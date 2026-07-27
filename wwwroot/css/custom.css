@@ -1,0 +1,8 @@
+/* Respect the OS-level "reduce motion" preference (WCAG 2.3.3): kill
+   hover-lift and bar-fill transitions instead of just shortening them. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    transition-duration: 0.001ms !important;
+    animation-duration: 0.001ms !important;
+  }
+}

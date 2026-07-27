@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mentor OS</title>
+  <meta name="description" content="A personal learning operating system for C#, .NET, DSA, System Design, SQL, Cloud, and FAANG interview prep." />
+  <meta name="theme-color" content="#0f172a" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22><rect width=%2224%22 height=%2224%22 rx=%226%22 fill=%22%2310b981%22/></svg>" />
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="css/custom.css" />
+</head>
+<body class="flex min-h-screen flex-col bg-slate-900 font-sans text-slate-50 antialiased">
+  <div id="nav-bar-mount"></div>
+
+  <!-- Hash routing never reloads the page, so screen readers won't announce
+       a new view unless we tell them to via this live region. -->
+  <div id="route-announcer" class="sr-only" aria-live="polite"></div>
+
+  <main id="app-root" class="mx-auto flex w-full max-w-6xl flex-1 flex-col px-6 py-10"></main>
+
+  <footer class="border-t border-white/5 py-8 text-center text-xs text-slate-400">
+    Built for focused preparation — no ads, no noise, no distractions.
+  </footer>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
