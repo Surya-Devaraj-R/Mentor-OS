@@ -12,13 +12,18 @@ public static class ExerciseEndpoints
     {
         var group = app.MapGroup("/api/exercises");
 
-        group.MapGet("/", async (int? lessonId, DifficultyLevel? difficulty, bool? interviewOnly, AppDbContext db) =>
+        group.MapGet("/", async (int? lessonId, int? topicId, string? tag, DifficultyLevel? difficulty, bool? interviewOnly, AppDbContext db) =>
         {
-            var query = db.Exercises.Include(e => e.Submissions).AsQueryable();
+            var query = db.Exercises
+                .Include(e => e.Submissions)
+                .Include(e => e.ExerciseTags).ThenInclude(et => et.Tag)
+                .AsQueryable();
 
             if (lessonId is not null) query = query.Where(e => e.LessonId == lessonId);
             if (difficulty is not null) query = query.Where(e => e.DifficultyLevel == difficulty);
             if (interviewOnly == true) query = query.Where(e => e.IsInterviewChallenge);
+            if (topicId is not null) query = query.Where(e => e.Lesson != null && e.Lesson.Module!.TopicId == topicId);
+            if (!string.IsNullOrWhiteSpace(tag)) query = query.Where(e => e.ExerciseTags.Any(et => et.Tag!.Name == tag));
 
             var exercises = await query.OrderBy(e => e.SortOrder).ToListAsync();
             return Results.Ok(exercises.Select(ToSummaryDto));
@@ -29,6 +34,8 @@ public static class ExerciseEndpoints
             var exercise = await db.Exercises
                 .Include(e => e.Solutions)
                 .Include(e => e.Submissions)
+                .Include(e => e.Hints)
+                .Include(e => e.ExerciseTags).ThenInclude(et => et.Tag)
                 .FirstOrDefaultAsync(e => e.Slug == slug);
 
             return exercise is null ? Results.NotFound() : Results.Ok(ToDetailDto(exercise));
@@ -44,6 +51,8 @@ public static class ExerciseEndpoints
             var exercise = await db.Exercises
                 .Include(e => e.Solutions)
                 .Include(e => e.Submissions)
+                .Include(e => e.Hints)
+                .Include(e => e.ExerciseTags).ThenInclude(et => et.Tag)
                 .FirstOrDefaultAsync(e => e.Id == id);
             if (exercise is null) return Results.NotFound();
 
@@ -71,9 +80,10 @@ public static class ExerciseEndpoints
     private static ExerciseSummaryDto ToSummaryDto(Exercise exercise)
     {
         var latest = exercise.Submissions.OrderByDescending(s => s.SubmittedUtc).FirstOrDefault();
+        var tags = exercise.ExerciseTags.Select(et => et.Tag!.Name).ToList();
         return new ExerciseSummaryDto(
             exercise.Id, exercise.Slug, exercise.Title, exercise.DifficultyLevel, exercise.ExerciseType,
-            exercise.IsInterviewChallenge, exercise.Language, latest?.SelfAssessment);
+            exercise.IsInterviewChallenge, exercise.Language, latest?.SelfAssessment, tags);
     }
 
     private static ExerciseDetailDto ToDetailDto(Exercise exercise)
@@ -89,8 +99,12 @@ public static class ExerciseEndpoints
             .Select(s => new ExerciseSubmissionDto(s.Id, s.SubmittedCode, s.Notes, s.SelfAssessment, s.AttemptNumber, s.SubmittedUtc))
             .ToList();
 
+        var hints = exercise.Hints.OrderBy(h => h.SortOrder).Select(h => h.Text).ToList();
+        var tags = exercise.ExerciseTags.Select(et => et.Tag!.Name).ToList();
+
         return new ExerciseDetailDto(
             exercise.Id, exercise.Slug, exercise.Title, exercise.Prompt, exercise.DifficultyLevel, exercise.ExerciseType,
-            exercise.StarterCode, exercise.Language, exercise.IsInterviewChallenge, solutions, submissions);
+            exercise.StarterCode, exercise.Language, exercise.IsInterviewChallenge, exercise.FollowUpQuestions,
+            tags, hints, solutions, submissions);
     }
 }

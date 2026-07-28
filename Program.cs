@@ -48,6 +48,8 @@ app.MapBookmarkEndpoints();
 app.MapExerciseEndpoints();
 app.MapInterviewPrepEndpoints();
 app.MapSearchEndpoints();
+app.MapChecklistEndpoints();
+app.MapProjectEndpoints();
 
 // Serve the frontend (index.html, js/, css/) straight from wwwroot/
 app.UseDefaultFiles();

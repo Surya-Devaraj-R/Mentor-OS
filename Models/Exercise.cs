@@ -18,6 +18,7 @@ public class Exercise
     public string? StarterCode { get; set; }
     public string? Language { get; set; }
     public bool IsInterviewChallenge { get; set; }
+    public string? FollowUpQuestions { get; set; }
     public int SortOrder { get; set; }
     public DateTime CreatedUtc { get; set; }
     public DateTime UpdatedUtc { get; set; }
@@ -25,4 +26,5 @@ public class Exercise
     public List<ExerciseSolution> Solutions { get; set; } = [];
     public List<ExerciseSubmission> Submissions { get; set; } = [];
     public List<ExerciseTag> ExerciseTags { get; set; } = [];
+    public List<ExerciseHint> Hints { get; set; } = [];
 }

@@ -42,7 +42,7 @@ public static class ResourceSeedData
             new("leetcode", "dsa", "Data Structures & Algorithms",
                 "LeetCode", "Daily Active Coding",
                 "https://leetcode.com", "practice", 6),
-            new("pramp", "interview-prep", "System Design & Interview Preparation",
+            new("pramp", "soft-skills", "System Design & Interview Preparation",
                 "Pramp", "Practice Coding Out Loud",
                 "https://pramp.com", "practice", 7),
             new("bytebytego", "system-design", "System Design & Interview Preparation",

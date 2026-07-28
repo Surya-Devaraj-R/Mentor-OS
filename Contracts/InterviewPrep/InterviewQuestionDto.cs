@@ -10,4 +10,7 @@ public record InterviewQuestionDto(
     string? SuggestedApproach,
     string? SampleAnswer,
     int SortOrder,
-    bool IsCompleted);
+    bool IsCompleted,
+    IReadOnlyList<string> Companies);
+
+public record CompanyDto(int Id, string Name, string Slug, string? OverviewBody);

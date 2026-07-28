@@ -7,15 +7,19 @@ import { navigate, refresh } from '../router.js';
 
 const STATUS_LABELS = { Solved: '✓ Solved', Attempted: '◐ Attempted', NeedsReview: '⚠ Needs Review' };
 
-// Route: /practice
+// Route: /practice (optionally ?tag=name)
 export async function renderPracticeListView(params, query, root) {
   document.title = 'Practice · Mentor OS';
   root.replaceChildren(createLoadingMessage('Loading exercises…'));
   const controller = new AbortController();
+  const activeTag = query.get('tag') || null;
 
   try {
-    const exercises = await getExercises({}, { signal: controller.signal });
-    root.replaceChildren(buildListView(exercises));
+    const [allExercises, filteredExercises] = await Promise.all([
+      getExercises({}, { signal: controller.signal }),
+      activeTag ? getExercises({ tag: activeTag }, { signal: controller.signal }) : Promise.resolve(null),
+    ]);
+    root.replaceChildren(buildListView(filteredExercises ?? allExercises, allExercises, activeTag));
   } catch (error) {
     if (error.name === 'AbortError') return;
     root.replaceChildren(createErrorMessage(error, 'Something went wrong loading exercises.'));
@@ -24,7 +28,7 @@ export async function renderPracticeListView(params, query, root) {
   return () => controller.abort();
 }
 
-function buildListView(exercises) {
+function buildListView(exercises, allExercises, activeTag) {
   const container = document.createElement('div');
   container.className = 'flex flex-col gap-6';
 
@@ -32,12 +36,30 @@ function buildListView(exercises) {
   heading.className = 'text-2xl font-semibold tracking-tight text-slate-50';
   heading.textContent = 'Practice';
 
+  const allTags = [...new Set(allExercises.flatMap((e) => e.tags))].sort();
+  const filterRow = document.createElement('div');
+  filterRow.className = 'flex flex-wrap gap-2';
+  filterRow.appendChild(createTagFilterChip('All', null, activeTag));
+  allTags.forEach((tag) => filterRow.appendChild(createTagFilterChip(tag, tag, activeTag)));
+
   const grid = document.createElement('div');
   grid.className = 'grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3';
   exercises.forEach((exercise) => grid.appendChild(createExerciseCard(exercise)));
 
-  container.append(heading, grid);
+  container.append(heading, filterRow, grid);
   return container;
+}
+
+function createTagFilterChip(label, tagValue, activeTag) {
+  const isActive = tagValue === activeTag;
+  const chip = document.createElement('button');
+  chip.type = 'button';
+  chip.className = isActive
+    ? 'rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-400'
+    : 'rounded-full border border-white/10 px-3 py-1 text-xs text-slate-400 transition duration-300 hover:text-slate-50';
+  chip.textContent = label;
+  chip.addEventListener('click', () => navigate(tagValue ? `/practice?tag=${encodeURIComponent(tagValue)}` : '/practice'));
+  return chip;
 }
 
 function createExerciseCard(exercise) {
@@ -73,6 +95,19 @@ function createExerciseCard(exercise) {
   }
 
   card.append(title, meta);
+
+  if (exercise.tags.length > 0) {
+    const tagRow = document.createElement('div');
+    tagRow.className = 'flex flex-wrap gap-1.5';
+    exercise.tags.forEach((tag) => {
+      const chip = document.createElement('span');
+      chip.className = 'rounded-full border border-white/10 px-2 py-0.5 text-xs text-slate-500';
+      chip.textContent = tag;
+      tagRow.appendChild(chip);
+    });
+    card.appendChild(tagRow);
+  }
+
   card.addEventListener('click', () => navigate(`/practice/${exercise.slug}`));
   return card;
 }
@@ -115,11 +150,51 @@ function buildDetailView(exercise) {
   promptSection.appendChild(renderMiniMarkdown(exercise.prompt));
 
   const attemptForm = createAttemptForm(exercise);
-  const solutionsSection = createSolutionsSection(exercise.solutions);
+  const hintsSection = exercise.hints.length > 0 ? createHintsSection(exercise.hints) : null;
+  const solutionsSection = createSolutionsSection(exercise.solutions, exercise.followUpQuestions);
   const historySection = createHistorySection(exercise.submissions);
 
-  container.append(header, promptSection, attemptForm, solutionsSection, historySection);
+  container.append(header, promptSection, attemptForm);
+  if (hintsSection) container.appendChild(hintsSection);
+  container.append(solutionsSection, historySection);
   return container;
+}
+
+function createHintsSection(hints) {
+  const section = document.createElement('section');
+  section.className = 'flex flex-col gap-2 rounded-xl border border-white/5 bg-slate-800 p-5';
+
+  const heading = document.createElement('h2');
+  heading.className = 'text-xs font-semibold uppercase tracking-wide text-emerald-400';
+  heading.textContent = 'Stuck? Reveal a Hint';
+  section.appendChild(heading);
+
+  const revealed = document.createElement('div');
+  revealed.className = 'flex flex-col gap-2 text-sm text-slate-300';
+  section.appendChild(revealed);
+
+  let nextIndex = 0;
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className =
+    'self-start rounded-lg border border-white/10 px-3 py-1.5 text-xs font-medium text-slate-300 transition duration-300 hover:border-emerald-500/40 hover:text-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/50';
+
+  const updateButtonLabel = () => {
+    button.textContent = nextIndex === 0 ? 'Show hint 1' : `Show hint ${nextIndex + 1}`;
+    if (nextIndex >= hints.length) button.remove();
+  };
+  updateButtonLabel();
+
+  button.addEventListener('click', () => {
+    const hint = document.createElement('p');
+    hint.textContent = `Hint ${nextIndex + 1}: ${hints[nextIndex]}`;
+    revealed.appendChild(hint);
+    nextIndex++;
+    updateButtonLabel();
+  });
+
+  section.appendChild(button);
+  return section;
 }
 
 function createAttemptForm(exercise) {
@@ -212,7 +287,7 @@ function getAssessmentButtonClass(isSelected) {
     : `${base} border-white/10 text-slate-400 hover:text-slate-50`;
 }
 
-function createSolutionsSection(solutions) {
+function createSolutionsSection(solutions, followUpQuestions) {
   const section = document.createElement('section');
   section.className = 'flex flex-col gap-3';
 
@@ -232,6 +307,18 @@ function createSolutionsSection(solutions) {
   solutionsList.className = 'mt-4 flex flex-col gap-4';
   solutions.forEach((solution) => solutionsList.appendChild(createSolutionCard(solution)));
   details.appendChild(solutionsList);
+
+  if (followUpQuestions) {
+    const followUp = document.createElement('div');
+    followUp.className = 'mt-4 rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3 text-sm text-slate-300';
+
+    const followUpLabel = document.createElement('span');
+    followUpLabel.className = 'font-semibold text-emerald-400';
+    followUpLabel.textContent = 'Follow-up: ';
+
+    followUp.append(followUpLabel, document.createTextNode(followUpQuestions));
+    details.appendChild(followUp);
+  }
 
   section.appendChild(details);
   return section;

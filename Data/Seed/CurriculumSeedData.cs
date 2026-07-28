@@ -2,8 +2,8 @@ using MentorOS.Models;
 
 namespace MentorOS.Data.Seed;
 
-// The 7 top-level learning tracks. Modules and lessons are added underneath
-// these incrementally (Phase 1+) using the same seed-if-empty pattern.
+// The 10 top-level learning paths. Interview Prep is deliberately NOT one of
+// these — it's its own feature (InterviewQuestion bank), not a learning path.
 public static class CurriculumSeedData
 {
     public static List<Topic> BuildTopics()
@@ -74,11 +74,41 @@ public static class CurriculumSeedData
             },
             new Topic
             {
-                Slug = "interview-prep",
-                Title = "Interview Prep",
-                Description = "Behavioral, system design, and mock-interview readiness.",
+                Slug = "git",
+                Title = "Git",
+                Description = "Version control fundamentals and collaborative workflows.",
                 IconKey = "practice",
                 SortOrder = 7,
+                CreatedUtc = now,
+                UpdatedUtc = now,
+            },
+            new Topic
+            {
+                Slug = "devops",
+                Title = "DevOps",
+                Description = "CI/CD pipelines, automation, and observability.",
+                IconKey = "system",
+                SortOrder = 8,
+                CreatedUtc = now,
+                UpdatedUtc = now,
+            },
+            new Topic
+            {
+                Slug = "architecture",
+                Title = "Architecture",
+                Description = "Software architecture patterns, layering, and design principles.",
+                IconKey = "course",
+                SortOrder = 9,
+                CreatedUtc = now,
+                UpdatedUtc = now,
+            },
+            new Topic
+            {
+                Slug = "soft-skills",
+                Title = "Soft Skills",
+                Description = "Communication, collaboration, and interview readiness beyond the code.",
+                IconKey = "practice",
+                SortOrder = 10,
                 CreatedUtc = now,
                 UpdatedUtc = now,
             },

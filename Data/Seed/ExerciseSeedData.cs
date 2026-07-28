@@ -3,26 +3,44 @@ using MentorOS.Models.Enums;
 
 namespace MentorOS.Data.Seed;
 
-// A handful of real, interview-representative exercises with genuine
-// solutions — self-assessment only, no execution (per the confirmed
-// two-phase plan: a real code-execution service is a separate, deferred
-// initiative with its own security design pass).
+// A real, interview-representative exercise bank with genuine solutions —
+// self-assessment only, no execution (per the confirmed two-phase plan: a
+// real code-execution service is a separate, deferred initiative with its
+// own security design pass).
 public static class ExerciseSeedData
 {
     public static List<Exercise> BuildExercises(IReadOnlyDictionary<string, int> lessonIdBySlug)
     {
-        var dsaLessonId = lessonIdBySlug["two-pointer-hash-map-patterns"];
-        var sqlLessonId = lessonIdBySlug["select-join-query-fundamentals"];
+        var tags = new Dictionary<string, Tag>();
 
         return
         [
-            BuildValidAnagram(dsaLessonId),
-            BuildContainsDuplicate(dsaLessonId),
-            BuildSecondHighestSalary(sqlLessonId),
+            BuildValidAnagram(lessonIdBySlug["two-pointer-hash-map-patterns"], tags),
+            BuildContainsDuplicate(lessonIdBySlug["two-pointer-hash-map-patterns"], tags),
+            BuildTwoSumSorted(lessonIdBySlug["two-pointer-hash-map-patterns"], tags),
+            BuildBinarySearch(lessonIdBySlug["binary-search-patterns"], tags),
+            BuildSecondHighestSalary(lessonIdBySlug["aggregations-subqueries-window-functions"], tags),
+            BuildDuplicateEmails(lessonIdBySlug["select-join-query-fundamentals"], tags),
+            BuildPalindromeCheck(lessonIdBySlug["variables-types-control-flow"], tags),
+            BuildShapeAreaCalculator(lessonIdBySlug["oop-interfaces-solid-basics"], tags),
+            BuildRateLimiterDesign(lessonIdBySlug["scaling-load-balancing-caching"], tags),
+            BuildCacheAsideImplementation(lessonIdBySlug["scaling-load-balancing-caching"], tags),
+            BuildResolveMergeConflict(lessonIdBySlug["collaborative-git-prs-rebasing-conflicts"], tags),
+            BuildCiPipelineYaml(lessonIdBySlug["cicd-pipelines-automated-testing"], tags),
         ];
     }
 
-    private static Exercise BuildValidAnagram(int lessonId)
+    private static ExerciseTag Tagged(Dictionary<string, Tag> tags, string name)
+    {
+        if (!tags.TryGetValue(name, out var tag))
+        {
+            tag = new Tag { Name = name };
+            tags[name] = tag;
+        }
+        return new ExerciseTag { Tag = tag };
+    }
+
+    private static Exercise BuildValidAnagram(int lessonId, Dictionary<string, Tag> tags)
     {
         var now = DateTime.UtcNow;
         return new Exercise
@@ -41,9 +59,16 @@ public static class ExerciseSeedData
                 """,
             Language = "csharp",
             IsInterviewChallenge = true,
+            FollowUpQuestions = "What would change if the strings could contain Unicode characters, not just lowercase a-z?",
             SortOrder = 1,
             CreatedUtc = now,
             UpdatedUtc = now,
+            ExerciseTags = [Tagged(tags, "hashing"), Tagged(tags, "strings")],
+            Hints =
+            [
+                new ExerciseHint { Text = "If the lengths differ, they can't possibly be anagrams — check that first.", SortOrder = 1 },
+                new ExerciseHint { Text = "Counting character frequencies avoids the O(n log n) cost of sorting both strings.", SortOrder = 2 },
+            ],
             Solutions =
             [
                 new ExerciseSolution
@@ -97,7 +122,7 @@ public static class ExerciseSeedData
         };
     }
 
-    private static Exercise BuildContainsDuplicate(int lessonId)
+    private static Exercise BuildContainsDuplicate(int lessonId, Dictionary<string, Tag> tags)
     {
         var now = DateTime.UtcNow;
         return new Exercise
@@ -116,9 +141,15 @@ public static class ExerciseSeedData
                 """,
             Language = "csharp",
             IsInterviewChallenge = true,
+            FollowUpQuestions = "Could you solve this with O(1) extra space if you were allowed to sort the input array in place?",
             SortOrder = 2,
             CreatedUtc = now,
             UpdatedUtc = now,
+            ExerciseTags = [Tagged(tags, "hashing"), Tagged(tags, "arrays")],
+            Hints =
+            [
+                new ExerciseHint { Text = "A hash set's Add method tells you whether the value was already present.", SortOrder = 1 },
+            ],
             Solutions =
             [
                 new ExerciseSolution
@@ -145,7 +176,128 @@ public static class ExerciseSeedData
         };
     }
 
-    private static Exercise BuildSecondHighestSalary(int lessonId)
+    private static Exercise BuildTwoSumSorted(int lessonId, Dictionary<string, Tag> tags)
+    {
+        var now = DateTime.UtcNow;
+        return new Exercise
+        {
+            LessonId = lessonId,
+            Slug = "two-sum-sorted-array",
+            Title = "Two Sum on a Sorted Array",
+            Prompt = "Given a SORTED integer array `nums` and a `target`, return the 1-indexed positions of the two numbers that add up to `target`, using O(1) extra space.",
+            DifficultyLevel = DifficultyLevel.Easy,
+            ExerciseType = ExerciseType.Coding,
+            StarterCode = """
+                public int[] TwoSumSorted(int[] nums, int target)
+                {
+                    // Your code here
+                }
+                """,
+            Language = "csharp",
+            IsInterviewChallenge = true,
+            FollowUpQuestions = "How would the approach change if the array were NOT sorted, but you still needed O(1) extra space?",
+            SortOrder = 3,
+            CreatedUtc = now,
+            UpdatedUtc = now,
+            ExerciseTags = [Tagged(tags, "two-pointers"), Tagged(tags, "arrays")],
+            Hints =
+            [
+                new ExerciseHint { Text = "The array is sorted — that's a strong hint two pointers apply here, not a hash map.", SortOrder = 1 },
+                new ExerciseHint { Text = "If the current pair's sum is too big, which pointer should move — left or right?", SortOrder = 2 },
+            ],
+            Solutions =
+            [
+                new ExerciseSolution
+                {
+                    ApproachTitle = "Two Pointers (Optimal)",
+                    Explanation = "Start pointers at both ends. If the sum is too big, move the right pointer left (decreasing the sum); if too small, move the left pointer right (increasing it) — sorted order guarantees this always converges correctly.",
+                    SolutionCode = """
+                        public int[] TwoSumSorted(int[] nums, int target)
+                        {
+                            var left = 0;
+                            var right = nums.Length - 1;
+
+                            while (left < right)
+                            {
+                                var sum = nums[left] + nums[right];
+                                if (sum == target) return [left + 1, right + 1];
+                                if (sum < target) left++;
+                                else right--;
+                            }
+
+                            throw new ArgumentException("No two numbers sum to the target.");
+                        }
+                        """,
+                    Language = "csharp",
+                    TimeComplexity = "O(n)",
+                    SpaceComplexity = "O(1)",
+                    SortOrder = 1,
+                },
+            ],
+        };
+    }
+
+    private static Exercise BuildBinarySearch(int lessonId, Dictionary<string, Tag> tags)
+    {
+        var now = DateTime.UtcNow;
+        return new Exercise
+        {
+            LessonId = lessonId,
+            Slug = "classic-binary-search",
+            Title = "Classic Binary Search",
+            Prompt = "Given a sorted array of distinct integers `nums` and a `target`, return the index of `target`, or -1 if it isn't present. Must run in O(log n).",
+            DifficultyLevel = DifficultyLevel.Easy,
+            ExerciseType = ExerciseType.Coding,
+            StarterCode = """
+                public int Search(int[] nums, int target)
+                {
+                    // Your code here
+                }
+                """,
+            Language = "csharp",
+            IsInterviewChallenge = true,
+            FollowUpQuestions = "How would you find the FIRST occurrence of a target if the array had duplicates?",
+            SortOrder = 4,
+            CreatedUtc = now,
+            UpdatedUtc = now,
+            ExerciseTags = [Tagged(tags, "binary-search"), Tagged(tags, "arrays")],
+            Hints =
+            [
+                new ExerciseHint { Text = "Compute mid as left + (right - left) / 2 to avoid overflow.", SortOrder = 1 },
+            ],
+            Solutions =
+            [
+                new ExerciseSolution
+                {
+                    ApproachTitle = "Standard Binary Search",
+                    Explanation = "Narrow [left, right] by comparing the midpoint to the target each time, discarding the half that can't contain it.",
+                    SolutionCode = """
+                        public int Search(int[] nums, int target)
+                        {
+                            var left = 0;
+                            var right = nums.Length - 1;
+
+                            while (left <= right)
+                            {
+                                var mid = left + (right - left) / 2;
+                                if (nums[mid] == target) return mid;
+                                if (nums[mid] < target) left = mid + 1;
+                                else right = mid - 1;
+                            }
+
+                            return -1;
+                        }
+                        """,
+                    Language = "csharp",
+                    TimeComplexity = "O(log n)",
+                    SpaceComplexity = "O(1)",
+                    SortOrder = 1,
+                },
+            ],
+        };
+    }
+
+    private static Exercise BuildSecondHighestSalary(int lessonId, Dictionary<string, Tag> tags)
     {
         var now = DateTime.UtcNow;
         return new Exercise
@@ -159,9 +311,16 @@ public static class ExerciseSeedData
             StarterCode = "-- Your query here",
             Language = "sql",
             IsInterviewChallenge = true,
-            SortOrder = 3,
+            FollowUpQuestions = "How would you generalize this to find the Nth highest salary, for an arbitrary N?",
+            SortOrder = 5,
             CreatedUtc = now,
             UpdatedUtc = now,
+            ExerciseTags = [Tagged(tags, "sql"), Tagged(tags, "subqueries")],
+            Hints =
+            [
+                new ExerciseHint { Text = "What does MAX() return when it aggregates over zero rows? That's the key to handling the 'no second salary' case cleanly.", SortOrder = 1 },
+                new ExerciseHint { Text = "DENSE_RANK() ordered by salary descending gives you an alternative, window-function-based approach.", SortOrder = 2 },
+            ],
             Solutions =
             [
                 new ExerciseSolution
@@ -192,6 +351,385 @@ public static class ExerciseSeedData
                     TimeComplexity = "O(n)",
                     SpaceComplexity = "O(1)",
                     SortOrder = 2,
+                },
+                new ExerciseSolution
+                {
+                    ApproachTitle = "DENSE_RANK Window Function",
+                    Explanation = "Rank distinct salaries descending with DENSE_RANK(), then filter to rank 2 — this generalizes cleanly to 'Nth highest' by changing one number.",
+                    SolutionCode = """
+                        SELECT salary AS second_highest
+                        FROM (
+                            SELECT salary, DENSE_RANK() OVER (ORDER BY salary DESC) AS rnk
+                            FROM (SELECT DISTINCT salary FROM employees) AS distinct_salaries
+                        ) ranked
+                        WHERE rnk = 2;
+                        """,
+                    Language = "sql",
+                    TimeComplexity = "O(n log n)",
+                    SpaceComplexity = "O(n)",
+                    SortOrder = 3,
+                },
+            ],
+        };
+    }
+
+    private static Exercise BuildDuplicateEmails(int lessonId, Dictionary<string, Tag> tags)
+    {
+        var now = DateTime.UtcNow;
+        return new Exercise
+        {
+            LessonId = lessonId,
+            Slug = "find-duplicate-emails",
+            Title = "Find Duplicate Emails",
+            Prompt = "Given a `people` table with columns `id` and `email`, write a query that returns every email address that appears more than once.",
+            DifficultyLevel = DifficultyLevel.Easy,
+            ExerciseType = ExerciseType.Coding,
+            StarterCode = "-- Your query here",
+            Language = "sql",
+            IsInterviewChallenge = true,
+            FollowUpQuestions = "How would you write a query to DELETE the duplicate rows, keeping only the lowest id for each email?",
+            SortOrder = 6,
+            CreatedUtc = now,
+            UpdatedUtc = now,
+            ExerciseTags = [Tagged(tags, "sql"), Tagged(tags, "joins")],
+            Hints =
+            [
+                new ExerciseHint { Text = "GROUP BY email, then filter groups (not rows) with HAVING.", SortOrder = 1 },
+            ],
+            Solutions =
+            [
+                new ExerciseSolution
+                {
+                    ApproachTitle = "GROUP BY + HAVING",
+                    Explanation = "Group rows by email, then keep only the groups whose count is greater than one.",
+                    SolutionCode = """
+                        SELECT email
+                        FROM people
+                        GROUP BY email
+                        HAVING COUNT(*) > 1;
+                        """,
+                    Language = "sql",
+                    TimeComplexity = "O(n log n)",
+                    SpaceComplexity = "O(n)",
+                    SortOrder = 1,
+                },
+            ],
+        };
+    }
+
+    private static Exercise BuildPalindromeCheck(int lessonId, Dictionary<string, Tag> tags)
+    {
+        var now = DateTime.UtcNow;
+        return new Exercise
+        {
+            LessonId = lessonId,
+            Slug = "palindrome-check-pattern-matching",
+            Title = "Palindrome Check Using Pattern Matching",
+            Prompt = "Write a method that returns `true` if a string reads the same forwards and backwards (ignoring case), using a C# pattern-matching-friendly style rather than a manual index loop.",
+            DifficultyLevel = DifficultyLevel.Easy,
+            ExerciseType = ExerciseType.Coding,
+            StarterCode = """
+                public bool IsPalindrome(string s)
+                {
+                    // Your code here
+                }
+                """,
+            Language = "csharp",
+            IsInterviewChallenge = false,
+            FollowUpQuestions = "How would you adapt this to ignore spaces and punctuation, not just casing?",
+            SortOrder = 7,
+            CreatedUtc = now,
+            UpdatedUtc = now,
+            ExerciseTags = [Tagged(tags, "csharp"), Tagged(tags, "strings")],
+            Hints =
+            [
+                new ExerciseHint { Text = "String has a built-in way to compare against its own reversed characters.", SortOrder = 1 },
+            ],
+            Solutions =
+            [
+                new ExerciseSolution
+                {
+                    ApproachTitle = "Reverse and Compare",
+                    Explanation = "Build the reversed string using a span-based reverse, then compare case-insensitively.",
+                    SolutionCode = """
+                        public bool IsPalindrome(string s)
+                        {
+                            var chars = s.ToCharArray();
+                            Array.Reverse(chars);
+                            return string.Equals(s, new string(chars), StringComparison.OrdinalIgnoreCase);
+                        }
+                        """,
+                    Language = "csharp",
+                    TimeComplexity = "O(n)",
+                    SpaceComplexity = "O(n)",
+                    SortOrder = 1,
+                },
+            ],
+        };
+    }
+
+    private static Exercise BuildShapeAreaCalculator(int lessonId, Dictionary<string, Tag> tags)
+    {
+        var now = DateTime.UtcNow;
+        return new Exercise
+        {
+            LessonId = lessonId,
+            Slug = "shape-area-calculator",
+            Title = "Extensible Shape Area Calculator",
+            Prompt = "Design a small set of types so that a `TotalArea` function can sum the area of any mix of shapes (at least Circle and Rectangle), without ever needing to change when a new shape is added.",
+            DifficultyLevel = DifficultyLevel.Medium,
+            ExerciseType = ExerciseType.Coding,
+            StarterCode = """
+                // Design your interface and shape types, then implement TotalArea.
+                public double TotalArea(IEnumerable<object> shapes)
+                {
+                    // Your code here
+                }
+                """,
+            Language = "csharp",
+            IsInterviewChallenge = false,
+            FollowUpQuestions = "How would your design change if shapes needed a Perimeter calculation too, alongside Area?",
+            SortOrder = 8,
+            CreatedUtc = now,
+            UpdatedUtc = now,
+            ExerciseTags = [Tagged(tags, "csharp"), Tagged(tags, "oop")],
+            Hints =
+            [
+                new ExerciseHint { Text = "This is the Open/Closed Principle in practice — extend via new types, not by modifying TotalArea.", SortOrder = 1 },
+            ],
+            Solutions =
+            [
+                new ExerciseSolution
+                {
+                    ApproachTitle = "Interface + Polymorphism",
+                    Explanation = "Define an IShapeAreaCalculator interface; TotalArea depends only on that interface, so adding a new shape never requires changing TotalArea itself.",
+                    SolutionCode = """
+                        public interface IShapeAreaCalculator
+                        {
+                            double CalculateArea();
+                        }
+
+                        public record Circle(double Radius) : IShapeAreaCalculator
+                        {
+                            public double CalculateArea() => Math.PI * Radius * Radius;
+                        }
+
+                        public record Rectangle(double Width, double Height) : IShapeAreaCalculator
+                        {
+                            public double CalculateArea() => Width * Height;
+                        }
+
+                        public double TotalArea(IEnumerable<IShapeAreaCalculator> shapes) =>
+                            shapes.Sum(s => s.CalculateArea());
+                        """,
+                    Language = "csharp",
+                    TimeComplexity = "O(n)",
+                    SpaceComplexity = "O(1) extra",
+                    SortOrder = 1,
+                },
+            ],
+        };
+    }
+
+    private static Exercise BuildRateLimiterDesign(int lessonId, Dictionary<string, Tag> tags)
+    {
+        var now = DateTime.UtcNow;
+        return new Exercise
+        {
+            LessonId = lessonId,
+            Slug = "design-a-rate-limiter",
+            Title = "Design a Rate Limiter",
+            Prompt = "Design (in writing — no code required) a rate limiter that allows at most N requests per user per minute. Describe the data structure, what happens at the boundary between minutes, and how it would work across multiple app server instances.",
+            DifficultyLevel = DifficultyLevel.Medium,
+            ExerciseType = ExerciseType.Conceptual,
+            IsInterviewChallenge = true,
+            FollowUpQuestions = "How would your design change if the limit needed to be 'N requests per rolling 60 seconds' instead of per fixed-clock minute?",
+            SortOrder = 9,
+            CreatedUtc = now,
+            UpdatedUtc = now,
+            ExerciseTags = [Tagged(tags, "system-design")],
+            Hints =
+            [
+                new ExerciseHint { Text = "A fixed-window counter is the simplest approach — but think about what happens right at the window boundary.", SortOrder = 1 },
+                new ExerciseHint { Text = "Multiple app servers can't each keep their own in-memory counter — where does shared state need to live?", SortOrder = 2 },
+            ],
+            Solutions =
+            [
+                new ExerciseSolution
+                {
+                    ApproachTitle = "Fixed Window Counter in a Shared Cache",
+                    Explanation = "Store a counter per user per minute-bucket (e.g., key `ratelimit:{userId}:{minuteTimestamp}`) in a shared cache like Redis, incrementing on each request and rejecting once the count exceeds N. Using a shared cache (not per-server memory) means the limit is enforced correctly regardless of which app server instance handles the request. The main weakness: a burst right at the window boundary (end of minute 1, start of minute 2) can briefly allow close to 2N requests in a short span — a sliding-window-log or sliding-window-counter algorithm fixes this at the cost of more storage/complexity.",
+                    SolutionCode = "N/A — conceptual design exercise, no code required.",
+                    Language = "text",
+                    TimeComplexity = "O(1) per request",
+                    SpaceComplexity = "O(active users)",
+                    SortOrder = 1,
+                },
+            ],
+        };
+    }
+
+    private static Exercise BuildCacheAsideImplementation(int lessonId, Dictionary<string, Tag> tags)
+    {
+        var now = DateTime.UtcNow;
+        return new Exercise
+        {
+            LessonId = lessonId,
+            Slug = "implement-cache-aside",
+            Title = "Implement the Cache-Aside Pattern",
+            Prompt = "Write a method `GetProductAsync(int id)` that implements cache-aside: check the cache first, fall back to the database on a miss, and populate the cache before returning.",
+            DifficultyLevel = DifficultyLevel.Easy,
+            ExerciseType = ExerciseType.Coding,
+            StarterCode = """
+                public async Task<Product> GetProductAsync(int id)
+                {
+                    // Your code here
+                }
+                """,
+            Language = "csharp",
+            IsInterviewChallenge = false,
+            FollowUpQuestions = "How would you handle cache invalidation when the product is updated elsewhere in the system?",
+            SortOrder = 10,
+            CreatedUtc = now,
+            UpdatedUtc = now,
+            ExerciseTags = [Tagged(tags, "system-design"), Tagged(tags, "caching")],
+            Hints =
+            [
+                new ExerciseHint { Text = "Check the cache before touching the database at all — that's the whole point of the pattern.", SortOrder = 1 },
+            ],
+            Solutions =
+            [
+                new ExerciseSolution
+                {
+                    ApproachTitle = "Cache-Aside",
+                    Explanation = "On a cache hit, return immediately with no database call. On a miss, load from the database, populate the cache with a TTL, then return.",
+                    SolutionCode = """
+                        public async Task<Product> GetProductAsync(int id)
+                        {
+                            var cacheKey = $"product:{id}";
+
+                            if (cache.TryGetValue(cacheKey, out Product? cached))
+                            {
+                                return cached!;
+                            }
+
+                            var product = await db.Products.FindAsync(id)
+                                ?? throw new KeyNotFoundException($"Product {id} not found.");
+
+                            cache.Set(cacheKey, product, TimeSpan.FromMinutes(10));
+                            return product;
+                        }
+                        """,
+                    Language = "csharp",
+                    TimeComplexity = "O(1) on hit, O(query cost) on miss",
+                    SpaceComplexity = "O(1) per cached item",
+                    SortOrder = 1,
+                },
+            ],
+        };
+    }
+
+    private static Exercise BuildResolveMergeConflict(int lessonId, Dictionary<string, Tag> tags)
+    {
+        var now = DateTime.UtcNow;
+        return new Exercise
+        {
+            LessonId = lessonId,
+            Slug = "resolve-a-merge-conflict",
+            Title = "Resolve a Merge Conflict",
+            Prompt = """
+                You're merging `feature/increase-retries` into `main` and get a conflict in `Config.cs`:
+
+                ```
+                <<<<<<< HEAD
+                public const int MaxRetries = 3;
+                =======
+                public const int MaxRetries = 5;
+                >>>>>>> feature/increase-retries
+                ```
+
+                Write the correct final content of this file after resolving the conflict in favor of the feature branch's intent, and describe the exact commands you'd run afterward.
+                """,
+            DifficultyLevel = DifficultyLevel.Easy,
+            ExerciseType = ExerciseType.Conceptual,
+            IsInterviewChallenge = false,
+            FollowUpQuestions = "What would you do differently if you realized BOTH values were wrong, and the correct answer was actually 4?",
+            SortOrder = 11,
+            CreatedUtc = now,
+            UpdatedUtc = now,
+            ExerciseTags = [Tagged(tags, "git")],
+            Hints =
+            [
+                new ExerciseHint { Text = "All three marker lines (<<<<<<<, =======, >>>>>>>) must be deleted, not just the losing side's content.", SortOrder = 1 },
+            ],
+            Solutions =
+            [
+                new ExerciseSolution
+                {
+                    ApproachTitle = "Keep the Feature Branch's Value",
+                    Explanation = "Delete all three conflict marker lines, keep the value that reflects the intended change (5 retries, since that's the point of the feature branch), then stage and commit the resolution.",
+                    SolutionCode = """
+                        public const int MaxRetries = 5;
+
+                        // Then:
+                        git add Config.cs
+                        git commit
+                        """,
+                    Language = "csharp",
+                    SortOrder = 1,
+                },
+            ],
+        };
+    }
+
+    private static Exercise BuildCiPipelineYaml(int lessonId, Dictionary<string, Tag> tags)
+    {
+        var now = DateTime.UtcNow;
+        return new Exercise
+        {
+            LessonId = lessonId,
+            Slug = "write-a-ci-pipeline",
+            Title = "Write a Basic CI Pipeline",
+            Prompt = "Write a GitHub Actions workflow that runs on every push and pull request, restores dependencies, builds a .NET project, and runs its test suite — failing the pipeline if any step fails.",
+            DifficultyLevel = DifficultyLevel.Easy,
+            ExerciseType = ExerciseType.Coding,
+            StarterCode = "# Your workflow YAML here",
+            Language = "yaml",
+            IsInterviewChallenge = false,
+            FollowUpQuestions = "How would you add a step that only deploys to production when a push lands specifically on the main branch, not on every branch?",
+            SortOrder = 12,
+            CreatedUtc = now,
+            UpdatedUtc = now,
+            ExerciseTags = [Tagged(tags, "devops"), Tagged(tags, "ci-cd")],
+            Hints =
+            [
+                new ExerciseHint { Text = "Each step runs in order; if one fails, later steps in the same job don't run by default.", SortOrder = 1 },
+            ],
+            Solutions =
+            [
+                new ExerciseSolution
+                {
+                    ApproachTitle = "Minimal GitHub Actions Workflow",
+                    Explanation = "Trigger on push and pull_request, then checkout, set up .NET, restore, build, and test in order.",
+                    SolutionCode = """
+                        name: CI
+
+                        on: [push, pull_request]
+
+                        jobs:
+                          build-and-test:
+                            runs-on: ubuntu-latest
+                            steps:
+                              - uses: actions/checkout@v4
+                              - uses: actions/setup-dotnet@v4
+                                with:
+                                  dotnet-version: '10.0.x'
+                              - run: dotnet restore
+                              - run: dotnet build --no-restore
+                              - run: dotnet test --no-build
+                        """,
+                    Language = "yaml",
+                    SortOrder = 1,
                 },
             ],
         };

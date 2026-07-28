@@ -8,7 +8,12 @@ public enum EntityKind
     Module,
     Lesson,
     Exercise,
-    CapstoneChecklistItem,
+
+    // Tracks completion of one ChecklistItem row (Capstone/Lesson/Project) —
+    // EntityId is the ChecklistItem's own Id, not its OwnerId, so each item
+    // toggles independently under this one shared kind.
+    ChecklistItem,
+
     InterviewQuestion,
     Resource,
 

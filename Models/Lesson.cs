@@ -14,4 +14,10 @@ public class Lesson
     public DateTime UpdatedUtc { get; set; }
 
     public List<LessonContentBlock> ContentBlocks { get; set; } = [];
+    public List<LessonObjective> Objectives { get; set; } = [];
+    public List<LessonReferenceLink> ReferenceLinks { get; set; } = [];
+    public List<QuizQuestion> QuizQuestions { get; set; } = [];
+
+    // This lesson's own prerequisites (lessons recommended beforehand).
+    public List<LessonPrerequisite> Prerequisites { get; set; } = [];
 }

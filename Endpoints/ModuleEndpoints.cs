@@ -1,3 +1,4 @@
+using MentorOS.Contracts.Checklists;
 using MentorOS.Contracts.Modules;
 using MentorOS.Data;
 using MentorOS.Models.Enums;
@@ -17,12 +18,12 @@ public static class ModuleEndpoints
             var module = await db.Modules
                 .Include(m => m.Lessons)
                 .Include(m => m.Capstone)
-                    .ThenInclude(c => c!.ChecklistItems)
                 .FirstOrDefaultAsync(m => m.Slug == slug);
 
             if (module is null) return Results.NotFound();
 
             var completedLessonIds = await progress.GetCompletedIdsAsync(EntityKind.Lesson);
+            var completedChecklistIds = await progress.GetCompletedIdsAsync(EntityKind.ChecklistItem);
 
             var lessons = module.Lessons
                 .OrderBy(l => l.SortOrder)
@@ -31,16 +32,18 @@ public static class ModuleEndpoints
                     completedLessonIds.Contains(l.Id)))
                 .ToList();
 
-            CapstoneSummaryDto? capstone = module.Capstone is null
-                ? null
-                : new CapstoneSummaryDto(
-                    module.Capstone.Title,
-                    module.Capstone.Description,
-                    module.Capstone.Requirements,
-                    module.Capstone.ChecklistItems
-                        .OrderBy(i => i.SortOrder)
-                        .Select(i => new CapstoneChecklistItemDto(i.Id, i.Description, i.SortOrder))
-                        .ToList());
+            CapstoneSummaryDto? capstone = null;
+            if (module.Capstone is not null)
+            {
+                var checklistItems = await db.ChecklistItems
+                    .Where(c => c.OwnerKind == ChecklistOwnerKind.Capstone && c.OwnerId == module.Capstone.Id)
+                    .OrderBy(c => c.SortOrder)
+                    .Select(c => new ChecklistItemDto(c.Id, c.Description, c.SortOrder, completedChecklistIds.Contains(c.Id)))
+                    .ToListAsync();
+
+                capstone = new CapstoneSummaryDto(
+                    module.Capstone.Title, module.Capstone.Description, module.Capstone.Requirements, checklistItems);
+            }
 
             var dto = new ModuleDetailDto(
                 module.Id, module.Slug, module.Title, module.Description,

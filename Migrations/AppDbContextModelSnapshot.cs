@@ -45,30 +45,6 @@ namespace MentorOS.Migrations
                     b.ToTable("Bookmarks");
                 });
 
-            modelBuilder.Entity("MentorOS.Models.CapstoneChecklistItem", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int>("CapstoneProjectId")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("Description")
-                        .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("TEXT");
-
-                    b.Property<int>("SortOrder")
-                        .HasColumnType("INTEGER");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CapstoneProjectId");
-
-                    b.ToTable("CapstoneChecklistItems");
-                });
-
             modelBuilder.Entity("MentorOS.Models.CapstoneProject", b =>
                 {
                     b.Property<int>("Id")
@@ -103,6 +79,62 @@ namespace MentorOS.Migrations
                         .IsUnique();
 
                     b.ToTable("CapstoneProjects");
+                });
+
+            modelBuilder.Entity("MentorOS.Models.ChecklistItem", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("OwnerId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("OwnerKind")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OwnerKind", "OwnerId");
+
+                    b.ToTable("ChecklistItems");
+                });
+
+            modelBuilder.Entity("MentorOS.Models.Company", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("OverviewBody")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Slug")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Slug")
+                        .IsUnique();
+
+                    b.ToTable("Companies");
                 });
 
             modelBuilder.Entity("MentorOS.Models.CompletionRecord", b =>
@@ -189,6 +221,9 @@ namespace MentorOS.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("FollowUpQuestions")
+                        .HasColumnType("TEXT");
+
                     b.Property<bool>("IsInterviewChallenge")
                         .HasColumnType("INTEGER");
 
@@ -230,6 +265,29 @@ namespace MentorOS.Migrations
                         .IsUnique();
 
                     b.ToTable("Exercises");
+                });
+
+            modelBuilder.Entity("MentorOS.Models.ExerciseHint", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("ExerciseId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Text")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ExerciseId");
+
+                    b.ToTable("ExerciseHints");
                 });
 
             modelBuilder.Entity("MentorOS.Models.ExerciseSolution", b =>
@@ -366,6 +424,21 @@ namespace MentorOS.Migrations
                     b.ToTable("InterviewQuestions");
                 });
 
+            modelBuilder.Entity("MentorOS.Models.InterviewQuestionCompany", b =>
+                {
+                    b.Property<int>("InterviewQuestionId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("CompanyId")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("InterviewQuestionId", "CompanyId");
+
+                    b.HasIndex("CompanyId");
+
+                    b.ToTable("InterviewQuestionCompanies");
+                });
+
             modelBuilder.Entity("MentorOS.Models.InterviewQuestionTag", b =>
                 {
                     b.Property<int>("InterviewQuestionId")
@@ -379,6 +452,51 @@ namespace MentorOS.Migrations
                     b.HasIndex("TagId");
 
                     b.ToTable("InterviewQuestionTags");
+                });
+
+            modelBuilder.Entity("MentorOS.Models.LearningPathProject", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ArchitectureDiagramBody")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ArchitectureDiagramFormat")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("PortfolioGuidance")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("TopicId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("UpdatedUtc")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TopicId")
+                        .IsUnique();
+
+                    b.ToTable("LearningPathProjects");
                 });
 
             modelBuilder.Entity("MentorOS.Models.Lesson", b =>
@@ -473,6 +591,85 @@ namespace MentorOS.Migrations
                     b.ToTable("LessonContentBlocks");
                 });
 
+            modelBuilder.Entity("MentorOS.Models.LessonObjective", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("LessonId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Text")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LessonId");
+
+                    b.ToTable("LessonObjectives");
+                });
+
+            modelBuilder.Entity("MentorOS.Models.LessonPrerequisite", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("LessonId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("PrerequisiteLessonId")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LessonId");
+
+                    b.HasIndex("PrerequisiteLessonId");
+
+                    b.ToTable("LessonPrerequisites");
+                });
+
+            modelBuilder.Entity("MentorOS.Models.LessonReferenceLink", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("LessonId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("LinkType")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Url")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LessonId");
+
+                    b.ToTable("LessonReferenceLinks");
+                });
+
             modelBuilder.Entity("MentorOS.Models.Module", b =>
                 {
                     b.Property<int>("Id")
@@ -546,6 +743,87 @@ namespace MentorOS.Migrations
                     b.HasIndex("LessonId");
 
                     b.ToTable("Notes");
+                });
+
+            modelBuilder.Entity("MentorOS.Models.ProjectMilestone", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("ProjectId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProjectId");
+
+                    b.ToTable("ProjectMilestones");
+                });
+
+            modelBuilder.Entity("MentorOS.Models.QuizOption", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("IsCorrect")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("QuizQuestionId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Text")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("QuizQuestionId");
+
+                    b.ToTable("QuizOptions");
+                });
+
+            modelBuilder.Entity("MentorOS.Models.QuizQuestion", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Explanation")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("LessonId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("QuestionText")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LessonId");
+
+                    b.ToTable("QuizQuestions");
                 });
 
             modelBuilder.Entity("MentorOS.Models.Resource", b =>
@@ -690,17 +968,6 @@ namespace MentorOS.Migrations
                     b.ToTable("Topics");
                 });
 
-            modelBuilder.Entity("MentorOS.Models.CapstoneChecklistItem", b =>
-                {
-                    b.HasOne("MentorOS.Models.CapstoneProject", "CapstoneProject")
-                        .WithMany("ChecklistItems")
-                        .HasForeignKey("CapstoneProjectId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("CapstoneProject");
-                });
-
             modelBuilder.Entity("MentorOS.Models.CapstoneProject", b =>
                 {
                     b.HasOne("MentorOS.Models.Module", "Module")
@@ -720,6 +987,17 @@ namespace MentorOS.Migrations
                         .OnDelete(DeleteBehavior.SetNull);
 
                     b.Navigation("Lesson");
+                });
+
+            modelBuilder.Entity("MentorOS.Models.ExerciseHint", b =>
+                {
+                    b.HasOne("MentorOS.Models.Exercise", "Exercise")
+                        .WithMany("Hints")
+                        .HasForeignKey("ExerciseId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Exercise");
                 });
 
             modelBuilder.Entity("MentorOS.Models.ExerciseSolution", b =>
@@ -763,6 +1041,25 @@ namespace MentorOS.Migrations
                     b.Navigation("Tag");
                 });
 
+            modelBuilder.Entity("MentorOS.Models.InterviewQuestionCompany", b =>
+                {
+                    b.HasOne("MentorOS.Models.Company", "Company")
+                        .WithMany("QuestionCompanies")
+                        .HasForeignKey("CompanyId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("MentorOS.Models.InterviewQuestion", "InterviewQuestion")
+                        .WithMany("QuestionCompanies")
+                        .HasForeignKey("InterviewQuestionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Company");
+
+                    b.Navigation("InterviewQuestion");
+                });
+
             modelBuilder.Entity("MentorOS.Models.InterviewQuestionTag", b =>
                 {
                     b.HasOne("MentorOS.Models.InterviewQuestion", "InterviewQuestion")
@@ -782,6 +1079,17 @@ namespace MentorOS.Migrations
                     b.Navigation("Tag");
                 });
 
+            modelBuilder.Entity("MentorOS.Models.LearningPathProject", b =>
+                {
+                    b.HasOne("MentorOS.Models.Topic", "Topic")
+                        .WithMany()
+                        .HasForeignKey("TopicId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Topic");
+                });
+
             modelBuilder.Entity("MentorOS.Models.Lesson", b =>
                 {
                     b.HasOne("MentorOS.Models.Module", "Module")
@@ -797,6 +1105,47 @@ namespace MentorOS.Migrations
                 {
                     b.HasOne("MentorOS.Models.Lesson", "Lesson")
                         .WithMany("ContentBlocks")
+                        .HasForeignKey("LessonId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Lesson");
+                });
+
+            modelBuilder.Entity("MentorOS.Models.LessonObjective", b =>
+                {
+                    b.HasOne("MentorOS.Models.Lesson", "Lesson")
+                        .WithMany("Objectives")
+                        .HasForeignKey("LessonId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Lesson");
+                });
+
+            modelBuilder.Entity("MentorOS.Models.LessonPrerequisite", b =>
+                {
+                    b.HasOne("MentorOS.Models.Lesson", "Lesson")
+                        .WithMany("Prerequisites")
+                        .HasForeignKey("LessonId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("MentorOS.Models.Lesson", "PrerequisiteLesson")
+                        .WithMany()
+                        .HasForeignKey("PrerequisiteLessonId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Lesson");
+
+                    b.Navigation("PrerequisiteLesson");
+                });
+
+            modelBuilder.Entity("MentorOS.Models.LessonReferenceLink", b =>
+                {
+                    b.HasOne("MentorOS.Models.Lesson", "Lesson")
+                        .WithMany("ReferenceLinks")
                         .HasForeignKey("LessonId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
@@ -825,6 +1174,39 @@ namespace MentorOS.Migrations
                     b.Navigation("Lesson");
                 });
 
+            modelBuilder.Entity("MentorOS.Models.ProjectMilestone", b =>
+                {
+                    b.HasOne("MentorOS.Models.LearningPathProject", "Project")
+                        .WithMany("Milestones")
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Project");
+                });
+
+            modelBuilder.Entity("MentorOS.Models.QuizOption", b =>
+                {
+                    b.HasOne("MentorOS.Models.QuizQuestion", "QuizQuestion")
+                        .WithMany("Options")
+                        .HasForeignKey("QuizQuestionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("QuizQuestion");
+                });
+
+            modelBuilder.Entity("MentorOS.Models.QuizQuestion", b =>
+                {
+                    b.HasOne("MentorOS.Models.Lesson", "Lesson")
+                        .WithMany("QuizQuestions")
+                        .HasForeignKey("LessonId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Lesson");
+                });
+
             modelBuilder.Entity("MentorOS.Models.Resource", b =>
                 {
                     b.HasOne("MentorOS.Models.Topic", "Topic")
@@ -835,14 +1217,16 @@ namespace MentorOS.Migrations
                     b.Navigation("Topic");
                 });
 
-            modelBuilder.Entity("MentorOS.Models.CapstoneProject", b =>
+            modelBuilder.Entity("MentorOS.Models.Company", b =>
                 {
-                    b.Navigation("ChecklistItems");
+                    b.Navigation("QuestionCompanies");
                 });
 
             modelBuilder.Entity("MentorOS.Models.Exercise", b =>
                 {
                     b.Navigation("ExerciseTags");
+
+                    b.Navigation("Hints");
 
                     b.Navigation("Solutions");
 
@@ -851,12 +1235,27 @@ namespace MentorOS.Migrations
 
             modelBuilder.Entity("MentorOS.Models.InterviewQuestion", b =>
                 {
+                    b.Navigation("QuestionCompanies");
+
                     b.Navigation("QuestionTags");
+                });
+
+            modelBuilder.Entity("MentorOS.Models.LearningPathProject", b =>
+                {
+                    b.Navigation("Milestones");
                 });
 
             modelBuilder.Entity("MentorOS.Models.Lesson", b =>
                 {
                     b.Navigation("ContentBlocks");
+
+                    b.Navigation("Objectives");
+
+                    b.Navigation("Prerequisites");
+
+                    b.Navigation("QuizQuestions");
+
+                    b.Navigation("ReferenceLinks");
                 });
 
             modelBuilder.Entity("MentorOS.Models.Module", b =>
@@ -864,6 +1263,11 @@ namespace MentorOS.Migrations
                     b.Navigation("Capstone");
 
                     b.Navigation("Lessons");
+                });
+
+            modelBuilder.Entity("MentorOS.Models.QuizQuestion", b =>
+                {
+                    b.Navigation("Options");
                 });
 #pragma warning restore 612, 618
         }

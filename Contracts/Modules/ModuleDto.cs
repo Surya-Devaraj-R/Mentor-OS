@@ -1,3 +1,5 @@
+using MentorOS.Contracts.Checklists;
+
 namespace MentorOS.Contracts.Modules;
 
 public record ModuleSummaryDto(
@@ -21,9 +23,7 @@ public record CapstoneSummaryDto(
     string Title,
     string Description,
     string Requirements,
-    IReadOnlyList<CapstoneChecklistItemDto> ChecklistItems);
-
-public record CapstoneChecklistItemDto(int Id, string Description, int SortOrder);
+    IReadOnlyList<ChecklistItemDto> ChecklistItems);
 
 public record ModuleDetailDto(
     int Id,

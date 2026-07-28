@@ -1,7 +1,9 @@
 import { getTopic } from '../api/topics.js';
 import { getModulesForTopic, getModule } from '../api/modules.js';
+import { getProjectForTopic } from '../api/projects.js';
 import { createBreadcrumb } from '../components/breadcrumb.js';
 import { renderMiniMarkdown } from '../components/content-blocks/mini-markdown.js';
+import { createChecklist } from '../components/checklist.js';
 import { createLoadingMessage, createErrorMessage } from '../components/status-message.js';
 import { navigate } from '../router.js';
 
@@ -11,12 +13,13 @@ export async function renderTopicView(params, query, root) {
   const controller = new AbortController();
 
   try {
-    const [topic, modules] = await Promise.all([
+    const [topic, modules, project] = await Promise.all([
       getTopic(params.topicSlug, { signal: controller.signal }),
       getModulesForTopic(params.topicSlug, { signal: controller.signal }),
+      getProjectForTopic(params.topicSlug, { signal: controller.signal }).catch(() => null),
     ]);
     document.title = `${topic.title} · Mentor OS`;
-    root.replaceChildren(buildTopicView(topic, modules));
+    root.replaceChildren(buildTopicView(topic, modules, project));
   } catch (error) {
     if (error.name === 'AbortError') return;
     document.title = 'Topic Not Found · Mentor OS';
@@ -26,7 +29,7 @@ export async function renderTopicView(params, query, root) {
   return () => controller.abort();
 }
 
-function buildTopicView(topic, modules) {
+function buildTopicView(topic, modules, project) {
   const container = document.createElement('div');
   container.className = 'flex flex-col gap-6';
 
@@ -51,7 +54,35 @@ function buildTopicView(topic, modules) {
   modules.forEach((module) => grid.appendChild(createModuleCard(module, topic.slug)));
 
   container.append(header, grid);
+
+  if (project) {
+    container.appendChild(createProjectCard(project, topic.slug));
+  }
+
   return container;
+}
+
+function createProjectCard(project, topicSlug) {
+  const card = document.createElement('button');
+  card.type = 'button';
+  card.className =
+    'flex flex-col gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-6 text-left transition duration-300 hover:-translate-y-1 hover:border-emerald-500/40 focus:outline-none focus:ring-2 focus:ring-emerald-500/50';
+
+  const eyebrow = document.createElement('span');
+  eyebrow.className = 'text-xs font-semibold uppercase tracking-wide text-emerald-400';
+  eyebrow.textContent = 'Production Project';
+
+  const title = document.createElement('h3');
+  title.className = 'text-base font-semibold text-slate-50';
+  title.textContent = project.title;
+
+  const description = document.createElement('p');
+  description.className = 'text-sm text-slate-400';
+  description.textContent = project.description;
+
+  card.append(eyebrow, title, description);
+  card.addEventListener('click', () => navigate(`/projects/${topicSlug}`));
+  return card;
 }
 
 function createModuleCard(module, topicSlug) {
@@ -209,19 +240,7 @@ function createCapstoneCard(capstone) {
   checklistHeading.className = 'text-xs font-semibold uppercase tracking-wide text-slate-400';
   checklistHeading.textContent = 'Checklist';
 
-  const checklist = document.createElement('ul');
-  checklist.className = 'flex flex-col gap-1.5 text-sm text-slate-300';
-  capstone.checklistItems.forEach((item) => {
-    const li = document.createElement('li');
-    li.className = 'flex items-start gap-2';
-
-    const marker = document.createElement('span');
-    marker.setAttribute('aria-hidden', 'true');
-    marker.textContent = '☐';
-    li.append(marker, document.createTextNode(item.description));
-
-    checklist.appendChild(li);
-  });
+  const checklist = createChecklist(capstone.checklistItems);
 
   card.append(eyebrow, title, description, requirementsHeading, requirements, checklistHeading, checklist);
   return card;

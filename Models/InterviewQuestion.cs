@@ -15,4 +15,5 @@ public class InterviewQuestion
     public DateTime UpdatedUtc { get; set; }
 
     public List<InterviewQuestionTag> QuestionTags { get; set; } = [];
+    public List<InterviewQuestionCompany> QuestionCompanies { get; set; } = [];
 }

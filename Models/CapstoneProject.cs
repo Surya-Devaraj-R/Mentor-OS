@@ -11,5 +11,6 @@ public class CapstoneProject
     public DateTime CreatedUtc { get; set; }
     public DateTime UpdatedUtc { get; set; }
 
-    public List<CapstoneChecklistItem> ChecklistItems { get; set; } = [];
+    // Checklist items are polymorphic (ChecklistItem.OwnerKind = Capstone,
+    // OwnerId = this.Id) — no direct EF navigation, queried explicitly.
 }

@@ -9,4 +9,5 @@ public enum BlockType
     BestPractice,
     InterviewTip,
     CommonMistake,
+    RealWorldAnalogy,
 }

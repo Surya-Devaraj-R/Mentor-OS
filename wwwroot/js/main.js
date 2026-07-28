@@ -8,6 +8,7 @@ import { renderPlannerView } from './views/planner-view.js';
 import { renderNotesView } from './views/notes-view.js';
 import { renderPracticeListView, renderPracticeDetailView } from './views/practice-view.js';
 import { renderInterviewPrepView } from './views/interview-prep-view.js';
+import { renderProjectView } from './views/project-view.js';
 import { renderSearchView } from './views/search-view.js';
 import { renderNotFoundView } from './views/not-found-view.js';
 
@@ -23,6 +24,7 @@ registerRoute('/notes', renderNotesView);
 registerRoute('/practice', renderPracticeListView);
 registerRoute('/practice/:exerciseSlug', renderPracticeDetailView);
 registerRoute('/interview-prep', renderInterviewPrepView);
+registerRoute('/projects/:topicSlug', renderProjectView);
 registerRoute('/search', renderSearchView);
 registerRoute('*', renderNotFoundView);
 

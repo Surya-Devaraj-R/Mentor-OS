@@ -10,7 +10,8 @@ public record ExerciseSummaryDto(
     ExerciseType ExerciseType,
     bool IsInterviewChallenge,
     string? Language,
-    SelfAssessment? LatestStatus);
+    SelfAssessment? LatestStatus,
+    IReadOnlyList<string> Tags);
 
 public record ExerciseSolutionDto(
     int Id,
@@ -40,6 +41,9 @@ public record ExerciseDetailDto(
     string? StarterCode,
     string? Language,
     bool IsInterviewChallenge,
+    string? FollowUpQuestions,
+    IReadOnlyList<string> Tags,
+    IReadOnlyList<string> Hints,
     IReadOnlyList<ExerciseSolutionDto> Solutions,
     IReadOnlyList<ExerciseSubmissionDto> Submissions);
 
