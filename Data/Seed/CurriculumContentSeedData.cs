@@ -283,11 +283,258 @@ public static class CurriculumContentSeedData
             "Explain Liskov Substitution using an example from your own code (or why you haven't hit it yet)",
         ]);
 
-        var module = BuildModule(topicId, "csharp-fundamentals", "C# Fundamentals",
-            "Language fundamentals every C# developer needs before going deeper into LINQ and async.",
-            100, [lesson1, lesson2]);
+        var lesson3 = BuildLesson(
+            slug: "collections-and-generics",
+            title: "Collections & Generics: Choosing the Right Data Structure",
+            summary: "List, Dictionary, and HashSet internals, the IEnumerable/ICollection/IList hierarchy, and writing your own generic constraints.",
+            estimatedMinutes: 40,
+            objectives:
+            [
+                "Choose between List<T>, Dictionary<TKey,TValue>, and HashSet<T> based on the operations you actually need",
+                "Explain the difference between IEnumerable<T>, ICollection<T>, and IList<T>, and accept the least restrictive one in a method signature",
+                "Write a generic method or class with a type constraint (`where T : ...`)",
+                "Explain why Dictionary/HashSet lookups are O(1) on average, and what makes a type a good dictionary key",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    `List<T>` is a dynamically-resizing array — indexed access and appends are fast, but searching for a value (`Contains`) or inserting at the front is `O(n)`.
 
-        return (module, [lesson1Checklist, lesson2Checklist]);
+                    `Dictionary<TKey, TValue>` and `HashSet<T>` are both backed by a hash table: they compute a hash of the key (or value) to jump almost directly to the right bucket, giving average `O(1)` insert, lookup, and delete — dramatically faster than scanning a list, at the cost of losing insertion order and needing a well-behaved `GetHashCode`/`Equals` pair on the key type.
+
+                    Collections are described by an interface hierarchy of increasing capability: `IEnumerable<T>` (just `foreach`, one item at a time, forward-only) → `ICollection<T>` (adds `Count`, `Add`, `Remove`, `Contains`) → `IList<T>` (adds index access, `Insert`, `RemoveAt`). `List<T>` implements all three.
+
+                    **Generics** let a type or method be parameterized over a type (`List<T>`, `Dictionary<TKey, TValue>`) instead of duplicating code per concrete type. A **generic constraint** (`where T : IComparable<T>`, `where T : class`, `where T : new()`) restricts what `T` can be, in exchange for being able to call more members on it inside the generic code.
+                    """, 1),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    A `List<T>` is like a numbered coat check rack — great for "give me item #12," but finding "the coat that belongs to Sam" means checking tickets one by one.
+
+                    A `Dictionary<TKey, TValue>` is like a library's card catalog — you look up a subject and jump straight to the right drawer, instead of walking every shelf.
+
+                    A `HashSet<T>` is like a bouncer's guest list — its only job is answering "is this name on the list?" as fast as possible, with no concept of order or duplicates.
+                    """, 2),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Typical complexity (average case)**
+
+                    - `List<T>`: `Add` O(1) amortized, `Insert(0, x)` O(n), `Contains` O(n), index access O(1)
+                    - `Dictionary<TKey,TValue>`: `Add`/lookup/`Remove` O(1), no guaranteed order
+                    - `HashSet<T>`: `Add`/`Contains`/`Remove` O(1), no duplicates, no guaranteed order
+
+                    **Interface hierarchy, least to most capable**
+
+                    - `IEnumerable<T>` — read-only, forward-only iteration
+                    - `ICollection<T>` — + `Count`, `Add`, `Remove`, `Contains`
+                    - `IList<T>` — + index access, `Insert`, `RemoveAt`
+
+                    **Common generic constraints**
+
+                    - `where T : class` / `where T : struct` — reference-type / value-type only
+                    - `where T : new()` — must have a public parameterless constructor
+                    - `where T : IComparable<T>` — must support ordering comparisons
+                    """, 3),
+                Block(BlockType.CodeSnippet, "A Generic Repository and a Constrained Generic Method", BodyFormat.PlainText, """
+                    public interface IEntity
+                    {
+                        int Id { get; }
+                    }
+
+                    public class Repository<T> where T : class, IEntity
+                    {
+                        private readonly Dictionary<int, T> _itemsById = new();
+
+                        public void Add(T item) => _itemsById[item.Id] = item;
+
+                        public T? Find(int id) =>
+                            _itemsById.TryGetValue(id, out var item) ? item : null;
+                    }
+
+                    // Constrained to IComparable<T> so CompareTo is callable inside the method.
+                    public static T Max<T>(T first, T second) where T : IComparable<T> =>
+                        first.CompareTo(second) >= 0 ? first : second;
+                    """, 4, language: "csharp"),
+                Block(BlockType.Diagram, "Collection Interface Hierarchy", BodyFormat.AsciiArt, """
+                    IEnumerable<T>        foreach only, forward-only, read-only
+                          |
+                    ICollection<T>        + Count, Add, Remove, Contains
+                          |
+                    IList<T>              + index access, Insert, RemoveAt
+                          |
+                       List<T>            concrete implementation
+
+                    A method that only needs to iterate should accept
+                    IEnumerable<T> — the least capable interface it needs.
+                    """, 5),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Accept the least powerful interface your method actually needs: `IEnumerable<T>` if you only iterate, `ICollection<T>` if you also need `Count` or `Add`, and reserve `IList<T>` for when you truly need index access. This mirrors Interface Segregation from the previous lesson — it maximizes what callers can pass in (an array, a `HashSet<T>`, a LINQ query result) without forcing them to materialize a concrete `List<T>` first.
+
+                    Reach for `HashSet<T>` instead of `List<T>` the moment your only question about a collection is "have I seen this before?" — it turns an `O(n)` scan into an `O(1)` average lookup.
+                    """, 6),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    When asked "List vs. Dictionary vs. HashSet, when would you use each?", answer with the operation you need, not the data itself: ordered sequence you'll index into → `List<T>`; key-to-value lookup → `Dictionary<TKey,TValue>`; pure membership/uniqueness check → `HashSet<T>`. Naming the operation first is what separates understanding from memorized definitions.
+                    """, 7),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Calling `.Contains()` on a `List<T>` inside a hot loop instead of using a `HashSet<T>` — each call is an `O(n)` scan, so doing it `n` times turns an algorithm into `O(n²)` without anyone noticing until it's slow in production.
+
+                    Also common: using a mutable class as a dictionary key (or `HashSet<T>` element) and then mutating a field that `GetHashCode`/`Equals` depends on — the item silently becomes unfindable, because it now hashes to a different bucket than the one it was stored in.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "You need to check membership ('have I seen this value before?') as fast as possible, and don't care about order or duplicates. What should you use?",
+                    "HashSet<T> is backed by a hash table, giving average O(1) Contains checks, versus List<T>'s O(n) linear scan — exactly the right fit when order and duplicates don't matter and only membership does.",
+                    [
+                        new QuizOptionSeed("List<T>", false),
+                        new QuizOptionSeed("HashSet<T>", true),
+                        new QuizOptionSeed("An array, sorted after every insert", false),
+                        new QuizOptionSeed("Queue<T>", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "Why accept `IEnumerable<T>` instead of `List<T>` as a parameter when a method only ever iterates the items once?",
+                    "Accepting the least restrictive interface your method needs maximizes what callers can pass in — an array, a HashSet<T>, a LINQ query result — without forcing them to materialize a List<T> they may not already have.",
+                    [
+                        new QuizOptionSeed("It lets the method accept any enumerable source, not just a concrete List<T>", true),
+                        new QuizOptionSeed("IEnumerable<T> iterates faster than List<T>", false),
+                        new QuizOptionSeed("It allows the method to add new items to the caller's collection", false),
+                        new QuizOptionSeed("It guarantees the sequence is sorted", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Collections (C#)", "https://learn.microsoft.com/en-us/dotnet/standard/collections/", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("Generic classes and methods (C# Programming Guide)", "https://learn.microsoft.com/en-us/dotnet/csharp/fundamentals/types/generics", LinkType.OfficialDocs),
+            ],
+            prerequisites: [lesson1, lesson2]);
+
+        var lesson3Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson3.Slug,
+        [
+            "Find one List<T>.Contains() call in your own code that's checked in a loop, and replace it with a HashSet<T>",
+            "Write a generic method with a `where T : IComparable<T>` constraint from scratch",
+            "Explain out loud why accepting IEnumerable<T> instead of List<T> in a method signature is usually the better default",
+        ]);
+
+        var lesson4 = BuildLesson(
+            slug: "linq-fundamentals",
+            title: "LINQ Fundamentals: Deferred Execution & Core Operators",
+            summary: "Method vs. query syntax, deferred execution, and the LINQ operators you'll reach for constantly.",
+            estimatedMinutes: 35,
+            objectives:
+            [
+                "Explain the difference between method syntax and query syntax, and when to reach for each",
+                "Explain deferred execution, and why enumerating the same query twice can produce different results",
+                "Use Where, Select, OrderBy, GroupBy, and aggregate operators (Sum/Count/Any/All) correctly",
+                "Force immediate execution with ToList()/ToArray() when materializing a snapshot is actually what you need",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    **LINQ** (Language-Integrated Query) is a set of extension methods on `IEnumerable<T>` (and `IQueryable<T>`) that let you filter, project, sort, and aggregate any sequence with a consistent, composable API — the same syntax works over in-memory lists, arrays, XML, and EF Core database queries.
+
+                    LINQ has two equivalent syntaxes: **method syntax** (`items.Where(x => x.IsActive).OrderBy(x => x.Name)`) and **query syntax** (`from x in items where x.IsActive orderby x.Name select x`). They compile to the same calls; method syntax is more common in day-to-day C# and covers a few operators query syntax can't express directly.
+
+                    Most LINQ operators use **deferred execution**: calling `.Where()` or `.Select()` doesn't run anything — it builds up a description of the query. The query only actually runs when something enumerates it: a `foreach`, or a call to `.ToList()`, `.ToArray()`, `.First()`, `.Count()`, etc. This means enumerating the *same* unmaterialized query twice re-runs it twice, against whatever the source looks like *at that moment*.
+                    """, 1),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    A deferred LINQ query is like a recipe card, not a cooked meal — writing `Where(x => x.IsFresh)` is jotting down an instruction, not doing any cooking. Nothing happens until someone actually follows the recipe (`foreach`, `.ToList()`), and if the pantry's contents changed since the recipe was written, that's what gets cooked — the recipe card itself never went stale.
+                    """, 2),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Filtering & projecting**
+
+                    - `.Where(x => ...)` — keep matching elements
+                    - `.Select(x => ...)` — project each element into something new
+                    - `.OrderBy(x => ...)` / `.OrderByDescending(x => ...)` — sort
+                    - `.GroupBy(x => x.Key)` — bucket elements by a key
+
+                    **Element & aggregate operators**
+
+                    - `.First()` / `.FirstOrDefault()` — throws / returns default if empty
+                    - `.Single()` / `.SingleOrDefault()` — throws if more than one match
+                    - `.Any(predicate)` / `.All(predicate)` — short-circuiting boolean checks
+                    - `.Count()`, `.Sum()`, `.Average()`, `.Min()`, `.Max()`
+                    - `.Distinct()`, `.Take(n)`, `.Skip(n)`
+
+                    **Forcing immediate execution**: `.ToList()`, `.ToArray()`, `.ToDictionary()`
+                    """, 3),
+                Block(BlockType.CodeSnippet, "Deferred Execution in Action", BodyFormat.PlainText, """
+                    var numbers = new List<int> { 1, 2, 3 };
+
+                    // Nothing has executed yet — this just describes a query.
+                    var evens = numbers.Where(n => n % 2 == 0);
+
+                    numbers.Add(4);
+
+                    // The query runs NOW, against the CURRENT state of numbers —
+                    // so 4 is included even though it was added after Where() was called.
+                    foreach (var n in evens)
+                    {
+                        Console.WriteLine(n); // prints 2, then 4
+                    }
+
+                    // Method syntax, chained and composable:
+                    var topActiveNames = people
+                        .Where(p => p.IsActive)
+                        .OrderByDescending(p => p.Score)
+                        .Select(p => p.Name)
+                        .Take(3)
+                        .ToList(); // materialized here — a real List<string>, not a query
+                    """, 4, language: "csharp"),
+                Block(BlockType.Diagram, "Query Built vs. Query Executed", BodyFormat.StructuredSteps, """
+                    [{"label":"Where(...)/Select(...) called","note":"builds a query description, runs nothing"},{"label":"Query object exists","note":"IEnumerable<T>, still not executed"},{"label":"foreach / ToList() / First()","note":"execution actually happens here"},{"label":"Source re-read at THIS moment","note":"reflects any changes made since the query was built"},{"label":"Results produced"}]
+                    """, 5),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Call `.ToList()` (or `.ToArray()`) once when you need to enumerate the same results more than once, or want a stable snapshot that won't change if the underlying source is mutated afterward — don't re-enumerate the same deferred query repeatedly.
+
+                    Keep LINQ chains readable: prefer a few named intermediate variables over one giant chained expression when a query does more than 3–4 operations — the next reader (often you, in six months) will thank you.
+                    """, 6),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    If given a "what does this print?" snippet involving LINQ, check for deferred execution first: was the query enumerated more than once, or was the source mutated between building the query and enumerating it? That's the detail most such questions are actually testing.
+                    """, 7),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Enumerating the same deferred LINQ query multiple times without realizing each enumeration re-runs it from scratch — against an EF Core `IQueryable<T>`, this silently means a second round trip to the database for what looks like "just looping over the results again."
+
+                    Also common: assuming a LINQ query is a snapshot taken at the moment `.Where()`/`.Select()` was called — it isn't, unless you explicitly materialize it with `.ToList()`.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "`var query = numbers.Where(n => n > 5); numbers.Add(10); foreach (var n in query) { ... }` — what does the foreach see?",
+                    "Where() only builds a query description; nothing executes until the foreach enumerates it. By then numbers already contains 10, so the query re-reads the current state of the list and includes it.",
+                    [
+                        new QuizOptionSeed("Only the numbers greater than 5 that existed before Add(10) was called", false),
+                        new QuizOptionSeed("10 as well, because the query re-evaluates the source at enumeration time, not at Where() time", true),
+                        new QuizOptionSeed("An InvalidOperationException, because numbers was modified after Where() was called", false),
+                        new QuizOptionSeed("An empty sequence, because Where() takes a snapshot immediately", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "Why can enumerating the same LINQ query twice against an EF Core IQueryable<T> be a performance problem?",
+                    "Deferred execution means each enumeration re-runs the full query against its data source. Two foreach loops over the same un-materialized IQueryable<T> trigger two separate round trips to the database — calling .ToList() once avoids the duplicate work.",
+                    [
+                        new QuizOptionSeed("LINQ automatically caches results after the first enumeration", false),
+                        new QuizOptionSeed("Each enumeration re-executes the query against the underlying data source, potentially hitting the database again", true),
+                        new QuizOptionSeed("IQueryable<T> can only be enumerated exactly once, ever", false),
+                        new QuizOptionSeed("Deferred execution only applies to in-memory collections, never to databases", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Introduction to LINQ queries (C#)", "https://learn.microsoft.com/en-us/dotnet/csharp/linq/get-started/introduction-to-linq-queries", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("Query syntax and method syntax in LINQ", "https://learn.microsoft.com/en-us/dotnet/csharp/linq/get-started/query-syntax-and-method-syntax-in-linq", LinkType.OfficialDocs),
+            ],
+            prerequisites: [lesson3]);
+
+        var lesson4Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson4.Slug,
+        [
+            "Write a LINQ method-syntax chain (Where/OrderBy/Select/Take) against your own data and materialize it with ToList()",
+            "Demonstrate deferred execution to yourself: build a query, mutate the source, then enumerate it and observe the result",
+            "Find one place in your own code enumerating the same LINQ query twice, and fix it with a single ToList()",
+        ]);
+
+        var module = BuildModule(topicId, "csharp-fundamentals", "C# Fundamentals",
+            "Language fundamentals every C# developer needs before going deeper into collections, LINQ, and async.",
+            205, [lesson1, lesson2, lesson3, lesson4]);
+
+        return (module, [lesson1Checklist, lesson2Checklist, lesson3Checklist, lesson4Checklist]);
     }
 
     // ============================== .NET ==============================
@@ -504,6 +751,270 @@ public static class CurriculumContentSeedData
             "Generate and read through one migration file end to end",
         ]);
 
+        var lesson3 = BuildLesson(
+            slug: "custom-middleware-and-di-patterns",
+            title: "Custom Middleware & Dependency Injection Patterns",
+            summary: "Writing your own middleware components and injecting dependencies correctly across constructors, factories, and HttpContext.",
+            estimatedMinutes: 40,
+            objectives:
+            [
+                "Write a custom middleware component using both the inline `app.Use()` delegate and the `IMiddleware` interface",
+                "Explain why middleware order in `Program.cs` directly determines request/response behavior",
+                "Identify why conventional middleware classes are effectively singletons, and where that means dependencies must be injected",
+                "Recognize the service locator anti-pattern and explain why it undermines the point of DI",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    There are two ways to write custom middleware. **Inline**, with `app.Use(async (context, next) => { ... })` — quick, good for small cross-cutting logic directly in `Program.cs`. **As a class**, either the *conventional middleware* shape (a constructor taking `RequestDelegate next`, plus an `InvokeAsync(HttpContext, ...)` method) or by implementing `IMiddleware` and registering it with `app.UseMiddleware<T>()`.
+
+                    Every middleware wraps the *rest of the pipeline* like a layer: code before `await next(context)` runs on the way **in** (request), code after it runs on the way **out** (response) — and a middleware can short-circuit entirely by never calling `next` at all (e.g., returning a 401 before routing even runs).
+
+                    A subtle but important DI wrinkle: conventional middleware classes (the `RequestDelegate next` constructor style) are built **once**, at app startup, and reused for every request — they behave like singletons even though you never called `AddSingleton` for them. That means constructor-injecting a Scoped service (like `AppDbContext`) into one recreates the exact captive-dependency bug from lesson 1. The fix is to accept Scoped dependencies as extra parameters on `InvokeAsync` itself — those get resolved fresh, per request, from that request's DI scope, not from the constructor.
+                    """, 1),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    Middleware is like wrapping a gift in several layers of paper — each layer gets added on the way in and peeled back in the exact reverse order on the way out. Skip the last layer's "unwrap" step (never call `next`) and whatever's underneath never gets revealed at all.
+
+                    A conventional middleware class is like a single reusable gift-wrapping station on a factory line, built once at the start of the shift — it can hold long-lived tools, but it can't privately keep a customer's one-time receipt (a Scoped service) between customers; that has to be handed to it fresh with each new box that comes through.
+                    """, 2),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Inline middleware**
+
+                    ```
+                    app.Use(async (context, next) =>
+                    {
+                        // before: runs on the way in
+                        await next(context);
+                        // after: runs on the way out
+                    });
+                    ```
+
+                    **Conventional middleware class** (built once, singleton-like)
+
+                    - Constructor takes `RequestDelegate next` (+ Singleton-safe deps only)
+                    - `InvokeAsync(HttpContext context, IScopedService svc)` — Scoped deps go **here**
+                    - Registered with `app.UseMiddleware<MyMiddleware>()`
+
+                    **`IMiddleware`** — resolved from DI per the lifetime you register it with
+
+                    - Register: `services.AddScoped<MyMiddleware>();`
+                    - Map: `app.UseMiddleware<MyMiddleware>();`
+                    - `Task InvokeAsync(HttpContext context, RequestDelegate next)`
+                    """, 3),
+                Block(BlockType.CodeSnippet, "A Custom Request-Timing Middleware", BodyFormat.PlainText, """
+                    public class RequestTimingMiddleware
+                    {
+                        private readonly RequestDelegate _next;
+                        private readonly ILogger<RequestTimingMiddleware> _logger;
+
+                        // Constructor deps must be Singleton-safe — this class is built once.
+                        public RequestTimingMiddleware(RequestDelegate next, ILogger<RequestTimingMiddleware> logger)
+                        {
+                            _next = next;
+                            _logger = logger;
+                        }
+
+                        // Scoped/Transient deps go here, resolved fresh per request.
+                        public async Task InvokeAsync(HttpContext context, AppDbContext db)
+                        {
+                            var stopwatch = Stopwatch.StartNew();
+
+                            await _next(context); // hand off to the rest of the pipeline
+
+                            stopwatch.Stop();
+                            _logger.LogInformation(
+                                "{Method} {Path} completed in {ElapsedMs}ms",
+                                context.Request.Method, context.Request.Path, stopwatch.ElapsedMilliseconds);
+                        }
+                    }
+
+                    // Program.cs
+                    app.UseMiddleware<RequestTimingMiddleware>();
+                    """, 4, language: "csharp"),
+                Block(BlockType.Diagram, "The Middleware Onion", BodyFormat.AsciiArt, """
+                    Request  -->  [ MW1 in  --> [ MW2 in  --> [ Endpoint ]
+                                                                    |
+                    Response <--  [ MW1 out <-- [ MW2 out <-- -----+
+
+                    Code before `await next()` in MW1/MW2 runs on the way IN.
+                    Code after `await next()` in MW1/MW2 runs on the way OUT,
+                    in the REVERSE order (MW2 finishes before MW1 finishes).
+                    """, 5),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    In a conventional middleware class, only inject truly Singleton-safe dependencies (loggers, `IConfiguration`, other Singletons) through the constructor. Anything Scoped or Transient — `DbContext`, a request-scoped service — must be a parameter on `InvokeAsync`, so the framework resolves it from that request's own DI scope.
+
+                    Prefer constructor injection everywhere else in the app (services, endpoint handlers). Resolving dependencies manually via `IServiceProvider.GetService<T>()` inside a method — the "service locator" pattern — hides a class's real dependencies from its constructor signature and makes them impossible to see without reading the method body.
+                    """, 6),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    If asked to write a piece of custom middleware, narrate the choice out loud: "I'll take `RequestDelegate next` in the constructor since this class is built once at startup, and pull `AppDbContext` in as an `InvokeAsync` parameter instead, since that's Scoped and needs to come from this request's own DI scope." That one sentence signals you understand *why* middleware DI works the way it does, not just the syntax.
+                    """, 7),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Injecting a Scoped service (most commonly `DbContext`) into a conventional middleware class's **constructor** — since the middleware is instantiated once at startup, this captures one instance forever, the exact captive-dependency bug from lesson 1, just in a new location.
+
+                    Also common: forgetting to call `await next(context)` at all in custom middleware, which silently dead-ends the pipeline — the request never reaches routing, the endpoint, or a response, and it just hangs or returns an empty response with no explicit error.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "In a conventional middleware class (constructor takes `RequestDelegate next`), where should a Scoped dependency like `AppDbContext` be injected?",
+                    "Conventional middleware classes are instantiated once at startup and reused for every request, behaving like a singleton. A Scoped dependency injected into the constructor would be captured forever — it must instead be a parameter on `InvokeAsync`, which DI resolves fresh from each request's own scope.",
+                    [
+                        new QuizOptionSeed("In the constructor, alongside RequestDelegate next", false),
+                        new QuizOptionSeed("As a parameter on the InvokeAsync method", true),
+                        new QuizOptionSeed("It can't be injected into middleware at all", false),
+                        new QuizOptionSeed("Only via a static service locator call inside InvokeAsync", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "What happens if a custom middleware never calls `await next(context)`?",
+                    "Calling next() is what hands control to the rest of the pipeline. Skipping it short-circuits the request entirely — later middleware, routing, and the endpoint handler never run, so no real response is produced unless the middleware explicitly writes one itself.",
+                    [
+                        new QuizOptionSeed("The rest of the pipeline still runs afterward automatically", false),
+                        new QuizOptionSeed("The request pipeline stops there — later middleware and the endpoint never execute", true),
+                        new QuizOptionSeed("The application throws a compile-time error", false),
+                        new QuizOptionSeed("It only skips authentication, not routing", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Write custom ASP.NET Core middleware", "https://learn.microsoft.com/en-us/aspnet/core/fundamentals/middleware/write", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("Dependency injection guidelines", "https://learn.microsoft.com/en-us/dotnet/core/extensions/dependency-injection-guidelines", LinkType.OfficialDocs),
+            ],
+            prerequisites: [lesson1]);
+
+        var lesson3Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson3.Slug,
+        [
+            "Write one custom middleware class using IMiddleware (or the conventional shape) and register it in Program.cs",
+            "Find any Scoped service accidentally injected into a middleware constructor and move it to InvokeAsync",
+            "Explain the 'middleware onion' out loud, tracing a request in and the response back out through two layers",
+        ]);
+
+        var lesson4 = BuildLesson(
+            slug: "configuration-logging-options-pattern",
+            title: "Configuration, Logging & the Options Pattern",
+            summary: "Reading settings safely with the Options pattern, structured logging with ILogger<T>, and environment-specific configuration.",
+            estimatedMinutes: 35,
+            objectives:
+            [
+                "Explain the configuration provider order and how appsettings.{Environment}.json and environment variables override appsettings.json",
+                "Bind a strongly-typed settings class using the Options pattern instead of scattering IConfiguration[\"Key\"] lookups",
+                "Choose between IOptions<T>, IOptionsSnapshot<T>, and IOptionsMonitor<T> for a given scenario",
+                "Write structured log messages using message templates instead of string interpolation",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    `IConfiguration` is built from an ordered stack of **providers** — `appsettings.json`, then `appsettings.{Environment}.json`, then environment variables, then command-line arguments (and user secrets in Development). Later providers **override** matching keys from earlier ones, which is exactly how the same code runs with different settings in Development vs. Production without changing a single line.
+
+                    Reading configuration directly with `builder.Configuration["Jwt:Issuer"]` scatters magic strings everywhere and gives you no compile-time safety. The **Options pattern** fixes this: define a plain settings class, bind a config section to it once (`services.Configure<JwtSettings>(config.GetSection("Jwt"))`), then inject a typed options wrapper wherever it's needed.
+
+                    Three flavors of that wrapper exist for different needs: **`IOptions<T>`** (Singleton, read once, never changes after startup), **`IOptionsSnapshot<T>`** (Scoped, recomputed per request — picks up config file changes without a restart), and **`IOptionsMonitor<T>`** (Singleton, but supports an `OnChange` callback for live reload, useful for long-lived Singleton services).
+
+                    **Logging** works the same DI-first way: inject `ILogger<T>` and call `logger.LogInformation("Order {OrderId} shipped in {ElapsedMs}ms", orderId, elapsed)`. The `{OrderId}`/`{ElapsedMs}` are **named placeholders**, not string interpolation — the logging provider keeps them as separate structured fields, so a log aggregator can filter/query by `OrderId` directly instead of regex-parsing a sentence.
+                    """, 1),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    Configuration providers are like sticky notes layered on top of a printed recipe card — the base card (`appsettings.json`) has sensible defaults, and each sticky note on top (`appsettings.Production.json`, then environment variables) can cross out and override just the one line it cares about, without anyone having to reprint the whole card.
+
+                    Structured logging vs. string interpolation is the difference between filling out a labeled spreadsheet row (`OrderId: 42, ElapsedMs: 118`) and writing the same information as a plain sentence in a notebook — the spreadsheet version can be sorted and filtered later; the sentence can only be searched by eye.
+                    """, 2),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Configuration provider order** (last one wins on a conflicting key)
+
+                    1. `appsettings.json`
+                    2. `appsettings.{Environment}.json`
+                    3. User secrets (Development only)
+                    4. Environment variables
+                    5. Command-line arguments
+
+                    **Options pattern**
+
+                    - `services.Configure<MySettings>(config.GetSection("MySettings"));`
+                    - `IOptions<T>` — Singleton, snapshot taken once at startup
+                    - `IOptionsSnapshot<T>` — Scoped, recomputed once per request
+                    - `IOptionsMonitor<T>` — Singleton, live-reloads + `OnChange(callback)`
+
+                    **Log levels** (ascending severity)
+
+                    `Trace` < `Debug` < `Information` < `Warning` < `Error` < `Critical`
+                    """, 3),
+                Block(BlockType.CodeSnippet, "Strongly-Typed Options + Structured Logging", BodyFormat.PlainText, """
+                    public class SmtpSettings
+                    {
+                        public string Host { get; set; } = "";
+                        public int Port { get; set; }
+                    }
+
+                    // Program.cs — bind the "Smtp" section instead of reading raw keys.
+                    builder.Services.Configure<SmtpSettings>(builder.Configuration.GetSection("Smtp"));
+
+                    public class EmailSender(IOptions<SmtpSettings> options, ILogger<EmailSender> logger)
+                    {
+                        private readonly SmtpSettings _settings = options.Value;
+
+                        public async Task SendAsync(string to, string subject)
+                        {
+                            var stopwatch = Stopwatch.StartNew();
+                            await DeliverAsync(_settings.Host, _settings.Port, to, subject);
+
+                            // Structured template — {To} and {ElapsedMs} stay queryable fields,
+                            // NOT baked into the message string like $"Sent to {to}" would be.
+                            logger.LogInformation(
+                                "Email sent to {To} in {ElapsedMs}ms", to, stopwatch.ElapsedMilliseconds);
+                        }
+                    }
+                    """, 4, language: "csharp"),
+                Block(BlockType.Diagram, "Configuration Provider Layering", BodyFormat.StructuredSteps, """
+                    [{"label":"appsettings.json","note":"base defaults"},{"label":"appsettings.{Environment}.json","note":"overrides per env"},{"label":"User Secrets","note":"Development only"},{"label":"Environment Variables","note":"overrides file-based config"},{"label":"Command-line Args","note":"highest precedence"},{"label":"Final merged IConfiguration"}]
+                    """, 5),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Bind configuration into a strongly-typed settings class via `services.Configure<T>()` rather than sprinkling `config["Section:Key"]` string lookups across the codebase — a typo in a magic string fails silently at runtime, while a typo in a C# property name fails to compile.
+
+                    Always use structured log message templates (`"Order {OrderId} shipped", orderId`) instead of string interpolation (`$"Order {orderId} shipped"`), and never log secrets (connection strings, API keys, passwords) even at `Debug` level — log sinks are often less tightly access-controlled than the config store itself.
+                    """, 6),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    Be ready to justify a choice between `IOptions<T>` and `IOptionsMonitor<T>` with a scenario, not just a definition: "For a background service that needs to pick up a changed rate-limit threshold without restarting the app, I'd use `IOptionsMonitor<T>` and subscribe to `OnChange` — `IOptions<T>` would only ever see the value from the moment the app started."
+                    """, 7),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Writing `logger.LogInformation($"Order {orderId} shipped")` — the string-interpolated `$""` bakes the value into the message text itself, so a log aggregator sees one opaque sentence per call instead of a queryable `OrderId` field. The fix is `logger.LogInformation("Order {OrderId} shipped", orderId)`.
+
+                    Also common: hardcoding a connection string or API key directly in C# instead of reading it from configuration — this leaks secrets into source control and makes it impossible to use a different value per environment without a code change.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "appsettings.json sets `Logging:LogLevel:Default` to `Information`, and an environment variable sets the same key to `Warning`. Which value wins?",
+                    "Environment variables are a later provider in the configuration stack than appsettings.json, and later providers override earlier ones for the same key — so the environment variable's `Warning` value wins.",
+                    [
+                        new QuizOptionSeed("appsettings.json always wins, since it's the base file", false),
+                        new QuizOptionSeed("The environment variable wins, since later providers override earlier ones", true),
+                        new QuizOptionSeed("Both values are merged into a list", false),
+                        new QuizOptionSeed("The app throws a configuration conflict exception at startup", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "What's the main problem with `logger.LogInformation($\"Order {orderId} shipped\")` compared to using a message template?",
+                    "String interpolation bakes the value directly into the log message text, losing the structured, queryable {OrderId} field that a template preserves — log aggregators can no longer filter or search by OrderId directly.",
+                    [
+                        new QuizOptionSeed("It's slower to compile", false),
+                        new QuizOptionSeed("It loses the structured, queryable OrderId field that a message template would preserve", true),
+                        new QuizOptionSeed("It throws a runtime exception", false),
+                        new QuizOptionSeed("LogInformation doesn't accept interpolated strings at all", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Configuration in ASP.NET Core", "https://learn.microsoft.com/en-us/aspnet/core/fundamentals/configuration/", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("Options pattern in ASP.NET Core", "https://learn.microsoft.com/en-us/aspnet/core/fundamentals/configuration/options", LinkType.OfficialDocs),
+            ],
+            prerequisites: [lesson3]);
+
+        var lesson4Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson4.Slug,
+        [
+            "Bind one appsettings.json section to a strongly-typed options class instead of using magic-string lookups",
+            "Replace one string-interpolated log call in your own code with a structured message template",
+            "Explain out loud when you'd reach for IOptionsMonitor<T> instead of IOptions<T>, with a concrete scenario",
+        ]);
+
         var capstone = new CapstoneProject
         {
             Title = "Build and Deploy a Minimal API Task Tracker",
@@ -531,10 +1042,10 @@ public static class CurriculumContentSeedData
         ]);
 
         var module = BuildModule(topicId, "aspnet-core-basics", "ASP.NET Core Basics",
-            "The middleware pipeline, dependency injection, EF Core, and building your first Minimal API.",
-            85, [lesson1, lesson2], capstone);
+            "The middleware pipeline, dependency injection, EF Core, custom middleware, configuration/logging, and building your first Minimal API.",
+            200, [lesson1, lesson2, lesson3, lesson4], capstone);
 
-        return (module, [lesson1Checklist, lesson2Checklist, capstoneChecklist]);
+        return (module, [lesson1Checklist, lesson2Checklist, lesson3Checklist, lesson4Checklist, capstoneChecklist]);
     }
 
     // ============================== DSA ==============================
@@ -774,11 +1285,298 @@ public static class CurriculumContentSeedData
             "Explain why `left + (right - left) / 2` is safer than `(left + right) / 2`",
         ]);
 
-        var module = BuildModule(topicId, "arrays-and-hashing", "Arrays & Hashing",
-            "The foundational patterns — hash maps, two pointers, and binary search — that unlock most array and string problems.",
-            85, [lesson1, lesson2]);
+        var lesson3 = BuildLesson(
+            slug: "sliding-window-patterns",
+            title: "Sliding Window Patterns",
+            summary: "Fixed-size and variable-size sliding windows for turning brute-force substring/subarray scans into linear time.",
+            estimatedMinutes: 45,
+            objectives:
+            [
+                "Distinguish fixed-size vs. variable-size sliding window problems",
+                "Implement a variable-size window that expands and contracts based on a condition",
+                "Explain why sliding window runs in O(n) despite an inner while loop nested in an outer for loop",
+                "Recognize sliding window opportunities in substring/subarray problems during an interview",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    A **sliding window** is a contiguous range `[left, right]` over an array or string that you slide across the input, expanding and contracting instead of restarting from scratch — turning many `O(n²)` or `O(n³)` brute-force scans into `O(n)`.
 
-        return (module, [lesson1Checklist, lesson2Checklist]);
+                    There are two shapes:
+
+                    - **Fixed-size window** — the window width `k` is fixed by the problem (e.g., "max sum of any subarray of size k"). Slide by adding the new right element and removing the leftmost element every step; the window never changes size.
+                    - **Variable-size window** — the window grows by moving `right` until some condition breaks (e.g., a duplicate character appears), then shrinks by moving `left` until the condition holds again. The window's size *is* the answer you're tracking, not a fixed input.
+
+                    Even though a variable window looks like two nested loops (an inner `while` inside an outer `for`), each pointer (`left` and `right`) only ever moves forward and never resets — so across the whole run, `left` and `right` each move at most `n` times total, giving `O(n)` overall, not `O(n²)`.
+                    """, 1),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    A fixed-size window is like a physical picture frame you slide across a long photo strip one inch at a time — the frame's size never changes, you just drop what falls off the left edge and pick up what enters on the right.
+
+                    A variable-size window is like slowly opening your umbrella to cover a growing group of people (expanding `right`) until it starts raining on someone at the edge (the condition breaks), at which point a few people step out from the left (shrinking `left`) until everyone under it is dry again.
+                    """, 2),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Recognizing a sliding window problem**
+
+                    - Keywords: "contiguous subarray/substring", "longest/shortest/max/min ... satisfying a condition"
+                    - The condition can be checked incrementally (adding/removing one element updates it in O(1) or close to it)
+
+                    **Fixed-size window template**
+
+                    - Maintain a running aggregate (sum, count, frequency map) for the current window
+                    - Each step: add `nums[right]`, remove `nums[right - k]`, move both pointers forward by one
+
+                    **Variable-size window template**
+
+                    - Expand `right` one step, update the window's state
+                    - While the window violates the condition, shrink from `left` and update state
+                    - After the inner while, the window is valid — record/update the answer
+                    """, 3),
+                Block(BlockType.CodeSnippet, "Longest Substring Without Repeating Characters", BodyFormat.PlainText, """
+                    // Longest substring without repeating characters: O(n) time, O(min(n, charset)) space.
+                    public int LengthOfLongestSubstring(string s)
+                    {
+                        var lastSeenAt = new Dictionary<char, int>();
+                        var left = 0;
+                        var longest = 0;
+
+                        for (var right = 0; right < s.Length; right++)
+                        {
+                            var c = s[right];
+
+                            // If c was seen inside the current window, jump left past it.
+                            if (lastSeenAt.TryGetValue(c, out var seenIndex) && seenIndex >= left)
+                            {
+                                left = seenIndex + 1;
+                            }
+
+                            lastSeenAt[c] = right;
+                            longest = Math.Max(longest, right - left + 1);
+                        }
+
+                        return longest;
+                    }
+                    """, 4, language: "csharp"),
+                Block(BlockType.Diagram, "Expanding and Jumping the Window", BodyFormat.AsciiArt, """
+                    s = a b c a b c b b
+                        0 1 2 3 4 5 6 7
+
+                    right=2: window [0..2] "abc"      length 3 (best so far)
+                    right=3: 'a' repeats inside window -> left jumps to 1
+                             window [1..3] "bca"       length 3
+                    right=6: 'b' repeats inside window -> left jumps to 5
+                             window [5..6] "cb"        length 2
+
+                    Longest substring without repeats: length 3 (e.g. "abc")
+                    """, 5),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Maintain the window's "state" (a frequency map, running sum, or count of violations) incrementally as you expand/shrink — never recompute it from scratch inside the loop, or you turn an O(n) sliding window back into O(n²)/O(n·k) by accident.
+
+                    For fixed-size windows, initialize by processing the first `k` elements outside the main loop, then slide one step at a time inside it — this avoids an off-by-one on the very first window.
+                    """, 6),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    Say the shape of the window out loud before coding: "the window size is fixed at k" vs. "the window grows until a condition breaks, then shrinks." Naming which of the two templates applies signals you're pattern-matching correctly, and tells the interviewer which invariant to expect you to maintain.
+                    """, 7),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Recomputing the window's sum/frequency map from scratch every time the window moves, instead of incrementally adding the new element and removing the old one — this silently turns an O(n) sliding window into O(n·k) or worse.
+
+                    Also common: letting `left` overshoot `right`, and — on variable-size problems — recording the answer before the inner while loop has fully shrunk the window back to valid, which can record a length that was never actually valid.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "You need the length of the longest subarray containing at most 2 distinct values. Which window shape fits?",
+                    "The valid window size isn't known upfront — it depends on how many distinct values are currently inside it — so you grow `right` until there are more than 2 distinct values, then shrink `left` until there are 2 or fewer again. That's a variable-size window.",
+                    [
+                        new QuizOptionSeed("A variable-size window that expands and shrinks based on the distinct-count condition", true),
+                        new QuizOptionSeed("A fixed-size window, since 'at most 2' implies a constant width", false),
+                        new QuizOptionSeed("Two pointers on a sorted copy of the array only", false),
+                        new QuizOptionSeed("Binary search over the array's values", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "Why is a two-pointer sliding window O(n) rather than O(n²), despite an inner while loop nested inside an outer for loop?",
+                    "Both `left` and `right` only ever move forward and never reset back — across the entire run, each pointer advances at most n times total, so the combined work across all iterations of the inner loop is bounded by O(n), not O(n) per outer step.",
+                    [
+                        new QuizOptionSeed("Each pointer moves forward at most n times total across the whole run, so total movement is bounded by O(n)", true),
+                        new QuizOptionSeed("It secretly isn't O(n) — it's O(n²), it just runs fast on small inputs", false),
+                        new QuizOptionSeed("Because it uses a hash map internally to skip elements", false),
+                        new QuizOptionSeed("It only works correctly on inputs smaller than about 1000 elements", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Window Sliding Technique (GeeksforGeeks)", "https://www.geeksforgeeks.org/window-sliding-technique/", LinkType.FurtherReading),
+                new ReferenceLinkSeed("Longest Substring Without Repeating Characters (LeetCode)", "https://leetcode.com/problems/longest-substring-without-repeating-characters/", LinkType.FurtherReading),
+            ],
+            prerequisites: [lesson1]);
+
+        var lesson3Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson3.Slug,
+        [
+            "Implement 'Longest Substring Without Repeating Characters' from scratch without checking the solution",
+            "Explain out loud when a fixed-size window applies vs. when a variable-size window applies",
+            "Find one brute-force nested-loop scan in your own code that a sliding window could replace",
+        ]);
+
+        var lesson4 = BuildLesson(
+            slug: "trees-recursive-traversal",
+            title: "Trees & Recursive Traversal: DFS, BFS, and BST Basics",
+            summary: "Recursive depth-first traversal, iterative breadth-first traversal, and the binary search tree invariant that makes search O(log n).",
+            estimatedMinutes: 50,
+            objectives:
+            [
+                "Implement the three DFS traversal orders (preorder, inorder, postorder) recursively",
+                "Implement BFS (level-order traversal) iteratively using a queue",
+                "Explain the BST invariant and why an inorder traversal of a BST yields sorted output",
+                "Choose DFS vs. BFS based on what the problem actually asks for",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    A **binary tree** is a node with up to two children (`left`, `right`). There are two fundamentally different ways to visit every node:
+
+                    - **Depth-first search (DFS)** — go as deep as possible down one branch before backtracking. Naturally recursive: a tree is defined in terms of smaller trees (its subtrees), so a recursive function calling itself on `node.Left` and `node.Right` mirrors the data structure's own definition. DFS has three orderings, based on *when* you visit the current node relative to its children: **preorder** (node, left, right), **inorder** (left, node, right), **postorder** (left, right, node).
+                    - **Breadth-first search (BFS)** — visit level by level, left to right. Implemented iteratively with a queue: dequeue a node, enqueue its children, repeat — the queue's FIFO order naturally produces level-by-level output.
+
+                    A **binary search tree (BST)** adds one invariant on top of the shape: for every node, everything in its left subtree is smaller, and everything in its right subtree is larger. That invariant is what makes search, insert, and delete run in `O(log n)` on a balanced tree (each comparison eliminates one whole subtree — the same idea as binary search on an array) — and it's also why an **inorder** traversal of a BST always visits nodes in sorted order.
+                    """, 1),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    DFS is like exploring a maze by always taking the first turn you see and following that corridor all the way to a dead end before backtracking to try the next branch — you go deep before you go wide.
+
+                    BFS is like ripples spreading out from a stone dropped in water — everything at distance 1 gets visited before anything at distance 2, expanding outward one ring at a time. That's also why BFS is the natural tool for "shortest path in an unweighted graph/tree" — it finds the nearest thing first, guaranteed.
+                    """, 2),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **DFS traversal orders**
+
+                    - Preorder (node, left, right) — good for copying/serializing a tree
+                    - Inorder (left, node, right) — yields sorted order on a BST
+                    - Postorder (left, right, node) — good for deleting/freeing a tree bottom-up
+
+                    **BFS**
+
+                    - Iterative, uses a `Queue<T>`
+                    - Natural fit for level-order output and shortest-path-in-unweighted-structure problems
+
+                    **BST invariant**
+
+                    - left subtree < node < right subtree, for every node
+                    - Search/insert: O(log n) average (balanced), O(n) worst case (degenerates toward a linked list)
+                    """, 3),
+                Block(BlockType.CodeSnippet, "Recursive Inorder DFS and Iterative BFS Level-Order", BodyFormat.PlainText, """
+                    public class TreeNode
+                    {
+                        public int Value;
+                        public TreeNode? Left;
+                        public TreeNode? Right;
+                    }
+
+                    // Inorder DFS (recursive): left, node, right -> sorted order on a BST.
+                    public void InorderTraversal(TreeNode? node, List<int> result)
+                    {
+                        if (node is null) return; // base case
+
+                        InorderTraversal(node.Left, result);
+                        result.Add(node.Value);
+                        InorderTraversal(node.Right, result);
+                    }
+
+                    // BFS (iterative): level-order traversal using a queue.
+                    public List<List<int>> LevelOrder(TreeNode? root)
+                    {
+                        var levels = new List<List<int>>();
+                        if (root is null) return levels;
+
+                        var queue = new Queue<TreeNode>();
+                        queue.Enqueue(root);
+
+                        while (queue.Count > 0)
+                        {
+                            var levelSize = queue.Count;
+                            var currentLevel = new List<int>();
+
+                            for (var i = 0; i < levelSize; i++)
+                            {
+                                var node = queue.Dequeue();
+                                currentLevel.Add(node.Value);
+
+                                if (node.Left is not null) queue.Enqueue(node.Left);
+                                if (node.Right is not null) queue.Enqueue(node.Right);
+                            }
+
+                            levels.Add(currentLevel);
+                        }
+
+                        return levels;
+                    }
+                    """, 4, language: "csharp"),
+                Block(BlockType.Diagram, "DFS vs. BFS on the Same Tree", BodyFormat.AsciiArt, """
+                                4
+                              /   \\
+                             2     6
+                            / \\   / \\
+                           1   3 5   7
+
+                    Inorder DFS (left, node, right):
+                      1, 2, 3, 4, 5, 6, 7          <- sorted, because this is a BST
+
+                    BFS / level order (queue: dequeue, enqueue children):
+                      Level 0: 4
+                      Level 1: 2, 6
+                      Level 2: 1, 3, 5, 7
+                    """, 5),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Always null-check before recursing (`if (node is null) return;`) as the very first line of a recursive tree function — this is the base case, and skipping it is the most common source of a `NullReferenceException` in tree code.
+
+                    Pick the traversal to match the question: need sorted output from a BST -> inorder; need to clone/serialize a tree -> preorder; need to safely delete a tree bottom-up -> postorder; need the shortest path or level-by-level structure -> BFS, not DFS.
+                    """, 6),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    When given a tree problem, say which traversal you're choosing and why before writing code: "Since this is a BST and I need sorted output, I'll do an inorder traversal" demonstrates you understand *why* the traversal produces that order, not just that you memorized three names.
+                    """, 7),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Forgetting the null base case in a recursive traversal, causing a `NullReferenceException` the first time recursion reaches a leaf's non-existent child.
+
+                    Also common: reaching for DFS on a "shortest path" or "minimum depth" style question, when BFS is what actually guarantees finding the nearest answer first — DFS can find *a* path, but not necessarily the shortest one, without extra bookkeeping BFS gets for free.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "You need to print the values of a binary search tree in ascending sorted order. Which traversal should you use?",
+                    "Inorder visits the left subtree, then the current node, then the right subtree. On a BST that means all-smaller values, then the current value, then all-larger values — which is exactly sorted order.",
+                    [
+                        new QuizOptionSeed("Inorder traversal (left, node, right)", true),
+                        new QuizOptionSeed("Preorder traversal (node, left, right)", false),
+                        new QuizOptionSeed("Postorder traversal (left, right, node)", false),
+                        new QuizOptionSeed("BFS / level-order traversal", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "You need the minimum depth (shortest root-to-leaf path) of a binary tree. Why is BFS usually preferred over plain recursive DFS here?",
+                    "BFS explores level by level, so the very first leaf it reaches is guaranteed to be the shallowest one — it can stop immediately. Plain DFS would need to fully explore multiple branches and compare their depths to find the minimum, doing extra work BFS avoids by construction.",
+                    [
+                        new QuizOptionSeed("BFS visits nodes level by level, so the first leaf it finds is guaranteed to be the shallowest", true),
+                        new QuizOptionSeed("DFS is asymptotically slower than BFS on every tree", false),
+                        new QuizOptionSeed("DFS cannot be implemented recursively on a binary tree", false),
+                        new QuizOptionSeed("BFS always uses less memory than DFS, regardless of tree shape", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Tree Traversals: Inorder, Preorder, Postorder (GeeksforGeeks)", "https://www.geeksforgeeks.org/tree-traversals-inorder-preorder-and-postorder/", LinkType.FurtherReading),
+                new ReferenceLinkSeed("LeetCode Explore: Binary Tree", "https://leetcode.com/explore/learn/card/data-structure-tree/", LinkType.FurtherReading),
+            ],
+            prerequisites: [lesson2]);
+
+        var lesson4Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson4.Slug,
+        [
+            "Implement all three DFS traversals (preorder, inorder, postorder) recursively from scratch",
+            "Implement BFS level-order traversal iteratively using a Queue<T>, without looking at the solution",
+            "Explain why inorder traversal of a BST yields sorted output, using the BST invariant",
+        ]);
+
+        var module = BuildModule(topicId, "arrays-and-hashing", "Arrays & Hashing",
+            "The foundational patterns — hash maps, two pointers, binary search, sliding windows, and tree traversal — that unlock most array, string, and tree problems.",
+            220, [lesson1, lesson2, lesson3, lesson4]);
+
+        return (module, [lesson1Checklist, lesson2Checklist, lesson3Checklist, lesson4Checklist]);
     }
 
     // ============================== System Design ==============================
@@ -997,11 +1795,268 @@ public static class CurriculumContentSeedData
             "Argue both sides of a SQL vs. NoSQL choice for one system you've worked on",
         ]);
 
-        var module = BuildModule(topicId, "system-design-fundamentals", "System Design Fundamentals",
-            "How to scale a single server into a resilient, horizontally-scaled system with a real database strategy.",
-            90, [lesson1, lesson2]);
+        var lesson3 = BuildLesson(
+            slug: "message-queues-async-communication",
+            title: "Message Queues & Asynchronous Communication",
+            summary: "Decoupling services with queues and pub/sub, and the delivery guarantees you actually get in practice.",
+            estimatedMinutes: 45,
+            objectives:
+            [
+                "Explain why asynchronous messaging decouples producers and consumers in both time and load",
+                "Distinguish a point-to-point queue from a publish/subscribe topic and know when to use each",
+                "Explain at-least-once, at-most-once, and exactly-once delivery, and why 'exactly-once' end-to-end is effectively a myth",
+                "Design a consumer that stays correct even when it receives the same message twice",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    A **message queue** decouples a producer from a consumer: the producer writes a message to a broker and moves on immediately, instead of blocking on the consumer actually processing it. This absorbs traffic spikes (the queue grows instead of the consumer falling over) and lets producer and consumer scale, deploy, and fail independently.
 
-        return (module, [lesson1Checklist, lesson2Checklist]);
+                    There are two core messaging shapes:
+
+                    - **Point-to-point (queue)** — each message is delivered to exactly one consumer out of a pool. Good for distributing work items (e.g., "resize this image") across a pool of workers.
+                    - **Publish/subscribe (topic)** — each message is fanned out to *every* subscriber. Good for broadcasting an event (e.g., "order placed") to multiple independent services that each need to react.
+
+                    Real systems (Kafka, RabbitMQ, SQS/SNS) blend both: Kafka topics are partitioned, and each partition behaves like a point-to-point queue *within* a consumer group, while multiple consumer groups each get their own full copy of the stream — pub/sub across groups, point-to-point within a group.
+
+                    **Delivery guarantees** describe what happens when something fails mid-delivery:
+
+                    - **At-most-once** — a message might be lost, but is never redelivered. Fire-and-forget.
+                    - **At-least-once** — a message is never lost, but might be redelivered (e.g., consumer crashes after processing but before acknowledging). This is the practical default for most brokers.
+                    - **Exactly-once** — the message is processed precisely once. True end-to-end exactly-once requires cooperation between the broker *and* the consumer's side effects (e.g., a transactional write that records "processed message #123" atomically with the business update) — the broker alone cannot guarantee it.
+                    """, 1),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    A message queue is like dropping a letter in a mailbox instead of hand-delivering it and waiting on the doorstep — you trust the postal system (the broker) to get it there, and you're free to walk away and do something else the moment it's in the box.
+
+                    A point-to-point queue is like a single ticket-number line at a deli counter — each ticket is served by exactly one clerk. Pub/sub is like a store's PA announcement — everyone in the building hears the same page, and each department reacts to it independently.
+                    """, 2),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Queue vs. topic**
+
+                    - Queue (point-to-point) — one consumer per message, used to distribute work across a pool
+                    - Topic (pub/sub) — every subscriber gets a copy, used to broadcast events
+
+                    **Delivery guarantees**
+
+                    - At-most-once — may lose messages, never duplicates
+                    - At-least-once — never loses messages, may duplicate (the common default)
+                    - Exactly-once — requires idempotent, transactional consumer logic; the broker can't provide this alone
+
+                    **Common brokers**
+
+                    - Kafka — partitioned log, high throughput, consumer groups, replay-able
+                    - RabbitMQ — flexible routing (exchanges), strong point-to-point queue semantics
+                    - SQS/SNS — managed queue (SQS) + managed pub/sub (SNS), at-least-once by default
+                    """, 3),
+                Block(BlockType.CodeSnippet, "An Idempotent Consumer (Deduping At-Least-Once Delivery)", BodyFormat.PlainText, """
+                    // The broker guarantees at-least-once delivery, so this message
+                    // might arrive twice. Track processed message IDs so a duplicate
+                    // is a safe no-op instead of double-charging a customer.
+                    public async Task HandleOrderPaidAsync(OrderPaidMessage message)
+                    {
+                        var alreadyProcessed = await db.ProcessedMessages
+                            .AnyAsync(m => m.MessageId == message.MessageId);
+
+                        if (alreadyProcessed)
+                        {
+                            return; // duplicate delivery — safe to ignore
+                        }
+
+                        await using var transaction = await db.Database.BeginTransactionAsync();
+
+                        await fulfillmentService.ShipOrderAsync(message.OrderId);
+                        db.ProcessedMessages.Add(new ProcessedMessage { MessageId = message.MessageId });
+                        await db.SaveChangesAsync();
+
+                        await transaction.CommitAsync(); // side effect + dedupe record commit together
+                    }
+                    """, 4, language: "csharp"),
+                Block(BlockType.Diagram, "Producer to Consumer Group, Through a Broker", BodyFormat.StructuredSteps, """
+                    [{"label":"Producer"},{"label":"Broker","note":"queue or partitioned topic"},{"label":"Consumer Group A","note":"work distributed across N workers"},{"label":"Consumer Group B","note":"separate copy of the stream, e.g. analytics"},{"label":"Dead-Letter Queue","note":"messages that fail repeatedly land here, not lost"}]
+                    """, 5),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Make consumers **idempotent** by design — track a message/idempotency ID and short-circuit on a duplicate — rather than assuming the broker will never redeliver. At-least-once is the realistic default, so idempotency is what actually makes that safe.
+
+                    Configure a **dead-letter queue** for messages that fail processing repeatedly, instead of retrying forever or silently dropping them — it keeps a poison message from blocking the whole queue while preserving it for investigation.
+                    """, 6),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    When a design calls for messaging, state the delivery guarantee you're assuming out loud ("I'll assume at-least-once, so the consumer needs to be idempotent") before writing consumer logic — interviewers use this as a strong signal you understand that "exactly-once" is not something you get for free just by picking a fancy broker.
+                    """, 7),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Assuming a message broker provides exactly-once delivery out of the box, then writing a consumer that isn't idempotent — a redelivered message silently double-processes (double-charges, double-ships, double-emails).
+
+                    Also common: forgetting that ordering is only guaranteed *within* a single partition/queue, not across the whole topic — a design that depends on global ordering across multiple partitions will see events arrive out of order under load.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "A consumer crashes right after processing a message but before acknowledging it to the broker. Under at-least-once delivery, what happens?",
+                    "Since the broker never received the acknowledgment, it assumes the message wasn't processed and redelivers it — which is exactly why at-least-once consumers must be idempotent, since the same message can legitimately be processed more than once.",
+                    [
+                        new QuizOptionSeed("The message is permanently lost", false),
+                        new QuizOptionSeed("The broker redelivers the message, so the consumer may process it again", true),
+                        new QuizOptionSeed("The broker automatically detects the duplicate and skips redelivery", false),
+                        new QuizOptionSeed("The entire queue is paused until manually restarted", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "An 'order placed' event needs to reach three independent services (billing, shipping, analytics), each processing it fully on their own. Which messaging shape fits?",
+                    "Publish/subscribe (a topic) fans the same event out to every subscriber — each service gets its own copy and reacts independently, unlike a point-to-point queue where only one consumer in a pool would receive it.",
+                    [
+                        new QuizOptionSeed("A single point-to-point queue shared by all three services", false),
+                        new QuizOptionSeed("Publish/subscribe, so each service receives its own copy of the event", true),
+                        new QuizOptionSeed("A synchronous HTTP call chained across all three services", false),
+                        new QuizOptionSeed("There's no way to deliver one event to three consumers", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("System Design Primer: Communication", "https://github.com/donnemartin/system-design-primer#communication", LinkType.FurtherReading),
+                new ReferenceLinkSeed("Amazon SQS: At-Least-Once Delivery", "https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/FIFO-queues.html", LinkType.OfficialDocs),
+            ],
+            prerequisites: [lesson1]);
+
+        var lesson3Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson3.Slug,
+        [
+            "Draw the producer -> broker -> consumer group -> dead-letter queue diagram from memory",
+            "Explain why at-least-once delivery requires an idempotent consumer, using your own example",
+            "Describe a real scenario where point-to-point queueing is the wrong fit and pub/sub is correct",
+        ]);
+
+        var lesson4 = BuildLesson(
+            slug: "cap-theorem-consistency-models",
+            title: "CAP Theorem & Consistency Models",
+            summary: "Why partition tolerance isn't optional, and the practical spectrum from strong to eventual consistency real systems pick from.",
+            estimatedMinutes: 45,
+            objectives:
+            [
+                "Explain why a real distributed system is actually choosing between consistency and availability, not freely picking 2 of 3",
+                "Differentiate strong consistency, eventual consistency, and read-your-writes consistency with a concrete example of each",
+                "Explain how quorum-based reads/writes (N/W/R) let you tune the consistency-availability trade-off instead of picking one extreme",
+                "Choose an appropriate consistency model for a given feature, rather than applying one model to an entire system",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    The **CAP theorem** states that a distributed data store can provide at most two of three guarantees: **C**onsistency (every read sees the latest write), **A**vailability (every request gets a response), and **P**artition tolerance (the system keeps working when network nodes can't reach each other).
+
+                    In practice this isn't really a 3-way menu: network partitions *will* happen, so partition tolerance isn't optional for any system that spans more than one machine. That leaves a real choice only during a partition: return a possibly-stale answer (favor **A**vailability) or refuse to answer until consistency can be guaranteed (favor **C**onsistency). The **PACELC** extension makes this more honest: even *without* a partition (Else), you still trade **L**atency against **C**onsistency.
+
+                    Consistency isn't binary — it's a spectrum:
+
+                    - **Strong consistency** — every read reflects the most recent write, everywhere, immediately (e.g., a bank balance after a transfer).
+                    - **Eventual consistency** — replicas converge to the same value *eventually*, with no guarantee about how long "eventually" takes (e.g., a social media like count).
+                    - **Read-your-writes consistency** — a middle ground: a user is guaranteed to see their *own* writes immediately, even if other users might briefly see a stale value.
+
+                    Many distributed databases (e.g., Dynamo-style stores) let you tune this per-operation with **quorums**: with `N` replicas, a write must be acknowledged by `W` of them and a read must query `R` of them. Setting `W + R > N` guarantees every read overlaps with at least one replica that saw the latest write — a knob between strict consistency and maximum availability, rather than an all-or-nothing choice.
+                    """, 1),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    Strong consistency is like a single shared bank ledger everyone reads from directly — the instant a deposit is written, every teller sees the new balance, no exceptions.
+
+                    Eventual consistency is like a group chat where phones briefly lose signal on a subway — everyone's message eventually shows up for everyone else, but for a few seconds different people can see a different set of messages, and that's an accepted trade-off for the chat never just freezing while it waits for a signal.
+                    """, 2),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **CAP, honestly stated**
+
+                    - Partition tolerance: not optional in a real distributed system
+                    - The real trade-off during a partition: Consistency vs. Availability
+                    - PACELC: even without a partition, Latency trades against Consistency
+
+                    **Consistency models, from strongest to weakest**
+
+                    - Strong — every read sees the latest write, everywhere
+                    - Read-your-writes — you always see your own writes; others may lag
+                    - Eventual — replicas converge eventually, no bound on "eventually"
+
+                    **Quorum tuning**: with `N` replicas, `W` = write quorum, `R` = read quorum
+
+                    - `W + R > N` — guarantees strong-ish (quorum) consistency, at some latency cost
+                    - `W + R <= N` — faster, more available, but reads can return stale data
+                    """, 3),
+                Block(BlockType.CodeSnippet, "Choosing a Quorum Per Operation", BodyFormat.PlainText, """
+                    // N = 3 replicas total for this key.
+                    // Reading an account balance: favor correctness over speed.
+                    var balance = await store.ReadAsync(
+                        key: $"account:{accountId}",
+                        quorum: ReadQuorum.All);          // R = 3, W + R > N guaranteed
+
+                    // Reading a "like" count on a post: favor speed over freshness.
+                    var likeCount = await store.ReadAsync(
+                        key: $"post:{postId}:likes",
+                        quorum: ReadQuorum.One);           // R = 1, may be briefly stale
+
+                    // Same store, two different consistency choices —
+                    // picked per feature, not once for the whole system.
+                    """, 4, language: "csharp"),
+                Block(BlockType.Diagram, "A Partition Forces a Choice", BodyFormat.AsciiArt, """
+                    Before partition:        During partition:
+
+                    [Node A]---[Node B]      [Node A]   X   [Node B]
+                       both see writes         network cut, can't sync
+
+                    Client writes to A during the partition. Node B can't hear about it. When a
+                    client asks Node B for the value, the system must choose:
+
+                      CP choice: Node B refuses to answer (unavailable) until it can confirm
+                                 it has the latest value -> consistent, but not available.
+
+                      AP choice: Node B answers anyway, with what it currently has
+                                 -> available, but possibly stale (inconsistent).
+                    """, 5),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Pick a consistency model **per feature**, not once for the entire system — a bank balance and a "likes" counter living in the same product have very different tolerance for staleness, and forcing both through the same strong-consistency path (or the same eventually-consistent path) is usually wrong for one of them.
+
+                    When using a quorum-based store, state your `N`/`W`/`R` choice explicitly and connect it to the guarantee it buys you (`W + R > N` for read-your-writes-style guarantees) rather than treating the quorum settings as an unexplained default.
+                    """, 6),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    Don't recite "CAP means you pick 2 of 3" as if it's the whole answer — that line undersells your understanding. Instead say partition tolerance is a given for any real distributed system, so the actual decision is Consistency vs. Availability *during a partition*, and mention PACELC to show you know the trade-off exists even when the network is healthy. That distinction is exactly what separates a memorized answer from real understanding.
+                    """, 7),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Treating CAP as "pick any 2 of 3," including partition tolerance as something you could simply opt out of — any system with more than one node over a real network cannot assume partitions won't happen, so this framing misrepresents the theorem.
+
+                    Also common: assuming "NoSQL" automatically means eventual consistency and "SQL" automatically means strong consistency — many NoSQL stores offer tunable/quorum consistency, and the right model depends on the specific feature, not the database category.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "Why is 'partition tolerance' generally not treated as an optional trade-off in CAP discussions?",
+                    "Any distributed system spanning more than one machine over a real network will eventually experience a partition, so refusing to tolerate one isn't a viable design choice — the real, live trade-off only exists between Consistency and Availability once a partition occurs.",
+                    [
+                        new QuizOptionSeed("Because partitions never actually happen in production", false),
+                        new QuizOptionSeed("Because a multi-node system over a real network will eventually experience one, so not tolerating it isn't practical", true),
+                        new QuizOptionSeed("Because partition tolerance is guaranteed automatically by TCP", false),
+                        new QuizOptionSeed("Because CAP only applies to single-node databases", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "In a quorum-based store with N replicas, what does setting W + R > N guarantee?",
+                    "If the write quorum and read quorum together exceed the total number of replicas, any read quorum is mathematically guaranteed to overlap with at least one replica that received the latest write — ensuring the read sees it.",
+                    [
+                        new QuizOptionSeed("That writes will never fail", false),
+                        new QuizOptionSeed("That every read quorum overlaps with at least one replica holding the latest write", true),
+                        new QuizOptionSeed("That the system will tolerate an unlimited number of partitions", false),
+                        new QuizOptionSeed("That reads will always be faster than writes", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("System Design Primer: Consistency Patterns", "https://github.com/donnemartin/system-design-primer#consistency-patterns", LinkType.FurtherReading),
+                new ReferenceLinkSeed("Amazon DynamoDB: Read Consistency", "https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.ReadConsistency.html", LinkType.OfficialDocs),
+            ],
+            prerequisites: [lesson2]);
+
+        var lesson4Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson4.Slug,
+        [
+            "Explain, without saying 'pick 2 of 3,' why partition tolerance isn't really optional",
+            "Describe one feature that needs strong consistency and one that's fine with eventual consistency, from a real or hypothetical app",
+            "Work through why W + R > N guarantees a quorum read sees the latest write",
+        ]);
+
+        var module = BuildModule(topicId, "system-design-fundamentals", "System Design Fundamentals",
+            "How to scale a single server into a resilient, horizontally-scaled system with a real database strategy, decoupled asynchronous communication, and a defensible consistency model.",
+            180, [lesson1, lesson2, lesson3, lesson4]);
+
+        return (module, [lesson1Checklist, lesson2Checklist, lesson3Checklist, lesson4Checklist]);
     }
 
     // ============================== SQL ==============================
@@ -1229,11 +2284,253 @@ public static class CurriculumContentSeedData
             "Explain the difference between RANK() and DENSE_RANK() with a tie example",
         ]);
 
-        var module = BuildModule(topicId, "sql-fundamentals", "SQL Fundamentals",
-            "Query evaluation order, joins, NULL handling, and the window functions that solve most SQL interview questions.",
-            70, [lesson1, lesson2]);
+        var lesson3 = BuildLesson(
+            slug: "indexing-query-performance",
+            title: "Indexing & Query Performance",
+            summary: "How B-tree indexes turn table scans into fast lookups, when they stop helping, and reading a query plan to tell the difference.",
+            estimatedMinutes: 40,
+            objectives:
+            [
+                "Explain how a B-tree index turns an O(n) scan into an O(log n) lookup",
+                "Decide whether a given WHERE/JOIN condition can actually use an index",
+                "Read a basic query plan and recognize a full table scan vs. an index seek",
+                "Recognize the write-amplification cost of adding an index",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    Without an index, finding rows that match a condition means a **full table scan** — the database reads every row and checks the condition, `O(n)` in the number of rows.
 
-        return (module, [lesson1Checklist, lesson2Checklist]);
+                    An **index** is a separate, ordered data structure (almost always a **B-tree**) that maps column values to the rows containing them. Because a B-tree stays sorted and balanced, looking up a value is `O(log n)` — the database walks down the tree instead of scanning every row. This is sometimes called an **index seek**, as opposed to a **full scan**.
+
+                    Indexes aren't free. Every `INSERT`/`UPDATE`/`DELETE` has to keep every index on that table up to date, so more indexes mean slower writes and more storage — indexing is a read/write trade-off, not a pure win.
+
+                    A **composite index** (an index on more than one column) can only be used efficiently from its **leftmost columns** inward — an index on `(customer_id, status)` speeds up `WHERE customer_id = ?` and `WHERE customer_id = ? AND status = ?`, but does *nothing* for `WHERE status = ?` alone, because the index is physically sorted by `customer_id` first.
+
+                    To see whether a query actually uses an index, ask the database to show its **query plan** — the command differs by engine (`EXPLAIN` in MySQL/PostgreSQL, `EXPLAIN QUERY PLAN` in SQLite, `EXPLAIN ANALYZE` for actual runtime numbers in PostgreSQL), but the concept is the same everywhere: it shows whether a step is a scan or a seek, and roughly how many rows it expects to touch.
+                    """, 1),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    A table without an index is like a phone book with pages ripped out and shuffled — finding "everyone named Patel" means reading every single page front to back.
+
+                    An index is the same phone book, alphabetized: you jump straight to the "P" section instead of reading the whole book. But now imagine you also have to keep the book alphabetized every time someone moves into town — that's the write cost of maintaining an index. A composite index sorted by (last name, first name) lets you jump straight to "Patel, Raj" — but it's useless if all you know is someone's first name is "Raj," because the book isn't sorted by first name at all.
+                    """, 2),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **When an index helps**
+
+                    - High-selectivity columns (many distinct values — e.g., `email`, `order_id`)
+                    - Columns frequently used in `WHERE`, `JOIN ... ON`, and `ORDER BY`
+                    - The leftmost column(s) of a composite index
+
+                    **When an index won't be used (or won't help)**
+
+                    - Low-selectivity columns (a `bool` or a status with 3 values on a huge table) — often cheaper to scan
+                    - Wrapping the column in a function: `WHERE UPPER(email) = 'X'` can't use a plain index on `email`
+                    - A leading wildcard: `WHERE name LIKE '%smith'` can't use a standard B-tree index (`'smith%'` can)
+                    - Querying a non-leftmost column of a composite index in isolation
+
+                    **Reading a plan**: look for words like "Seq Scan"/"Table Scan" (full scan) vs. "Index Scan"/"Index Seek" (using the index), and the estimated row count.
+                    """, 3),
+                Block(BlockType.CodeSnippet, "Creating and Checking a Composite Index", BodyFormat.PlainText, """
+                    -- Index sorted by customer_id first, then status.
+                    CREATE INDEX idx_orders_customer_status
+                        ON orders (customer_id, status);
+
+                    -- Uses the index (leftmost column, or leftmost + second column):
+                    SELECT * FROM orders WHERE customer_id = 42;
+                    SELECT * FROM orders WHERE customer_id = 42 AND status = 'shipped';
+
+                    -- Does NOT use this index efficiently (status isn't the leftmost column):
+                    SELECT * FROM orders WHERE status = 'shipped';
+
+                    -- Ask the engine what it actually did (syntax varies by database:
+                    -- EXPLAIN in MySQL/PostgreSQL, EXPLAIN QUERY PLAN in SQLite).
+                    EXPLAIN
+                    SELECT * FROM orders WHERE customer_id = 42;
+                    """, 4, language: "sql"),
+                Block(BlockType.Diagram, "Full Scan vs. B-Tree Index Seek", BodyFormat.AsciiArt, """
+                    No index (full scan):
+
+                    row1 -> row2 -> row3 -> row4 -> ... -> rowN
+                    (check every row for a match; O(n))
+
+                    With a B-tree index on customer_id:
+
+                                    [ 50 ]
+                                   /      \\
+                              [ 20 ]      [ 80 ]
+                              /   \\        /    \\
+                          [10] [30,42]  [60]  [90,99]
+
+                    Looking up customer_id = 42:
+                    50 -> go left -> 20 -> go right -> [30, 42] -> found
+                    (a few hops down the tree; O(log n))
+                    """, 5),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Index the columns your `WHERE` clauses, `JOIN ... ON` conditions, and `ORDER BY` clauses actually use — not every column "just in case." Put the most selective, most frequently-filtered column first in a composite index so the leftmost-prefix rule works in your favor for the widest range of queries.
+
+                    Avoid wrapping an indexed column in a function or arithmetic in your `WHERE` clause (`WHERE UPPER(email) = ?`, `WHERE price * 1.1 > ?`) — most databases can't use a plain index through a transformed expression, silently falling back to a full scan.
+                    """, 6),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    If asked "how would you speed up this slow query," don't just say "add an index" — name *which* column(s), explain why they're selective enough to be worth indexing, and mention the trade-off out loud ("this speeds up reads on `customer_id` but adds overhead to every insert into `orders`"). Naming the trade-off is what separates "memorized the word index" from actually understanding it.
+                    """, 7),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Adding an index to every column "for safety" — each extra index slows down every write on that table and consumes storage, often with no read benefit if the column is rarely filtered on or has low selectivity (like a boolean flag on a large table).
+
+                    Also common: assuming an index exists and is being used without checking the query plan — a query can silently fall back to a full scan (function-wrapped column, leading wildcard, non-leftmost composite column) while the developer assumes the index is doing its job.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "You have a composite index on `(customer_id, status)`. Which query can use it efficiently?",
+                    "A composite index is physically sorted by its leftmost column first, then the next. A query filtering only on `status` can't use this index efficiently because `status` isn't the leftmost column — the index is only useful when `customer_id` is part of the filter.",
+                    [
+                        new QuizOptionSeed("WHERE status = 'shipped'", false),
+                        new QuizOptionSeed("WHERE customer_id = 42 AND status = 'shipped'", true),
+                        new QuizOptionSeed("Both queries use the index equally well", false),
+                        new QuizOptionSeed("Neither query can use the index", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "Why does `WHERE UPPER(email) = 'JANE@EXAMPLE.COM'` typically fail to use a plain index on `email`?",
+                    "A standard B-tree index is built on the raw column values. Wrapping the column in a function like UPPER() means the database would have to compute that function for every row to compare it, which defeats the purpose of the index — so most engines fall back to a full scan unless a function-based (expression) index exists.",
+                    [
+                        new QuizOptionSeed("Indexes only work on numeric columns, never text", false),
+                        new QuizOptionSeed("The function transforms the column's value, so the plain index on the raw column can't be used to satisfy it", true),
+                        new QuizOptionSeed("UPPER() is not valid SQL syntax", false),
+                        new QuizOptionSeed("It works exactly the same as filtering on email directly", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Use The Index, Luke", "https://use-the-index-luke.com/", LinkType.FurtherReading),
+                new ReferenceLinkSeed("PostgreSQL: Indexes", "https://www.postgresql.org/docs/current/indexes.html", LinkType.OfficialDocs),
+            ],
+            prerequisites: [lesson1]);
+
+        var lesson3Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson3.Slug,
+        [
+            "Run EXPLAIN (or your database's equivalent) on one of your own queries and identify a scan vs. a seek",
+            "Create a composite index and explain, in your own words, why column order matters",
+            "Find one query in your own code that filters through a function-wrapped column and would silently skip an index",
+        ]);
+
+        var lesson4 = BuildLesson(
+            slug: "transactions-isolation-levels",
+            title: "Transactions & Isolation Levels",
+            summary: "ACID guarantees, the standard isolation levels, and how concurrent transactions can deadlock.",
+            estimatedMinutes: 40,
+            objectives:
+            [
+                "State the four ACID properties and what each one actually guarantees",
+                "Distinguish dirty reads, non-repeatable reads, and phantom reads from each other",
+                "Choose an appropriate isolation level for a given concurrency requirement",
+                "Explain how a deadlock forms and one strategy to avoid one",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    A **transaction** groups multiple statements into one all-or-nothing unit, started with `BEGIN`/`START TRANSACTION` and ended with `COMMIT` (keep all changes) or `ROLLBACK` (discard all changes). Transactions guarantee **ACID**:
+
+                    - **Atomicity** — every statement in the transaction succeeds, or none of them take effect.
+                    - **Consistency** — a transaction moves the database from one valid state to another, never violating constraints.
+                    - **Isolation** — concurrent transactions don't see each other's uncommitted changes (how strictly is controlled by the **isolation level**).
+                    - **Durability** — once committed, the change survives a crash.
+
+                    Isolation is a spectrum, not all-or-nothing, because full isolation between every concurrent transaction is expensive. The ANSI SQL standard defines four levels, each preventing more "phenomena" than the last:
+
+                    - **Read Uncommitted** — can see another transaction's uncommitted changes (a **dirty read**).
+                    - **Read Committed** — never sees uncommitted data, but re-reading the same row twice in one transaction can return different values if another transaction committed in between (a **non-repeatable read**).
+                    - **Repeatable Read** — the same row read twice returns the same value for the whole transaction, but a range query re-run later can return new rows another transaction inserted (a **phantom read**).
+                    - **Serializable** — transactions behave as if run one at a time, in some order — no dirty reads, non-repeatable reads, or phantoms, at the cost of the most blocking/retries.
+
+                    A **deadlock** happens when two transactions each hold a lock the other one needs: transaction A holds a lock on row 1 and wants row 2, while transaction B holds a lock on row 2 and wants row 1 — neither can proceed, so the database detects the cycle and forcibly rolls one of them back.
+                    """, 1),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    Isolation levels are like how strictly a shared document is locked while you're editing it. **Read Uncommitted** is peeking at someone else's still-being-typed, unsaved draft. **Read Committed** is only ever seeing their saved versions, but the document might change between two glances. **Repeatable Read** is like taking a personal snapshot of the pages you've already looked at, so they can't change under you — but new pages someone else adds later can still show up. **Serializable** is like getting the whole document to yourself until you're done, as if no one else were editing it at all.
+
+                    A deadlock is two people trying to merge onto a single-lane bridge from opposite ends, each already halfway across and blocking the other — neither can back up or move forward until someone gives way.
+                    """, 2),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Isolation levels vs. phenomena prevented**
+
+                    | Level            | Dirty Read | Non-repeatable Read | Phantom Read |
+                    |------------------|:----------:|:--------------------:|:------------:|
+                    | Read Uncommitted | Possible   | Possible              | Possible     |
+                    | Read Committed   | Prevented  | Possible              | Possible     |
+                    | Repeatable Read  | Prevented  | Prevented             | Possible     |
+                    | Serializable     | Prevented  | Prevented             | Prevented    |
+
+                    **Rule of thumb**: use the lowest isolation level that still meets your correctness requirement — higher isolation means more locking/retries and less concurrency.
+                    """, 3),
+                Block(BlockType.CodeSnippet, "A Transaction with an Explicit Isolation Level", BodyFormat.PlainText, """
+                    SET TRANSACTION ISOLATION LEVEL REPEATABLE READ;
+
+                    BEGIN TRANSACTION;
+
+                    UPDATE accounts SET balance = balance - 100 WHERE account_id = 1;
+                    UPDATE accounts SET balance = balance + 100 WHERE account_id = 2;
+
+                    COMMIT;
+                    -- Both updates take effect together, or neither does
+                    -- (atomicity) — if anything fails, ROLLBACK undoes both.
+                    """, 4, language: "sql"),
+                Block(BlockType.Diagram, "How a Deadlock Forms", BodyFormat.StructuredSteps, """
+                    [{"label":"Transaction A: locks Row 1"},{"label":"Transaction B: locks Row 2"},{"label":"Transaction A: requests Row 2","note":"blocked — B holds it"},{"label":"Transaction B: requests Row 1","note":"blocked — A holds it"},{"label":"Database detects the cycle","note":"A waits on B, B waits on A"},{"label":"One transaction is rolled back","note":"to break the deadlock"}]
+                    """, 5),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Keep transactions as short as possible and touch rows in a **consistent order** across your codebase (e.g., always update the lower account ID first) — most deadlocks come from two code paths locking the same rows in opposite orders, and consistent ordering eliminates the cycle entirely.
+
+                    Default to the lowest isolation level that satisfies your correctness needs (often Read Committed) rather than reaching for Serializable everywhere — extra isolation isn't free, and most application logic doesn't actually need it.
+                    """, 6),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    If asked to design a "transfer money between accounts" function, say the isolation trade-off out loud: what could go wrong at Read Committed (another transaction reading the balance mid-transfer), and why wrapping both updates in one transaction with appropriate isolation — not just "using a transaction" as a magic word — is what actually prevents it.
+                    """, 7),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Holding a transaction open across slow, unrelated work (an external API call, user think-time) — every lock it holds blocks other transactions the entire time, and it dramatically increases deadlock risk. Keep transactions limited to the database work itself.
+
+                    Also common: assuming "I wrapped it in a transaction" alone prevents concurrency bugs, without considering which isolation level is actually in effect — the default isolation level (often Read Committed) still allows non-repeatable reads, which can matter a lot for logic like "check balance, then debit it."
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "Which isolation level prevents dirty reads but still allows a non-repeatable read?",
+                    "Read Committed guarantees you never see another transaction's uncommitted (dirty) data, but it doesn't guarantee that re-reading the same row twice in one transaction returns the same value — another transaction can commit a change in between, causing a non-repeatable read.",
+                    [
+                        new QuizOptionSeed("Read Uncommitted", false),
+                        new QuizOptionSeed("Read Committed", true),
+                        new QuizOptionSeed("Repeatable Read", false),
+                        new QuizOptionSeed("Serializable", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "What actually causes a deadlock between two transactions?",
+                    "A deadlock is a circular wait: transaction A holds a lock transaction B needs, while B simultaneously holds a lock A needs. Neither can proceed, so the database detects the cycle and forcibly rolls one transaction back.",
+                    [
+                        new QuizOptionSeed("One transaction runs a query that is too slow", false),
+                        new QuizOptionSeed("Two transactions each hold a lock the other one needs, forming a circular wait", true),
+                        new QuizOptionSeed("A transaction is missing a COMMIT statement", false),
+                        new QuizOptionSeed("The database ran out of storage space", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("PostgreSQL: Transaction Isolation", "https://www.postgresql.org/docs/current/transaction-iso.html", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("PostgreSQL: Explicit Locking", "https://www.postgresql.org/docs/current/explicit-locking.html", LinkType.OfficialDocs),
+            ],
+            prerequisites: [lesson2]);
+
+        var lesson4Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson4.Slug,
+        [
+            "Explain all four ACID properties out loud with a one-sentence definition each",
+            "Describe a real scenario where Read Committed isn't strict enough and Repeatable Read is needed",
+            "Trace through a two-transaction deadlock scenario and describe how consistent lock ordering would avoid it",
+        ]);
+
+        var module = BuildModule(topicId, "sql-fundamentals", "SQL Fundamentals",
+            "Query evaluation order, joins, NULL handling, window functions, indexing, and transactions.",
+            210, [lesson1, lesson2, lesson3, lesson4]);
+
+        return (module, [lesson1Checklist, lesson2Checklist, lesson3Checklist, lesson4Checklist]);
     }
 
     // ============================== Cloud ==============================
@@ -1458,11 +2755,279 @@ public static class CurriculumContentSeedData
             "List the stages of a deployment pipeline you've used (or would design) from commit to production",
         ]);
 
-        var module = BuildModule(topicId, "cloud-fundamentals", "Cloud Fundamentals",
-            "The service-model spectrum, compute options, and automating deployment with CI/CD and Infrastructure as Code.",
-            65, [lesson1, lesson2]);
+        var lesson3 = BuildLesson(
+            slug: "containers-and-orchestration-basics",
+            title: "Containers & Orchestration Basics: Docker to Kubernetes",
+            summary: "Docker images vs. running containers, the problem Kubernetes actually solves, and the core objects — pods, deployments, services — that make it work.",
+            estimatedMinutes: 40,
+            objectives:
+            [
+                "Explain the difference between a container image and a running container",
+                "Explain what problem Kubernetes solves that manually running containers doesn't",
+                "Describe the relationship between pods, deployments, and services",
+                "Read a Kubernetes Deployment/Service manifest and explain what it declares",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    A **container image** is an immutable, layered filesystem snapshot — your app, its runtime, and its dependencies bundled together. A **running container** is a live process created from that image, with its own isolated filesystem view and process namespace, but sharing the host OS kernel — unlike a VM, which virtualizes an entire OS.
 
-        return (module, [lesson1Checklist, lesson2Checklist]);
+                    **Docker** builds images from a `Dockerfile` (a set of layered instructions), stores them in a registry (Docker Hub, or a private ACR/ECR), and runs containers from those images on a single host.
+
+                    Running containers by hand works for a demo, but breaks down at production scale: what restarts a crashed container? What happens when a host dies? How do containers find each other as they're rescheduled onto different hosts? **Kubernetes** is a container orchestrator that answers all three — it continuously reconciles a *desired state* (declared in YAML) against actual state, rescheduling and restarting containers as needed across a cluster of machines.
+
+                    Three core Kubernetes objects:
+
+                    - **Pod** — the smallest deployable unit; one or more tightly-coupled containers that share a network namespace and are always scheduled together.
+                    - **Deployment** — declares how many replicas of a Pod template should exist, and manages rolling updates when the template changes.
+                    - **Service** — a stable network endpoint (a virtual IP + DNS name) that load-balances traffic across whichever Pods currently match a label selector, even as individual Pods are replaced.
+                    """, 1),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    A container image is like a shipping container's manifest and contents sealed at the factory — identical every time it's loaded. A running container is that container actually sitting on a ship, doing its job, sharing the same ship (the host kernel) as every other container aboard, unlike a VM, which would be its own separate ship.
+
+                    Kubernetes is like a port's automated dispatch system: if a container gets damaged (a Pod crashes), the system loads a fresh replacement without waiting for a human to notice. If a truck route closes (a node goes down), dispatch reroutes cargo through a different truck automatically — you declare "I always want 3 of this container available," and the system keeps that promise no matter what fails underneath it.
+                    """, 2),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Everyday Docker commands**
+
+                    - `docker build -t myapp:1.0 .` — build an image from a Dockerfile
+                    - `docker run -p 8080:8080 myapp:1.0` — run a container, mapping a host port to a container port
+                    - `docker ps` / `docker logs <container>` — inspect running containers and their output
+                    - `docker compose up` — start every service defined in `docker-compose.yml` together
+
+                    **Everyday kubectl commands**
+
+                    - `kubectl get pods` / `kubectl get deployments` / `kubectl get services`
+                    - `kubectl apply -f deployment.yaml` — create or update objects to match a manifest
+                    - `kubectl scale deployment myapp --replicas=5` — change the desired replica count
+                    - `kubectl logs <pod-name>` / `kubectl describe pod <pod-name>` — debug a specific Pod
+                    """, 3),
+                Block(BlockType.CodeSnippet, "A Kubernetes Deployment and Service", BodyFormat.PlainText, """
+                    apiVersion: apps/v1
+                    kind: Deployment
+                    metadata:
+                      name: mentoros-api
+                    spec:
+                      replicas: 3
+                      selector:
+                        matchLabels:
+                          app: mentoros-api
+                      template:
+                        metadata:
+                          labels:
+                            app: mentoros-api
+                        spec:
+                          containers:
+                            - name: mentoros-api
+                              image: myregistry.azurecr.io/mentoros-api:1.0
+                              ports:
+                                - containerPort: 8080
+                    ---
+                    apiVersion: v1
+                    kind: Service
+                    metadata:
+                      name: mentoros-api
+                    spec:
+                      selector:
+                        app: mentoros-api
+                      ports:
+                        - port: 80
+                          targetPort: 8080
+                    """, 4, language: "yaml"),
+                Block(BlockType.Diagram, "From Deployment to Traffic", BodyFormat.AsciiArt, """
+                    Deployment (desired state: 3 replicas)
+                            |
+                       ReplicaSet
+                       /    |    \\
+                     Pod   Pod   Pod    <- each runs 1+ containers, scheduled on any node
+                       \\    |    /
+                        Service (stable virtual IP + DNS name)
+                            |
+                    Load-balances traffic across whichever Pods
+                    currently match the label selector
+                    """, 5),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Keep each container doing one job (one process per container) — a container running both a web server and a cron daemon is harder to restart, scale, and reason about independently than two single-purpose containers.
+
+                    Set resource requests and limits (CPU/memory) on every container in a Deployment — without them, one misbehaving Pod can starve every other Pod on the same node, and the scheduler can't make good placement decisions.
+                    """, 6),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    If asked "why not just run Docker containers directly on a few VMs," answer with what Kubernetes actually automates: self-healing (restarting crashed Pods), declarative rolling updates and rollbacks, horizontal scaling, and service discovery across a constantly-changing set of Pod IPs — running containers by hand solves none of these once you have more than a handful of services.
+                    """, 7),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Treating a Pod as if it has a stable identity or IP address — Pods are ephemeral and get replaced (with a new IP) constantly; anything that needs a stable address to talk to a Pod should go through a Service, never a Pod's IP directly.
+
+                    Also common: skipping resource requests/limits "to keep the YAML simple," which lets a single leaking container silently degrade every other workload scheduled onto the same node.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "A Pod crashes and Kubernetes replaces it. What happens to the Pod's original IP address?",
+                    "Pods are ephemeral; a replacement Pod gets a new IP address. Anything that needs to reach the workload reliably should address it through a Service, whose stable virtual IP and DNS name don't change as Pods are replaced.",
+                    [
+                        new QuizOptionSeed("It stays the same, since Kubernetes preserves Pod IPs across restarts", false),
+                        new QuizOptionSeed("The replacement Pod gets a new IP; clients should use a Service instead of a Pod IP directly", true),
+                        new QuizOptionSeed("The Deployment stops working until the IP is manually reassigned", false),
+                        new QuizOptionSeed("Kubernetes pauses all other Pods until the IP is restored", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "What's the main problem Kubernetes solves that manually running Docker containers on a few servers does not?",
+                    "Kubernetes continuously reconciles declared desired state (replica count, image version) against actual state — restarting crashed containers, rescheduling around failed nodes, and load-balancing across Pods — all automatically, which manual `docker run` commands provide no mechanism for.",
+                    [
+                        new QuizOptionSeed("It makes container images smaller", false),
+                        new QuizOptionSeed("It automatically maintains a desired state — restarting, rescheduling, and load-balancing containers as failures happen", true),
+                        new QuizOptionSeed("It replaces the need for a container runtime entirely", false),
+                        new QuizOptionSeed("It eliminates the need for a Dockerfile", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Docker overview", "https://docs.docker.com/get-started/overview/", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("Kubernetes: Deployments", "https://kubernetes.io/docs/concepts/workloads/controllers/deployment/", LinkType.OfficialDocs),
+            ],
+            prerequisites: [lesson1]);
+
+        var lesson3Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson3.Slug,
+        [
+            "Write a docker-compose.yml that runs your own app plus one dependency (e.g. a database) together",
+            "Explain what a Deployment, Pod, and Service each do, out loud, without notes",
+            "Describe how Kubernetes restarts a crashed container, in your own words",
+        ]);
+
+        var lesson4 = BuildLesson(
+            slug: "cloud-security-fundamentals",
+            title: "Cloud Security Fundamentals: IAM, Secrets & Network Boundaries",
+            summary: "Identity and access management, least-privilege roles, secrets management, and network security groups that keep cloud resources locked down.",
+            estimatedMinutes: 40,
+            objectives:
+            [
+                "Explain the difference between authentication and authorization",
+                "Design an IAM policy that follows least privilege for a specific task",
+                "Explain why secrets must never be hardcoded or committed to source control, and where they should live instead",
+                "Explain what a network security group / firewall rule actually restricts",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    **Identity and Access Management (IAM)** answers two separate questions for every request: **authentication** ("who are you?" — verifying identity, e.g. via a signed token or API key) and **authorization** ("what are you allowed to do?" — checking that identity against a policy). A request can be authenticated but still fail authorization, and the two failures should be treated differently.
+
+                    An IAM **policy** attaches a set of allowed actions on specific resources to an identity (a user, a service, or a role). Applying **least privilege** means writing that policy as narrowly as the task allows — e.g., "read objects from bucket X" instead of "full access to all storage" — so a leaked credential or a compromised service can only do limited damage.
+
+                    **Secrets** (API keys, database passwords, connection strings, certificates) must never be hardcoded in source code or committed to version control — once in git history, a secret is effectively permanently exposed, even if deleted in a later commit. Instead, secrets belong in a dedicated secrets manager (e.g., a cloud key vault) or are injected as environment variables/mounted files at deploy time, pulled fresh by the running service rather than baked into an image or a repo.
+
+                    A **network security group (NSG)** (also called a security group, or a firewall rule set depending on the provider) is a set of allow/deny rules controlling what network traffic can reach a resource — by port, protocol, and source. Combined, IAM and NSGs form **defense in depth**: even if one layer is bypassed, another layer still limits the blast radius.
+                    """, 1),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    Authentication is like showing ID at a building's front desk ("prove you are who you say you are"); authorization is the separate question of which floors your keycard actually opens once you're inside — you can be a verified employee (authenticated) and still be denied entry to the server room (unauthorized).
+
+                    A network security group is like a building's front-door policy: it decides who's even allowed to approach which door, regardless of what they're carrying — a perimeter control, separate from (and in addition to) checking each person's ID once they're inside.
+                    """, 2),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Authentication vs. authorization**
+
+                    - Authentication — verifying identity (login, API key, signed token)
+                    - Authorization — verifying permission (does this identity's policy allow this action on this resource?)
+
+                    **Secrets: where they should (and shouldn't) live**
+
+                    - Never: hardcoded in source, committed to git, baked into a container image layer
+                    - Yes: a secrets manager / key vault, injected as env vars or mounted files at runtime, referenced by name in CI/CD (not pasted into pipeline YAML)
+
+                    **Rough network-boundary equivalents across providers**
+
+                    - AWS: Security Groups (instance-level) + Network ACLs (subnet-level)
+                    - Azure: Network Security Groups (NSGs)
+                    - GCP: Firewall Rules (VPC-level)
+                    """, 3),
+                Block(BlockType.CodeSnippet, "A Kubernetes NetworkPolicy Restricting Traffic", BodyFormat.PlainText, """
+                    apiVersion: networking.k8s.io/v1
+                    kind: NetworkPolicy
+                    metadata:
+                      name: api-allow-from-frontend-only
+                    spec:
+                      podSelector:
+                        matchLabels:
+                          app: mentoros-api
+                      policyTypes:
+                        - Ingress
+                      ingress:
+                        - from:
+                            - podSelector:
+                                matchLabels:
+                                  app: mentoros-frontend
+                          ports:
+                            - protocol: TCP
+                              port: 8080
+                    """, 4, language: "yaml"),
+                Block(BlockType.Diagram, "Defense in Depth: Layered Security", BodyFormat.AsciiArt, """
+                       Internet
+                          |
+                     [ Network Security Group / Firewall ]   <- only allow expected ports/sources
+                          |
+                     [ Authentication ]                      <- verify identity (who is this?)
+                          |
+                     [ Authorization / IAM Policy ]           <- verify permission (allowed to do this?)
+                          |
+                     [ Application + Data ]                   <- the actual resource being protected
+
+                    Each layer assumes the one before it might fail —
+                    a bypass at one layer still has to get through the next.
+                    """, 5),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Store every secret in a dedicated secrets manager and reference it by name at deploy time — never paste a real secret value into a Dockerfile, a YAML manifest, or a CI/CD pipeline definition, since all three commonly end up in source control.
+
+                    Grant IAM roles per-service, scoped to exactly the resources that service touches, and review them periodically — permissions that were correct at launch tend to become overly broad over time as nobody removes access that's no longer needed.
+                    """, 6),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    If asked how you'd secure a new cloud service, describe layers, not just one control: network boundaries (who can even reach it), authentication (who are they), authorization (what can they do), and secrets handling (how does it get its credentials) — naming all four, unprompted, signals defense-in-depth thinking rather than a single point of protection.
+                    """, 7),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Committing a real API key or connection string to git "temporarily" to get something working — even one commit permanently exposes it in history, and rotating it afterward is mandatory, not optional, once that happens.
+
+                    Also common: granting a service or CI pipeline broad "admin" or "contributor" access at setup time to unblock work quickly, then never tightening it once the immediate problem is solved.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "A request presents a valid, correctly-signed API key but tries to delete a resource its policy doesn't permit. What's the correct way to describe this failure?",
+                    "The request is authenticated (the key proves who's making it) but not authorized (the policy doesn't grant that action) — these are separate checks, and failing one doesn't mean the other also failed.",
+                    [
+                        new QuizOptionSeed("An authentication failure, since the key must be invalid", false),
+                        new QuizOptionSeed("An authorization failure — identity was verified, but the policy doesn't permit this action", true),
+                        new QuizOptionSeed("A network security group failure", false),
+                        new QuizOptionSeed("This scenario can't happen; a valid key always has full access", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "Why is committing a secret to git considered permanently exposed, even if you delete it in a later commit?",
+                    "Git preserves full history by design — the secret still exists in an earlier commit object and is reachable by anyone who can read the repository's history, so deleting it from the latest commit doesn't remove it from the past ones. The only real fix is rotating (invalidating) the secret.",
+                    [
+                        new QuizOptionSeed("It isn't — deleting the file in a new commit fully removes it", false),
+                        new QuizOptionSeed("Git preserves the old commit containing the secret in its history, unless that history is explicitly rewritten and the secret rotated", true),
+                        new QuizOptionSeed("Secrets are automatically encrypted by git once committed", false),
+                        new QuizOptionSeed("Only the most recent commit is ever accessible to other users", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("AWS: IAM security best practices", "https://docs.aws.amazon.com/IAM/latest/UserGuide/best-practices.html", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("Kubernetes: Network Policies", "https://kubernetes.io/docs/concepts/services-networking/network-policies/", LinkType.OfficialDocs),
+            ],
+            prerequisites: [lesson2]);
+
+        var lesson4Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson4.Slug,
+        [
+            "Write (or find) an IAM policy for one of your services and check it against least privilege",
+            "Confirm no real secret exists in your own git history using `git log -p` or a secrets-scanning tool",
+            "Explain the difference between authentication and authorization using your own example",
+        ]);
+
+        var module = BuildModule(topicId, "cloud-fundamentals", "Cloud Fundamentals",
+            "The service-model spectrum, compute options, containers and orchestration, security fundamentals, and automating deployment with CI/CD and Infrastructure as Code.",
+            145, [lesson1, lesson2, lesson3, lesson4]);
+
+        return (module, [lesson1Checklist, lesson2Checklist, lesson3Checklist, lesson4Checklist]);
     }
 
     // ============================== Git ==============================
@@ -1691,11 +3256,285 @@ public static class CurriculumContentSeedData
             "Write a pull request description for one of your own recent changes, as if a reviewer had zero context",
         ]);
 
-        var module = BuildModule(topicId, "git-fundamentals", "Git Fundamentals",
-            "Commits, branches, merging, rebasing, and resolving conflicts without panicking.",
-            65, [lesson1, lesson2]);
+        var lesson3 = BuildLesson(
+            slug: "undoing-changes-reset-revert-reflog",
+            title: "Undoing Changes Safely: Reset, Revert, Restore & the Reflog Safety Net",
+            summary: "What reset's three modes actually touch, when to reach for revert or restore instead, and why the reflog means most 'disasters' are recoverable.",
+            estimatedMinutes: 35,
+            objectives:
+            [
+                "Explain what --soft, --mixed, and --hard each do to HEAD, the staging index, and the working directory",
+                "Choose revert over reset for anything already pushed and shared",
+                "Recover a commit that a hard reset appeared to destroy, using git reflog",
+                "Shelve in-progress changes with git stash to switch context without losing work",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    Git gives you several distinct ways to undo something, and picking the wrong one is how "undoing a mistake" turns into a bigger mistake.
 
-        return (module, [lesson1Checklist, lesson2Checklist]);
+                    **`git reset <commit>`** moves the current branch's pointer (HEAD) to a different commit, with three modes controlling how much else it touches:
+
+                    - `--soft` — moves HEAD only; the staging index and working directory are untouched, so the undone commit's changes end up staged, ready to re-commit.
+                    - `--mixed` (the default) — moves HEAD and resets the staging index, but leaves the working directory files exactly as they were.
+                    - `--hard` — moves HEAD, resets the staging index, AND overwrites the working directory. The undone changes are gone from disk.
+
+                    **`git revert <commit>`** doesn't move anything — it creates a brand-new commit whose changes are the exact opposite of the target commit, so history only ever grows forward. That's what makes it safe to use on commits other people have already pulled.
+
+                    **`git restore <file>`** (and the older `git checkout -- <file>`) discards uncommitted changes to a single file, restoring it to its last-committed state, without touching commit history at all. `git restore --staged <file>` unstages a file without discarding its edits.
+
+                    **`git stash`** temporarily shelves uncommitted changes (staged and unstaged) onto a stack, giving you a clean working directory to switch branches or pull latest; `git stash pop` brings them back.
+
+                    The **reflog** (`git reflog`) is Git's local safety net: it records every commit HEAD has pointed to on your machine — including ones a hard reset just "deleted" — for about 90 days by default, so a bad reset is almost never truly unrecoverable.
+                    """, 1),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    `git reset --soft` is like un-checking-out library books but leaving them stacked on your desk — the loan record is undone, but the books are still right there. `git reset --hard` is like un-checking-out the books AND shredding them — nothing left to work with.
+
+                    The reflog is like a security camera in that same library: even after the books are shredded, there's still a recording of exactly where they were, which is usually enough to reconstruct what you lost.
+
+                    `git stash` is like sweeping the papers on your desk into a drawer when a surprise visitor arrives, so you can deal with them later without losing anything.
+                    """, 2),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Undo commands at a glance**
+
+                    - `git reset --soft HEAD~1` — undo last commit, keep changes staged
+                    - `git reset --mixed HEAD~1` — undo last commit, keep changes unstaged (default mode)
+                    - `git reset --hard HEAD~1` — undo last commit AND discard its changes (destructive)
+                    - `git revert <commit>` — undo a commit by adding a new, opposite commit (safe, shareable)
+                    - `git restore <file>` — discard uncommitted changes to one file
+                    - `git restore --staged <file>` — unstage a file without discarding its edits
+
+                    **Stash**
+
+                    - `git stash` — shelve uncommitted changes
+                    - `git stash pop` — reapply the most recent stash and remove it from the stack
+                    - `git stash list` — see everything currently stashed
+
+                    **Reflog**
+
+                    - `git reflog` — see every place HEAD has pointed, locally, recently
+                    - `git reset --hard <hash-from-reflog>` — recover a commit a hard reset removed
+                    """, 3),
+                Block(BlockType.CodeSnippet, "Reset, Revert, Stash & Reflog in Practice", BodyFormat.PlainText, """
+                    # Uncommit the last 2 commits but keep their changes staged
+                    git reset --soft HEAD~2
+
+                    # Uncommit and unstage the last commit, but keep the file edits on disk
+                    git reset --mixed HEAD~1
+
+                    # Discard the last commit AND its changes entirely (destructive, local-only)
+                    git reset --hard HEAD~1
+
+                    # Undo a commit that's already been pushed, without rewriting history
+                    git revert a1b2c3d
+
+                    # Restore a single file to how it looked in the last commit
+                    git restore src/Config.cs
+
+                    # Shelve messy in-progress work to switch branches cleanly
+                    git stash
+                    git checkout main
+                    # ... handle the urgent thing ...
+                    git checkout feature/my-work
+                    git stash pop
+
+                    # "I just did something I regret" — the reflog remembers every HEAD move
+                    git reflog
+                    # 3a7f2e1 HEAD@{0}: reset: moving to HEAD~1
+                    # d9c4b80 HEAD@{1}: commit: Add retry logic
+                    git reset --hard d9c4b80   # recover the commit the reset just threw away
+                    """, 4, language: "bash"),
+                Block(BlockType.Diagram, "What Each Reset Mode Touches", BodyFormat.AsciiArt, """
+                    Mode      HEAD pointer   Staging index   Working directory
+                    --soft    moves          untouched       untouched
+                    --mixed   moves          reset           untouched
+                    --hard    moves          reset           reset (DESTRUCTIVE)
+
+                    git reset --soft HEAD~1   -> commit undone, changes still staged
+                    git reset --mixed HEAD~1  -> commit undone, changes unstaged but present
+                    git reset --hard HEAD~1   -> commit undone, changes gone entirely
+                    """, 5),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Before running `git reset --hard` or any destructive rewrite, know that `git reflog` exists — Git keeps a local log of every place HEAD has pointed for about 90 days by default, so a "disaster" is almost always recoverable with `git reset --hard <reflog-entry>`.
+
+                    Prefer `git restore` for file-level undo over the older, overloaded `git checkout` syntax — `restore` was split out specifically because `checkout` did too many unrelated things (switching branches AND restoring files), and that ambiguity caused real mistakes.
+                    """, 6),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    If asked "you just ran `git reset --hard` and lost work, what do you do," don't say "it's gone" — say `git reflog`, find the commit hash from before the reset, and `git reset --hard` back to it. Knowing the reflog exists is one of the most practical, high-signal pieces of Git knowledge in an interview, because it shows you've actually recovered from a real mistake before, not just read about the commands.
+                    """, 7),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Reaching for `git reset --hard` out of habit to "clean up" without realizing it permanently discards uncommitted working-directory changes with no confirmation prompt — always run `git status` (and `git stash` if unsure) before a hard reset.
+
+                    Also common: confusing `git revert` (safe, adds a new commit, fine for shared history) with `git reset` (rewrites history, unsafe once pushed and pulled by others) — using them interchangeably in conversation is a quick way to signal you don't actually understand the difference.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "You accidentally ran `git reset --hard HEAD~3`, discarding three commits. Is this recoverable?",
+                    "Yes, almost always. The reflog records every commit HEAD has pointed to locally, even ones a hard reset appears to remove. Find the old commit hash with `git reflog` and run `git reset --hard <hash>` to get it back.",
+                    [
+                        new QuizOptionSeed("No — --hard permanently deletes commits with no way to recover them", false),
+                        new QuizOptionSeed("Yes — find the commit hash in git reflog and reset --hard back to it", true),
+                        new QuizOptionSeed("Yes, but only by contacting your Git hosting provider's support team", false),
+                        new QuizOptionSeed("Only if the commits had already been pushed to a remote", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "Which git reset mode moves HEAD back a commit but leaves the undone changes staged, ready to re-commit?",
+                    "--soft only moves the HEAD/branch pointer; it deliberately leaves the staging index and working directory alone, so the previously-committed changes land back in the staging area as if you'd just run git add.",
+                    [
+                        new QuizOptionSeed("--hard", false),
+                        new QuizOptionSeed("--soft", true),
+                        new QuizOptionSeed("--mixed", false),
+                        new QuizOptionSeed("git revert", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("git-reset — official documentation", "https://git-scm.com/docs/git-reset", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("Git Tools: Stashing and Cleaning", "https://git-scm.com/book/en/v2/Git-Tools-Stashing-and-Cleaning", LinkType.OfficialDocs),
+            ],
+            prerequisites: [lesson1]);
+
+        var lesson3Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson3.Slug,
+        [
+            "Run git reset --soft, --mixed, and --hard on scratch commits and explain what each one left behind",
+            "Deliberately hard-reset away a commit, then recover it using git reflog",
+            "Use git stash to switch branches mid-change, then reapply it with git stash pop",
+        ]);
+
+        var lesson4 = BuildLesson(
+            slug: "advanced-git-workflows-rebase-cherrypick-bisect",
+            title: "Advanced Git Workflows: Interactive Rebase, Cherry-Pick & Bisect",
+            summary: "Cleaning up local history with interactive rebase, porting single commits with cherry-pick, and binary-searching for a bug's origin with bisect.",
+            estimatedMinutes: 40,
+            objectives:
+            [
+                "Use interactive rebase to squash, reorder, and reword commits before opening a pull request",
+                "Cherry-pick a single commit onto another branch without merging its entire history",
+                "Use git bisect to binary-search commit history for the exact change that introduced a bug",
+                "Compare trunk-based development and Git Flow, and state a concrete trade-off between them",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    **Interactive rebase** (`git rebase -i HEAD~n`) opens an editable list of your last `n` commits and lets you rewrite local history before sharing it: `pick` keeps a commit as-is, `reword` edits its message, `squash`/`fixup` merge it into the previous commit, `drop` removes it, and `edit` pauses so you can amend it. It's how a day of messy "wip", "fix typo", "actually fix it" commits becomes one or two clean, reviewable commits.
+
+                    **Cherry-pick** (`git cherry-pick <commit>`) applies the changes from one specific commit onto your current branch as a new commit — useful for porting a single bug fix to a release branch without merging in everything else that branch's source has accumulated since.
+
+                    **Bisect** (`git bisect`) finds the exact commit that introduced a regression using binary search: you tell it one commit you know is `bad` (has the bug) and one you know is `good` (doesn't), and Git checks out the midpoint commit for you to test. You mark it `good` or `bad`, and Git halves the remaining range again — finding the culprit in `O(log n)` checks instead of testing every commit one by one.
+
+                    **Workflow strategies**: **trunk-based development** keeps everyone committing small, frequent changes directly (or via very short-lived branches) to a single main branch, often behind feature flags. **Git Flow** uses long-lived `develop`, `release`, and `feature` branches with a more formal release process. Trunk-based favors speed and continuous integration; Git Flow favors more structured, scheduled releases — most modern, fast-shipping teams lean trunk-based.
+                    """, 1),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    Interactive rebase is like editing a rough draft before submitting it — merging duplicate paragraphs, reordering sections, and fixing typos — so the reader sees a clean final version instead of your entire messy drafting process.
+
+                    Cherry-pick is like photocopying one specific page out of a colleague's notebook instead of asking to merge your entire notebook with theirs.
+
+                    Bisect is the classic "guess a number, narrow the range" game applied to commit history: instead of reading every page of a 1,000-page book to find where a typo was introduced, you check the middle page, decide if the typo exists yet, and repeat on the correct half — finding it in about 10 checks instead of 1,000.
+                    """, 2),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Interactive rebase commands** (inside the editor `git rebase -i` opens)
+
+                    - `pick` — keep the commit as-is
+                    - `reword` — keep the changes, edit the commit message
+                    - `squash` — combine into the previous commit, merge messages
+                    - `fixup` — combine into the previous commit, discard this message
+                    - `drop` — remove the commit entirely
+                    - `edit` — pause here so you can amend the commit
+
+                    **Cherry-pick & bisect**
+
+                    - `git cherry-pick <hash>` — apply one commit's changes onto the current branch
+                    - `git cherry-pick -x <hash>` — same, and records the original commit hash in the message
+                    - `git bisect start` / `git bisect bad` / `git bisect good <hash>` — begin the binary search
+                    - `git bisect reset` — end the session and return to where you started
+
+                    **Trunk-based vs. Git Flow**
+
+                    - Trunk-based — short-lived branches, frequent small merges to main, feature flags for incomplete work
+                    - Git Flow — long-lived develop/release/feature branches, more formal, scheduled releases
+                    """, 3),
+                Block(BlockType.CodeSnippet, "Interactive Rebase, Cherry-Pick & Bisect", BodyFormat.PlainText, """
+                    # Squash the last 4 WIP commits into clean ones before opening a PR
+                    git rebase -i HEAD~4
+                    # editor shows:
+                    #   pick   a1b2c3d Add search endpoint
+                    #   squash e4f5a6b wip
+                    #   squash 7c8d9e0 fix typo
+                    #   reword 1a2b3c4 add tests
+                    # -> save and edit the combined commit message when prompted
+
+                    # Port just the hotfix commit onto the release branch
+                    git checkout release/2.4
+                    git cherry-pick a1b2c3d
+
+                    # Binary-search for the commit that introduced a regression
+                    git bisect start
+                    git bisect bad                # current commit is broken
+                    git bisect good v1.9.0         # this old tag was known to work
+                    # Git checks out the midpoint; you build/test it, then:
+                    git bisect good                # (or `git bisect bad`)
+                    # ... repeat until Git reports the first bad commit ...
+                    git bisect reset               # done — return to your original HEAD
+                    """, 4, language: "bash"),
+                Block(BlockType.Diagram, "Bisect: Binary-Searching for the Bad Commit", BodyFormat.StructuredSteps, """
+                    [{"label":"Mark current commit bad","note":"git bisect bad"},{"label":"Mark an old known-good commit","note":"git bisect good v1.9.0"},{"label":"Git checks out the midpoint commit"},{"label":"You build/test it"},{"label":"Mark it good or bad","note":"git bisect good | git bisect bad"},{"label":"Git halves the remaining range and repeats"},{"label":"First bad commit identified","note":"git bisect reset to finish"}]
+                    """, 5),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Only interactively rebase commits that are still local and not yet pushed and shared — exactly like plain rebase, rewriting commit history that others may have already pulled and built on top of causes the same painful, confusing divergence.
+
+                    When bisecting, write a small script that exits `0` (good) or `1` (bad) and hand it to `git bisect run <script>` instead of testing manually at every step — it turns a multi-step manual process into one command that finds the culprit unattended.
+                    """, 6),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    If asked how you'd track down which commit introduced a regression in a codebase with thousands of commits, say "bisect" and explain why it's fast: it's a binary search, so it finds the culprit in roughly `log2(n)` tests instead of checking every commit — for 1,000 commits, that's about 10 checks, not 1,000. Naming the complexity class unprompted is a strong signal.
+                    """, 7),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Interactively rebasing (and force-pushing) commits a teammate has already pulled and built more work on top of — this silently rewrites the history their local branch depends on and causes the same shared-history breakage as a plain rebase, just easier to trigger since it's so convenient locally.
+
+                    Also common: forgetting to run `git bisect reset` after finding the culprit, leaving the repository checked out at some arbitrary commit in detached-HEAD state instead of back on your actual branch.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "You have 6 messy 'wip' commits on your local, not-yet-pushed feature branch and want 2 clean commits before opening a PR. What's the right tool?",
+                    "git rebase -i HEAD~6 opens an editable list of those 6 commits, letting you use squash/fixup to combine related ones and reword to write clear final messages — exactly the local-history cleanup this scenario calls for.",
+                    [
+                        new QuizOptionSeed("git rebase -i HEAD~6, using squash/fixup to combine related commits", true),
+                        new QuizOptionSeed("git reset --hard HEAD~6", false),
+                        new QuizOptionSeed("git revert HEAD~6", false),
+                        new QuizOptionSeed("git cherry-pick HEAD~6", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "What does git bisect actually do?",
+                    "Bisect performs a binary search between a commit known to be good and one known to be bad, checking out the midpoint for you to test at each step — it finds the exact commit that introduced a regression in roughly log2(n) steps instead of checking every commit one by one.",
+                    [
+                        new QuizOptionSeed("It binary-searches commit history between a known-good and known-bad commit to find the one that introduced a bug", true),
+                        new QuizOptionSeed("It automatically resolves merge conflicts using a bisection algorithm", false),
+                        new QuizOptionSeed("It splits one large commit into two smaller, separate commits", false),
+                        new QuizOptionSeed("It merges two branches by alternating commits from each", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("git-rebase — official documentation", "https://git-scm.com/docs/git-rebase", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("git-bisect — official documentation", "https://git-scm.com/docs/git-bisect", LinkType.OfficialDocs),
+            ],
+            prerequisites: [lesson2]);
+
+        var lesson4Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson4.Slug,
+        [
+            "Use git rebase -i to squash 3+ WIP commits into one clean, well-described commit on a scratch branch",
+            "Cherry-pick a single commit from one branch onto another and confirm only that change came across",
+            "Use git bisect (manually, or with a test script via git bisect run) to find a bug you introduced on purpose",
+        ]);
+
+        var module = BuildModule(topicId, "git-fundamentals", "Git Fundamentals",
+            "Commits, branches, merging, rebasing, resolving conflicts, undoing mistakes safely, and advanced workflows like interactive rebase, cherry-pick, and bisect.",
+            140, [lesson1, lesson2, lesson3, lesson4]);
+
+        return (module, [lesson1Checklist, lesson2Checklist, lesson3Checklist, lesson4Checklist]);
     }
 
     // ============================== DevOps ==============================
@@ -1911,11 +3750,244 @@ public static class CurriculumContentSeedData
             "Explain the difference between monitoring and observability in your own words",
         ]);
 
-        var module = BuildModule(topicId, "devops-fundamentals", "DevOps Fundamentals",
-            "Designing real CI/CD pipelines with a healthy test pyramid, then actually seeing what's happening in production.",
-            70, [lesson1, lesson2]);
+        var lesson3 = BuildLesson(
+            slug: "deployment-strategies-blue-green-canary",
+            title: "Deployment Strategies: Blue-Green, Canary & Feature Flags",
+            summary: "Shipping change to production without a full-stop outage window, and separating 'the code is deployed' from 'the feature is live.'",
+            estimatedMinutes: 35,
+            objectives:
+            [
+                "Explain the difference between deploying code and releasing a feature to users",
+                "Compare blue-green, canary, and rolling deployments and their rollback trade-offs",
+                "Use a feature flag to decouple deployment from release",
+                "Choose an automated rollback condition for a progressive rollout",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    **Deploying** code (getting a new build onto production infrastructure) and **releasing** a feature (making its behavior visible to users) are two different events, even though teams often collapse them into one "deploy = release" moment. Separating them is what makes safe rollouts possible.
 
-        return (module, [lesson1Checklist, lesson2Checklist]);
+                    Three common deployment strategies trade off differently:
+
+                    - **Blue-green** — run two identical, full environments ("blue" and "green"); the new version deploys to the idle one, gets smoke-tested with zero live traffic, then a router/load balancer instantly cuts traffic over. Rollback is just cutting back — just as instant.
+                    - **Canary** — route a small percentage of live traffic (e.g., 5%) to the new version, watch error rate/latency, then progressively increase the percentage (5% -> 25% -> 50% -> 100%) if metrics stay healthy. Limits the "blast radius" of a bad release to a subset of real users.
+                    - **Rolling** — replace old instances with new ones a few at a time, in place, so there's never a moment with double the infrastructure — but both versions run simultaneously mid-rollout, and rollback means rolling forward again, not an instant switch.
+
+                    A **feature flag** decouples the two further: code can be deployed to production "dark" (flag off, inert), then released later — instantly, without a redeploy — by flipping the flag, and just as instantly killed by flipping it back if something looks wrong.
+                    """, 1),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    Blue-green is like having two identical stages set up side by side — the show plays on Stage A while Stage B is fully rehearsed and lit; when it's ready, the spotlight instantly swings to Stage B, and swinging back if something goes wrong is just as fast.
+
+                    Canary deployment is named for the literal canary in a coal mine — miners sent a canary ahead into the tunnel as an early warning system, because if something was wrong with the air, the canary showed it before any miner was exposed. A canary release exposes a small slice of real users first, as an early warning, before the whole user base is exposed to a bad change.
+                    """, 2),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Strategy comparison**
+
+                    - Blue-green — instant cutover and instant rollback; needs ~2x infrastructure during the switch; no "mixed version" period
+                    - Canary — gradual traffic shift; limits blast radius; needs good real-time metrics and an automated rollback trigger
+                    - Rolling — no extra infrastructure; old and new versions run side by side mid-rollout; rollback is slower (roll forward again)
+                    - Feature flag — decouples "deployed" from "released"; instant kill switch with no redeploy; adds flag-cleanup debt if left in code too long
+
+                    **Rule of thumb**: deploy dark behind a flag, then release progressively (canary-style) by ramping the flag's rollout percentage.
+                    """, 3),
+                Block(BlockType.CodeSnippet, "Progressive Canary Rollout with an Automated Rollback Gate", BodyFormat.PlainText, """
+                    apiVersion: argoproj.io/v1alpha1
+                    kind: Rollout
+                    metadata:
+                      name: checkout-service
+                    spec:
+                      strategy:
+                        canary:
+                          steps:
+                            - setWeight: 5
+                            - pause: { duration: 10m }
+                            - setWeight: 25
+                            - pause: { duration: 10m }
+                            - setWeight: 50
+                            - pause: { duration: 10m }
+                            - setWeight: 100
+                          # If error-rate/latency analysis fails at any paused step,
+                          # traffic weight is automatically rolled back to 0 for the
+                          # new version — no human has to notice and react first.
+                          analysis:
+                            templates:
+                              - templateName: error-rate-and-latency-check
+                            startingStep: 1
+                    """, 4, language: "yaml"),
+                Block(BlockType.Diagram, "Canary Rollout Progression", BodyFormat.StructuredSteps, """
+                    [{"label":"Deploy canary","note":"5% of live traffic"},{"label":"Watch error rate & p99 latency","note":"auto-rollback if unhealthy"},{"label":"Ramp to 25%"},{"label":"Ramp to 50%"},{"label":"Ramp to 100%","note":"old version fully retired"}]
+                    """, 5),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Deploy behind a feature flag set to "off" by default, then release progressively by ramping the flag's rollout percentage — this means a bad release can be killed instantly (flip the flag) without waiting on a redeploy or a rollback pipeline run.
+
+                    Pick an automated, metric-based rollback condition (error rate, p99 latency) before a canary or progressive rollout starts, not while it's already in flight — deciding the threshold under incident pressure leads to hesitation exactly when speed matters most.
+                    """, 6),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    If asked to design a safe rollout for a high-traffic service, explicitly name canary with an automated rollback gate as the default answer, and mention feature flags as the way to decouple "shipped" from "live" — interviewers are often listening for whether you treat blast-radius limitation and automated (not human-watched) rollback as first-class requirements, not an afterthought.
+                    """, 7),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Doing an instant full cutover with no staged traffic percentage and no automated health check — this means 100% of users hit a broken change at once, and someone has to notice and react manually before damage is contained.
+
+                    Also common: leaving feature flags in code long after a feature is fully released and stable ("flag debt") — every permanent flag is a permanent branch that has to be reasoned about, tested, and eventually cleaned up.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "In a canary deployment, what's the main purpose of an automated rollback triggered by error-rate/latency checks?",
+                    "It limits blast radius by pulling the new version back before it reaches all users, the moment the subset of real traffic reveals a regression — without waiting for a human to notice and react.",
+                    [
+                        new QuizOptionSeed("It automatically rolls back the new version before it's exposed to all users if metrics regress", true),
+                        new QuizOptionSeed("It's purely a cost-optimization technique, unrelated to safety", false),
+                        new QuizOptionSeed("It replaces the need for any pre-deploy testing", false),
+                        new QuizOptionSeed("It only applies to blue-green deployments, not canary", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "What's the key difference between deploying code and releasing a feature?",
+                    "Deploying puts new code on production infrastructure; releasing (often via a feature flag) is the separate act of making that code's behavior visible and active for users — the two can happen at completely different times.",
+                    [
+                        new QuizOptionSeed("They're always the same event — a deploy always makes a feature visible to users", false),
+                        new QuizOptionSeed("Deploying puts code on production servers; releasing is separately making it visible/active to users", true),
+                        new QuizOptionSeed("Releasing means restarting the production servers", false),
+                        new QuizOptionSeed("There's no meaningful difference in modern deployment pipelines", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("BlueGreenDeployment (Martin Fowler's site)", "https://martinfowler.com/bliki/BlueGreenDeployment.html", LinkType.FurtherReading),
+                new ReferenceLinkSeed("Kubernetes: Performing a Rolling Update", "https://kubernetes.io/docs/tutorials/kubernetes-basics/update/update-intro/", LinkType.OfficialDocs),
+            ],
+            prerequisites: [lesson1]);
+
+        var lesson3Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson3.Slug,
+        [
+            "Explain the rollback trade-off between blue-green, canary, and rolling deployments in your own words",
+            "Identify one feature in your own project that could ship dark behind a flag before being released",
+            "Sketch a canary rollout plan with traffic percentages and an automated rollback condition",
+        ]);
+
+        var lesson4 = BuildLesson(
+            slug: "incident-response-on-call-basics",
+            title: "Incident Response & On-Call Basics",
+            summary: "Severity levels, runbooks, and blameless postmortems — how to respond to a production incident, and actually learn from it afterward.",
+            estimatedMinutes: 35,
+            objectives:
+            [
+                "Classify an incident by severity and explain what response each level demands",
+                "Follow a runbook during an active incident instead of improvising under pressure",
+                "Write a blameless postmortem that surfaces systemic fixes, not blame",
+                "Explain why a 'root cause' is usually plural, not singular",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    Production incidents get classified by **severity** so the response scales to the actual impact instead of every alert triggering the same panic (or the same shrug):
+
+                    - **SEV1** — full outage or major data-integrity risk, all hands, immediate page.
+                    - **SEV2** — significant degradation (a feature down, elevated errors for many users), urgent but not all-hands.
+                    - **SEV3/SEV4** — minor, limited-impact issues, handled during business hours, no page.
+
+                    During an active incident, a designated **incident commander** coordinates the response (who's investigating what, who's communicating status), while responders follow a **runbook** — a pre-written, step-by-step guide for a known failure mode ("API error rate spiking: check X, then Y, then Z") — rather than improvising from scratch under pressure.
+
+                    After the incident is resolved, a **blameless postmortem** documents the timeline, contributing factors, and follow-up actions. "Blameless" doesn't mean nothing went wrong — it means the write-up focuses on *why the system allowed the failure* (missing alert, unclear runbook, a single point of failure) rather than which person made a mistake, because a single-person "root cause" is almost never the whole story.
+                    """, 1),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    Severity levels and a runbook work like a fire department's incident command system: a small kitchen fire gets one engine and a checklist; a multi-alarm building fire gets a designated incident commander coordinating multiple crews, all following pre-drilled procedures instead of inventing a plan on the spot. Nobody improvises hose placement mid-fire — the procedure was written and rehearsed beforehand, precisely so no one has to think it up under pressure.
+
+                    A blameless postmortem is like an aviation crash investigation: investigators don't stop at "the pilot made an error" — they ask why the cockpit design, training, or procedures made that error easy to make, because grounding one pilot doesn't fix a system that will produce the same error again with someone else at the controls.
+                    """, 2),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Severity levels, roughly**
+
+                    - SEV1 — full outage / data integrity risk — immediate page, all hands
+                    - SEV2 — significant degradation — urgent, dedicated responder(s)
+                    - SEV3/SEV4 — minor / cosmetic — business hours, no page
+
+                    **During an incident**
+
+                    - One incident commander coordinates; responders execute the runbook
+                    - Status updates go to one shared channel, on a cadence — not scattered DMs
+                    - Mitigate first (stop the bleeding — e.g., rollback), root-cause later
+
+                    **Blameless postmortem contains**
+
+                    - Timeline of detection, escalation, mitigation, resolution
+                    - Contributing factors (plural), not a single scapegoat "root cause"
+                    - Concrete follow-up actions with owners and due dates
+                    """, 3),
+                Block(BlockType.CodeSnippet, "A Runbook Step: Fast Mitigation Before Root-Causing", BodyFormat.PlainText, """
+                    #!/usr/bin/env bash
+                    # Runbook: "checkout-service error rate > 5%"
+                    # Step 1 — confirm impact before doing anything else.
+                    curl -s https://status.internal/checkout-service/error-rate
+
+                    # Step 2 — mitigate FIRST: roll back to the last known-good version.
+                    # Don't wait to find the root cause before stopping user impact.
+                    kubectl rollout undo deployment/checkout-service
+
+                    # Step 3 — confirm the rollback actually resolved the symptom.
+                    watch -n 10 'curl -s https://status.internal/checkout-service/error-rate'
+
+                    # Root-cause investigation happens AFTER impact is stopped,
+                    # feeding into the postmortem — not during the live incident.
+                    """, 4, language: "bash"),
+                Block(BlockType.Diagram, "Incident Lifecycle", BodyFormat.StructuredSteps, """
+                    [{"label":"Detect","note":"alert fires or user report"},{"label":"Triage & Declare","note":"assign severity + incident commander"},{"label":"Mitigate","note":"stop user impact — e.g., rollback"},{"label":"Resolve","note":"confirm metrics back to normal"},{"label":"Blameless Postmortem","note":"contributing factors + follow-up actions"}]
+                    """, 5),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Mitigate before you root-cause: rolling back or failing over to stop user impact takes priority over understanding exactly why something broke — the full investigation belongs in the postmortem, not in the middle of an active SEV1.
+
+                    Write the postmortem within a day or two while details are fresh, list contributing factors as a list (plural), and assign every follow-up action a concrete owner and due date — a postmortem with no tracked action items is just a story, not a fix.
+                    """, 6),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    If asked to walk through how you'd handle a production incident, narrate it in order — detect, assign severity, mitigate (rollback) before investigating root cause, then resolve and write a blameless postmortem — interviewers are often checking whether you reach for "stop the bleeding first" instead of debugging live in production while users are still affected.
+                    """, 7),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Naming a single person's mistake as "the root cause" in a postmortem — this discourages honest reporting next time (people hide details that might implicate them) and almost always ignores the systemic factors (no alert existed, the runbook was outdated, a single point of failure) that let one person's mistake become an outage in the first place.
+
+                    Also common: skipping a postmortem for a "near miss" that didn't fully become an outage — near misses are the cheapest opportunity to find and fix a systemic gap before it causes a real incident.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "Why should postmortems be blameless rather than naming which individual made the mistake?",
+                    "Blaming individuals discourages honest, detailed reporting of what actually happened, which makes it harder to find the systemic factors (missing alerts, outdated runbooks, single points of failure) that let one mistake turn into an outage — and those factors will cause the same failure again with someone else at the controls.",
+                    [
+                        new QuizOptionSeed("Blameless means nothing went wrong and no one needs to change anything", false),
+                        new QuizOptionSeed("Naming an individual discourages honest reporting and hides the systemic factors that actually need fixing", true),
+                        new QuizOptionSeed("It's a legal requirement in most engineering organizations", false),
+                        new QuizOptionSeed("Postmortems are only useful for SEV1 incidents, so blame doesn't matter for smaller ones", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "During an active SEV1 incident with an assigned incident commander, an engineer spots what looks like a quick fix. What should they do?",
+                    "Report it through the incident's coordinated channel (to the incident commander) rather than applying it unilaterally — uncoordinated changes during an active incident can make impact worse or muddy the timeline needed for the postmortem.",
+                    [
+                        new QuizOptionSeed("Apply the fix immediately without telling anyone, to save time", false),
+                        new QuizOptionSeed("Report it to the incident commander / shared channel so the change is coordinated and tracked", true),
+                        new QuizOptionSeed("Wait until the postmortem meeting to mention it", false),
+                        new QuizOptionSeed("Page every engineer in the company to get consensus first", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Google SRE Book: Managing Incidents", "https://sre.google/sre-book/managing-incidents/", LinkType.FurtherReading),
+                new ReferenceLinkSeed("Google SRE Book: Postmortem Culture", "https://sre.google/sre-book/postmortem-culture/", LinkType.FurtherReading),
+            ],
+            prerequisites: [lesson2]);
+
+        var lesson4Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson4.Slug,
+        [
+            "Write a one-page runbook for a service you own: what to check first, who to page, how to roll back",
+            "Draft a blameless postmortem for a real (or hypothetical) incident, focused on systemic fixes with owners",
+            "Explain the difference between a SEV1 and a SEV3 and what response each demands",
+        ]);
+
+        var module = BuildModule(topicId, "devops-fundamentals", "DevOps Fundamentals",
+            "Designing real CI/CD pipelines with a healthy test pyramid, safely rolling out change to production, seeing what's happening once it's live, and responding when something breaks.",
+            140, [lesson1, lesson2, lesson3, lesson4]);
+
+        return (module, [lesson1Checklist, lesson2Checklist, lesson3Checklist, lesson4Checklist]);
     }
 
     // ============================== Architecture ==============================
@@ -2155,11 +4227,290 @@ public static class CurriculumContentSeedData
             "Describe a Repository (real or hypothetical) and what data source it would let you swap in for tests",
         ]);
 
-        var module = BuildModule(topicId, "software-architecture-fundamentals", "Software Architecture Fundamentals",
-            "Clean Architecture's dependency rule, and the design patterns that actually earn their complexity.",
-            80, [lesson1, lesson2]);
+        var lesson3 = BuildLesson(
+            slug: "domain-driven-design-basics",
+            title: "Domain-Driven Design Basics: Entities, Value Objects & Bounded Contexts",
+            summary: "Modeling the domain with entities, value objects, and aggregates, and drawing bounded-context boundaries between subdomains.",
+            estimatedMinutes: 45,
+            objectives:
+            [
+                "Distinguish an entity from a value object and explain why the distinction matters",
+                "Explain what an aggregate root is and why it's the only valid entry point into an aggregate",
+                "Identify a bounded-context boundary between two subdomains in a real system",
+                "Recognize when DDD's tactical patterns are worth the complexity vs. overkill for a simple CRUD app",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    **Domain-Driven Design (DDD)** is a set of practices for modeling software so its structure mirrors the real business domain, using a shared **ubiquitous language** that developers and domain experts both use, unambiguously, in conversation and in code.
 
-        return (module, [lesson1Checklist, lesson2Checklist]);
+                    Two core building blocks:
+
+                    - **Entity** — has a persistent identity that survives attribute changes over time (a `Customer` is still the same customer after changing their email address). Identity, not attributes, defines equality.
+                    - **Value Object** — has no identity of its own; it's fully defined by its attributes and is typically immutable (`Money(50, "USD")` equals any other `Money(50, "USD")` — there's no "which one" to ask about).
+
+                    An **aggregate** is a cluster of entities and value objects treated as one consistency boundary. The **aggregate root** is the single entity other code is allowed to reference from outside — it's the only door in, and it's responsible for enforcing every invariant across the whole cluster.
+
+                    A **bounded context** is an explicit boundary (often a service, module, or team) within which a specific model and ubiquitous language apply consistently. The same word can mean different things in different bounded contexts — "Customer" in a Sales context (who they are, what they've bought) is a very different model from "Customer" in a Shipping context (where to deliver, what's in transit) — and that's fine, as long as the boundary is explicit.
+                    """, 1),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    An entity is like a person's Social Security Number — they can change their name, address, even their appearance, and it's still legally the same person. A value object is like a dollar bill — any two $1 bills are completely interchangeable; nobody asks "which specific dollar bill do you mean?"
+
+                    An aggregate root is like a shipping container's manifest — you don't reach into the container and grab an individual crate directly; you go through the manifest, which is the only thing that knows and enforces what's allowed to be in there together.
+
+                    A bounded context is like two departments in the same company both talking about "the customer" in a meeting — Sales means "who's paying us," Shipping means "where does the box go" — and both are correct, because each department's model only has to make sense within its own walls.
+                    """, 2),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Entity vs. Value Object**
+
+                    - Entity — has identity, mutable over time, equality by ID
+                    - Value Object — no identity, usually immutable, equality by attribute values
+
+                    **Aggregate rules**
+
+                    - One aggregate root per aggregate; it's the only externally-referenceable entity
+                    - Everything inside the boundary is loaded/saved together, as one consistency unit
+                    - Reference other aggregates by ID only, never by direct object reference
+
+                    **Bounded context**
+
+                    - Same term can have different models in different contexts — that's expected, not a bug
+                    - Draw the boundary where the ubiquitous language would otherwise start conflicting
+                    """, 3),
+                Block(BlockType.CodeSnippet, "A Value Object and an Aggregate Root Enforcing an Invariant", BodyFormat.PlainText, """
+                    // Value object: no identity, immutable, equality by value (records give this for free).
+                    public record Money(decimal Amount, string Currency)
+                    {
+                        public static Money operator +(Money a, Money b) =>
+                            a.Currency != b.Currency
+                                ? throw new InvalidOperationException("Cannot add different currencies.")
+                                : a with { Amount = a.Amount + b.Amount };
+                    }
+
+                    // Aggregate root: the ONLY entry point into the Order/OrderLine cluster.
+                    public class Order
+                    {
+                        private readonly List<OrderLine> _lines = [];
+
+                        public int Id { get; private set; }
+                        public bool IsShipped { get; private set; }
+                        public IReadOnlyList<OrderLine> Lines => _lines.AsReadOnly();
+
+                        public void AddLine(string sku, int quantity, Money unitPrice)
+                        {
+                            if (IsShipped)
+                            {
+                                throw new InvalidOperationException("Cannot modify a shipped order.");
+                            }
+
+                            _lines.Add(new OrderLine(sku, quantity, unitPrice));
+                        }
+                    }
+
+                    public record OrderLine(string Sku, int Quantity, Money UnitPrice);
+                    """, 4, language: "csharp"),
+                Block(BlockType.Diagram, "Aggregate Boundary vs. Bounded Context Boundary", BodyFormat.AsciiArt, """
+                    Aggregate boundary (one consistency unit):
+
+                        Order (aggregate root)
+                          +-- OrderLine
+                          +-- OrderLine
+                          (external code only ever talks to Order, never an OrderLine directly)
+
+                    Bounded context boundary (same word, different models):
+
+                        [ Sales Context ]        [ Shipping Context ]
+                          Customer                  Customer
+                          - billingAddress          - deliveryAddress
+                          - loyaltyTier             - deliveryInstructions
+
+                    Order references a Customer by ID only across the boundary —
+                    never by holding a direct reference into another context's model.
+                    """, 5),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Keep aggregates small — one aggregate root guarding a handful of tightly-related entities. A large aggregate that pulls in half the domain graph turns every save into a broad lock and a merge-conflict magnet.
+
+                    Reference other aggregates by ID (`CustomerId`, not a `Customer` object reference) — this keeps aggregate boundaries honest and avoids accidentally loading (and locking) far more of the object graph than the operation actually needs.
+                    """, 6),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    If asked to explain DDD, don't lead with the vocabulary — lead with an example: "we had a `Customer` that meant something different to billing than it did to support, so we drew a bounded context boundary between them and stopped trying to force one shared model to do both jobs." Naming entities/value objects/aggregates only after the example lands is far more convincing than reciting definitions.
+                    """, 7),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Building an **anemic domain model** — entities that are just public-getter/setter data bags with all the actual logic living in separate "service" classes. This throws away the main point of DDD: behavior and invariants should live on the objects that own the data they protect.
+
+                    Also common: one giant aggregate that spans the whole domain "to keep everything consistent," and never drawing bounded-context boundaries at all, so the same term silently means five different things across the codebase depending on which file you're reading.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "What's the key difference between an entity and a value object?",
+                    "An entity has a persistent identity that survives changes to its attributes over time; a value object has no identity at all and is fully defined by (and equal based on) its attribute values.",
+                    [
+                        new QuizOptionSeed("Entities are always immutable; value objects are always mutable", false),
+                        new QuizOptionSeed("An entity has identity that persists through change; a value object is defined entirely by its attributes", true),
+                        new QuizOptionSeed("Value objects can only hold numeric data", false),
+                        new QuizOptionSeed("There is no real difference — the terms are interchangeable", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "Why should external code reference an aggregate root instead of reaching into its internal entities directly?",
+                    "The aggregate root is the only place invariants across the whole cluster are enforced. Bypassing it to modify an internal entity directly can leave the aggregate in an inconsistent state that violates rules the root exists to protect.",
+                    [
+                        new QuizOptionSeed("It's purely a naming convention with no functional purpose", false),
+                        new QuizOptionSeed("The aggregate root is the only entity that enforces invariants across the whole cluster", true),
+                        new QuizOptionSeed("Internal entities are always private and can't be referenced regardless", false),
+                        new QuizOptionSeed("It improves database query performance automatically", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("DDD Aggregate (Martin Fowler)", "https://martinfowler.com/bliki/DDD_Aggregate.html", LinkType.FurtherReading),
+                new ReferenceLinkSeed("Design a DDD-oriented microservice (.NET architecture docs)", "https://learn.microsoft.com/en-us/dotnet/architecture/microservices/microservice-ddd-cqrs-patterns/ddd-oriented-microservice", LinkType.OfficialDocs),
+            ],
+            prerequisites: [lesson1]);
+
+        var lesson3Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson3.Slug,
+        [
+            "Find one entity in your own code that's actually being used as a value object (or vice versa), and describe the fix",
+            "Identify the aggregate root for one cluster of related classes in your own code, and name the invariant it enforces",
+            "Describe two bounded contexts in a system you know where the same term means something different in each",
+        ]);
+
+        var lesson4 = BuildLesson(
+            slug: "microservices-vs-monoliths",
+            title: "Microservices vs. Monoliths: Trade-offs and the Distributed Monolith Trap",
+            summary: "When splitting a monolith into services actually pays off, how services should talk to each other, and how to avoid building a distributed monolith.",
+            estimatedMinutes: 45,
+            objectives:
+            [
+                "State the core trade-off between a monolith and microservices in one sentence",
+                "Choose synchronous vs. asynchronous communication for a given cross-service scenario",
+                "Use bounded contexts to decide where a real service boundary should go",
+                "Recognize a 'distributed monolith' and explain why it has the downsides of both worlds",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    A **monolith** is a single deployable application — one codebase, one build, one deployment unit (even if it's internally well-layered). A **microservices** architecture splits an application into multiple independently deployable services, each typically owning its own data store, communicating over the network.
+
+                    The core trade-off: microservices buy you independent deployability, independent scaling, and team autonomy (each team owns and ships its own service) — at the cost of real operational complexity: network calls that can fail or time out, distributed transactions (or the need to avoid them), service discovery, and eventual consistency between services instead of a single ACID database transaction.
+
+                    Service boundaries should follow **bounded contexts**, not org charts or technical layers — a service should own one coherent piece of the domain model (e.g., "Shipping"), not be "the database layer" or "the reporting team's stuff." Splitting along the wrong lines is how teams end up with services that must change together anyway.
+
+                    Communication between services is either **synchronous** (HTTP/gRPC request-response, when the caller genuinely needs an answer right now) or **asynchronous** (events/messages via a queue or broker, when the caller can proceed without waiting and just needs the side effect to happen eventually).
+                    """, 1),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    A monolith is like one big kitchen making every dish on the menu — simple to coordinate, but the whole kitchen shuts down together, and any change to the salad station risks disrupting the grill.
+
+                    Microservices are like a food court — each stall owns its own ingredients, its own staff, and can change its menu without asking the stall next door. But now the stalls have to coordinate handoffs (an order that spans two stalls), and one stall being closed doesn't have to take down the whole food court.
+
+                    A **distributed monolith** is a food court where every stall still has to call over to every other stall and wait for a response before it can plate a single dish — you've paid for separate kitchens, separate rent, and network overhead between them, but none of the actual independence you were trying to buy.
+                    """, 2),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Lean toward microservices when**
+
+                    - The domain has clear bounded contexts owned by different teams
+                    - Different parts of the system need very different scaling profiles or release cadences
+                    - You're already paying the operational cost of distributed systems for other reasons
+
+                    **Lean toward a monolith when**
+
+                    - The team is small, or the domain boundaries aren't well understood yet
+                    - You're early-stage and speed of iteration matters more than independent deployability
+
+                    **Communication choice**
+
+                    - Synchronous (HTTP/gRPC) — caller needs the answer now, and can tolerate the callee being temporarily down
+                    - Asynchronous (queue/event bus) — caller doesn't need to wait, and wants resilience against the callee being temporarily unavailable
+                    """, 3),
+                Block(BlockType.CodeSnippet, "Decoupling Services with an Asynchronous Event", BodyFormat.PlainText, """
+                    // Published by the Order service after it commits to ITS OWN database —
+                    // it does not call the Shipping service directly or wait for it.
+                    public record OrderPlacedIntegrationEvent(int OrderId, string CustomerEmail, decimal Total);
+
+                    public class OrderService(AppDbContext db, IEventPublisher publisher)
+                    {
+                        public async Task PlaceOrderAsync(Order order)
+                        {
+                            db.Orders.Add(order);
+                            await db.SaveChangesAsync();
+
+                            // Shipping reacts to this asynchronously; if Shipping is down
+                            // right now, placing the order still succeeds.
+                            await publisher.PublishAsync(
+                                new OrderPlacedIntegrationEvent(order.Id, order.CustomerEmail, order.Total));
+                        }
+                    }
+                    """, 4, language: "csharp"),
+                Block(BlockType.Diagram, "Microservices vs. a Distributed Monolith", BodyFormat.AsciiArt, """
+                    Healthy microservices (async, own data each):
+
+                        [ Order Service ] --event--> [ Message Bus ] --event--> [ Shipping Service ]
+                              |                                                        |
+                          (own DB)                                                (own DB)
+
+                    Distributed monolith (synchronous call chain, shared data):
+
+                        [ Order Service ] --HTTP,waits--> [ Shipping Service ] --HTTP,waits--> [ Billing Service ]
+                              \\_____________________ shared database _____________________/
+
+                    Every service must be up AND fast for any request to succeed —
+                    all the network overhead of microservices, none of the independence.
+                    """, 5),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Give each service its own datastore — a shared database across services is one of the fastest ways to end up with a distributed monolith, since it silently couples every service's schema to every other service.
+
+                    Default to asynchronous events for cross-service side effects (send a confirmation email, update a search index) and reserve synchronous calls for the cases where the caller genuinely cannot proceed without an immediate answer.
+                    """, 6),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    When asked "would you use microservices for this system?", resist the urge to answer with blanket enthusiasm. A strong answer is conditional: "it depends on team size, whether the domain boundaries are clear yet, and whether we actually need independent deploy cadences — for a small team early on, I'd start with a well-layered monolith and split later, along bounded contexts, once a real need for independence shows up."
+                    """, 7),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Splitting services along technical layers ("the API service," "the database service") instead of bounded contexts — this guarantees the "services" must be deployed together anyway, since a single business change touches all of them at once.
+
+                    Also common: building a **distributed monolith** — services that are deployed separately but share one database, or that chain synchronous calls (A waits on B waits on C) for every request. This has all of microservices' network latency and operational overhead with none of the independent-deployability benefit, and one slow or down service cascades failures through the whole chain.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "What's the defining problem with a 'distributed monolith'?",
+                    "It's deployed as separate services but remains tightly coupled — often via a shared database or synchronous call chains that must all succeed together — so it carries microservices' network and operational overhead without gaining any real independent deployability.",
+                    [
+                        new QuizOptionSeed("It has too few services to be considered real microservices", false),
+                        new QuizOptionSeed("It's deployed as separate services but stays tightly coupled, gaining overhead without independence", true),
+                        new QuizOptionSeed("It uses a message queue instead of HTTP", false),
+                        new QuizOptionSeed("It only happens when using SQLite instead of a distributed database", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "When is asynchronous (event/queue-based) communication a better fit than a synchronous HTTP call between two services?",
+                    "When the caller doesn't need an immediate response and would rather stay available even if the other service is temporarily down — trading immediate consistency for resilience and decoupling, e.g. triggering a confirmation email after an order is placed.",
+                    [
+                        new QuizOptionSeed("Whenever the two services are owned by the same team", false),
+                        new QuizOptionSeed("When the caller can proceed without waiting and wants resilience against the callee being unavailable", true),
+                        new QuizOptionSeed("Only when the payload is larger than a few kilobytes", false),
+                        new QuizOptionSeed("Asynchronous communication is always strictly better than synchronous", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("MonolithFirst (Martin Fowler)", "https://martinfowler.com/bliki/MonolithFirst.html", LinkType.FurtherReading),
+                new ReferenceLinkSeed("Microservices architecture (.NET architecture docs)", "https://learn.microsoft.com/en-us/dotnet/architecture/microservices/architect-microservice-container-applications/", LinkType.OfficialDocs),
+            ],
+            prerequisites: [lesson3]);
+
+        var lesson4Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson4.Slug,
+        [
+            "Describe one bounded context in a system you know that would make a reasonable service boundary, and why",
+            "Find (or imagine) one synchronous call chain in a system you know and identify whether it should be async instead",
+            "Explain the difference between microservices and a distributed monolith using your own words and an example",
+        ]);
+
+        var module = BuildModule(topicId, "software-architecture-fundamentals", "Software Architecture Fundamentals",
+            "Clean Architecture's dependency rule, the design patterns that earn their complexity, DDD's tactical modeling tools, and when to split (or not split) a monolith.",
+            210, [lesson1, lesson2, lesson3, lesson4]);
+
+        return (module, [lesson1Checklist, lesson2Checklist, lesson3Checklist, lesson4Checklist]);
     }
 
     // ============================== Soft Skills ==============================
@@ -2363,11 +4714,226 @@ public static class CurriculumContentSeedData
             "Recall a piece of critical feedback you received and describe what you did differently afterward",
         ]);
 
-        var module = BuildModule(topicId, "interview-readiness-fundamentals", "Interview & Communication Readiness",
-            "Structuring behavioral answers, understanding the interview loop, and communicating like a senior engineer.",
-            60, [lesson1, lesson2]);
+        var lesson3 = BuildLesson(
+            slug: "handling-conflict-difficult-conversations",
+            title: "Handling Conflict & Difficult Conversations at Work",
+            summary: "Disagreeing constructively, giving upward feedback to a manager, and resolving team friction before it festers.",
+            estimatedMinutes: 30,
+            objectives:
+            [
+                "Disagree with a decision or approach without making it personal",
+                "Give upward feedback to a manager or senior teammate respectfully",
+                "Open a hard conversation with an observation instead of an accusation",
+                "Recognize when a conflict needs a direct 1:1 conversation vs. escalation to a manager or HR",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    Conflict on an engineering team is normal, not a failure state — technical disagreements, competing priorities, and personality friction all surface naturally whenever people care about the work. What separates a healthy team from a dysfunctional one isn't the *absence* of conflict, it's whether conflict gets addressed early, directly, and respectfully, or left to compound silently.
 
-        return (module, [lesson1Checklist, lesson2Checklist]);
+                    The single most useful habit is **separating the person from the problem**: "this API design will be hard to version" is a critique of a decision; "you never think about backward compatibility" is an attack on a person. The first invites a conversation; the second invites defensiveness.
+
+                    Most workplace conflict falls into one of three buckets, each needing a different response:
+
+                    - **A genuine misunderstanding** — usually resolved by just asking a clarifying question.
+                    - **A disagreement over approach** — resolved by stating your reasoning and evidence, hearing theirs, and deciding (sometimes via "disagree and commit").
+                    - **A pattern of behavior** — the hardest kind, usually needing a direct, private conversation rather than being raised in front of the team.
+                    """, 1),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    Unaddressed friction is like a pressure-relief valve on a boiler: a small hiss of steam released early keeps the system stable, but capping it off "to keep the peace" doesn't make the pressure disappear — it just guarantees a much bigger, much louder problem later, at a worse time.
+
+                    Giving upward feedback to a manager is like adjusting the GPS route for a driver, not grabbing the wheel — you're offering better information ("there's traffic ahead on this approach"), not taking control of the decision, and a good driver welcomes that input.
+                    """, 2),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Before raising a conflict, check:**
+
+                    - Have I separated the behavior/decision from the person?
+                    - Am I raising this privately, not in front of the team?
+                    - Do I have a specific example, not just a general feeling?
+                    - What outcome am I actually asking for?
+
+                    **Openers that de-escalate instead of accuse**
+
+                    - "I noticed X — can you help me understand the reasoning?" (not "why would you do X")
+                    - "I have a different read on this, want to walk through it?" (not "that's wrong")
+                    - "I want to raise something that's been on my mind — is now an okay time?" (not ambushing mid-standup)
+                    """, 3),
+                Block(BlockType.CodeSnippet, "Opening an Upward-Feedback Conversation", BodyFormat.PlainText, """
+                    // Weak opener: vague, accusatory, easy to get defensive about.
+                    "You keep changing requirements on us and it's really frustrating."
+
+                    // Stronger opener: specific, observation-first, names an impact,
+                    // and ends by inviting their perspective instead of a verdict.
+                    "I wanted to raise something — on the last two sprints, requirements
+                    changed after we'd started building, and it cost us rework time both
+                    times. Can we figure out together how to lock scope earlier, or is
+                    there context I'm missing about why it changed?"
+                    """, 4),
+                Block(BlockType.Diagram, "Resolving Friction Before It Escalates", BodyFormat.StructuredSteps, """
+                    [{"label":"Notice friction","note":"a comment, a decision, a pattern"},{"label":"Pause and reflect privately","note":"is this a one-off or a pattern?"},{"label":"Request a private conversation","note":"never ambush in a group setting"},{"label":"State the observation + impact","note":"specific, not accusatory"},{"label":"Listen to their perspective fully","note":"before responding"},{"label":"Agree on a concrete path forward"},{"label":"Follow up later","note":"confirm it actually changed"}]
+                    """, 5),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Raise friction while it's still small and specific, in a private 1:1, rather than letting it accumulate until you're venting about a general pattern in a group setting — the earlier and narrower the conversation, the less defensive the other person needs to be.
+
+                    When giving upward feedback to a manager, frame it as information they'd want to have, tied to a concrete example and (if you have one) a suggested next step — "here's what I noticed, here's the impact, here's an idea" lands far better than an open-ended complaint.
+                    """, 6),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    "Tell me about a conflict with a coworker" is one of the most common behavioral questions, and interviewers are specifically listening for whether you take any ownership of your side of it — a strong answer names what you did to resolve it, not just what the other person did wrong, and ends with the relationship intact or improved, not burned.
+                    """, 7),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Raising a grievance in a group meeting or group chat instead of privately — even a completely valid point lands as a public callout, which triggers defensiveness and often escalates the exact conflict you were trying to resolve.
+
+                    Also common: letting a small friction sit unaddressed for weeks "to avoid making it awkward," until it resurfaces as a much bigger blowup over something that would have been a two-minute conversation if raised early.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "What's the key difference between 'this API design will be hard to version' and 'you never think about backward compatibility'?",
+                    "The first critiques a decision or artifact, inviting a conversation about the design itself. The second attacks the person's character or pattern of behavior, which triggers defensiveness instead of problem-solving — the core idea of separating the person from the problem.",
+                    [
+                        new QuizOptionSeed("There's no meaningful difference — both convey the same concern", false),
+                        new QuizOptionSeed("The first critiques the decision; the second attacks the person, which invites defensiveness", true),
+                        new QuizOptionSeed("The second is more specific and therefore more useful feedback", false),
+                        new QuizOptionSeed("The first is too vague to be actionable", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "Where should you raise a pattern of behavior that's been bothering you about a teammate's decisions?",
+                    "Patterns of behavior are the hardest kind of conflict and should be raised privately, one-on-one — raising them in front of the team turns a resolvable conversation into a public callout, which tends to escalate rather than resolve the underlying issue.",
+                    [
+                        new QuizOptionSeed("In the next team standup, so everyone is aware", false),
+                        new QuizOptionSeed("Privately, in a direct 1:1 conversation", true),
+                        new QuizOptionSeed("In a group Slack channel, so there's a written record", false),
+                        new QuizOptionSeed("You should let it go entirely rather than risk conflict", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("HBR: How to Handle Difficult Conversations at Work", "https://hbr.org/2015/01/how-to-handle-difficult-conversations-at-work", LinkType.FurtherReading),
+                new ReferenceLinkSeed("Crucial Conversations: Tools for Talking When Stakes Are High (overview)", "https://cruciallearning.com/crucial-conversations/", LinkType.FurtherReading),
+            ],
+            prerequisites: [lesson2]);
+
+        var lesson3Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson3.Slug,
+        [
+            "Draft an observation-plus-impact opener for a real piece of friction you've been sitting on",
+            "Identify one upward-feedback conversation you've been avoiding, and plan how you'd open it",
+            "Practice separating a decision/behavior from the person in a critique you'd normally phrase personally",
+        ]);
+
+        var lesson4 = BuildLesson(
+            slug: "negotiating-job-offers",
+            title: "Negotiating Job Offers",
+            summary: "Understanding total-comp components, negotiating respectfully with leverage, and avoiding the mistakes that quietly cost candidates money.",
+            estimatedMinutes: 35,
+            objectives:
+            [
+                "Break a FAANG-style offer down into its actual components, not just base salary",
+                "Negotiate using genuine leverage and rationale, without ultimatums or bluffing",
+                "Sequence a negotiation correctly relative to competing offers and deadlines",
+                "Recognize the negotiation mistakes that cost candidates real compensation",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    A job offer is rarely just a base salary number — it's a package with several independently negotiable pieces:
+
+                    - **Base salary** — fixed annual cash, usually the least flexible piece at large companies with structured pay bands.
+                    - **Annual bonus target** — a percentage of base, often somewhat negotiable, sometimes not.
+                    - **Equity/RSUs** — a grant vesting over time (commonly 4 years, sometimes with a 1-year cliff or a back-loaded schedule) — often the single largest and most negotiable lever at big tech companies.
+                    - **Sign-on bonus** — usually cash, often front-loaded specifically to offset unvested equity you're walking away from at your current employer.
+
+                    Negotiate the **whole package**, not just base — a company that's rigid on base salary bands often has real flexibility on equity or sign-on bonus instead. Your real leverage is a competing offer, a clear articulation of your value, or both — vague requests ("can you do better?") get vague, weaker responses than specific, well-reasoned ones.
+                    """, 1),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    Negotiating an offer is like negotiating a home purchase, not a garage sale: you research comparable data (comparable offers, market bands) before naming a number, you know your walk-away point (your BATNA — best alternative to a negotiated agreement) before the conversation starts, and you make a reasoned ask backed by evidence, not an emotional appeal or a bluff you can't back up.
+                    """, 2),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Total comp components to negotiate**
+
+                    - Base salary, bonus target %, equity grant size, vesting schedule, sign-on bonus, start-date-tied refreshers
+
+                    **Before you negotiate**
+
+                    - Know your walk-away point (BATNA) before the call, not during it
+                    - Gather real data points: other offers, levels.fyi bands, recruiter-shared ranges
+                    - Decide your top 1-2 asks — asking for everything at once dilutes all of them
+
+                    **Respectful negotiation phrases**
+
+                    - "I'm genuinely excited about this offer — I do have [other data point], is there flexibility on [specific component]?"
+                    - "Could we look at the equity/sign-on to help bridge that gap?"
+                    """, 3),
+                Block(BlockType.CodeSnippet, "A Respectful Negotiation Email", BodyFormat.PlainText, """
+                    // Weak: vague, no rationale, sounds like a bluff.
+                    "I need more money or I can't accept this offer."
+
+                    // Stronger: enthusiastic, specific, backed by a real data
+                    // point, and asks rather than demands.
+                    "Thank you again for the offer — I'm genuinely excited about
+                    the team and the role. I do have a competing offer with a
+                    higher total comp (details attached), and this role is my
+                    first choice. Is there flexibility on the equity grant or
+                    sign-on bonus to help close that gap? Happy to hop on a
+                    call to discuss."
+                    """, 4),
+                Block(BlockType.Diagram, "The Offer Negotiation Flow", BodyFormat.StructuredSteps, """
+                    [{"label":"Receive verbal/written offer"},{"label":"Express enthusiasm, ask for time","note":"a few business days is standard"},{"label":"Gather leverage","note":"competing offers, market data"},{"label":"Decide your top 1-2 asks"},{"label":"Make the ask, with rationale","note":"to the recruiter, not the hiring manager"},{"label":"Get the revised offer in writing"},{"label":"Confirm and respond by the deadline"}]
+                    """, 5),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Negotiate through the recruiter, not the hiring manager — it's the recruiter's job to close the deal, and routing hard numbers talk through them keeps your future day-to-day relationship with the hiring manager free of any negotiation friction.
+
+                    Always get a revised offer in writing before making a final decision or resigning from a current role — a verbal "we can probably do that" is not a commitment until it's on the written offer letter.
+                    """, 6),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    If a recruiter asks for your current salary or expectations early in the process, it's reasonable to redirect rather than answer directly: "I'd rather focus on finding the right fit first — once there's mutual interest, I'm happy to discuss compensation ranges." Anchoring too early, before the company has decided it wants you, usually works against the candidate.
+                    """, 7),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Accepting or rejecting an offer on the spot, on the same call it's presented — always ask for a few business days, even when you're fairly sure of your answer; a company that pressures you not to take time to think is itself a signal worth noting.
+
+                    Also common: negotiating only on base salary while ignoring equity and sign-on bonus, which at many tech companies are the components with the most real flexibility — and bluffing about a competing offer that doesn't exist, which can (and does) get discovered and burns trust permanently.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "At many large tech companies, which offer component is often the LEAST flexible to negotiate?",
+                    "Base salary is usually tied to structured pay bands and level, making it the most rigid piece. Equity and sign-on bonus tend to have more real negotiating room, which is why negotiating the whole package matters more than fixating on base alone.",
+                    [
+                        new QuizOptionSeed("Base salary", true),
+                        new QuizOptionSeed("Equity/RSU grant size", false),
+                        new QuizOptionSeed("Sign-on bonus", false),
+                        new QuizOptionSeed("Start date", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "Who should you typically negotiate compensation with, and why?",
+                    "The recruiter's job is to close the deal, so routing negotiation through them is standard practice — it also keeps your future working relationship with the hiring manager free of any negotiation-related friction.",
+                    [
+                        new QuizOptionSeed("The hiring manager, since they have final say", false),
+                        new QuizOptionSeed("The recruiter, since closing the deal is their role", true),
+                        new QuizOptionSeed("Whoever you have the most rapport with on the team", false),
+                        new QuizOptionSeed("HR only, and never mention it to the recruiter", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("levels.fyi: Salary Negotiation Guide", "https://www.levels.fyi/blog/negotiation-guide.html", LinkType.FurtherReading),
+                new ReferenceLinkSeed("HBR: How to Negotiate Your Next Salary", "https://hbr.org/2021/01/how-to-negotiate-your-next-salary", LinkType.FurtherReading),
+            ],
+            prerequisites: [lesson3]);
+
+        var lesson4Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson4.Slug,
+        [
+            "Write out your total-comp breakdown for a past or hypothetical offer, component by component",
+            "Draft a respectful negotiation email using a real or plausible data point",
+            "Identify your walk-away point (BATNA) before your next real negotiation conversation",
+        ]);
+
+        var module = BuildModule(topicId, "interview-readiness-fundamentals", "Interview & Communication Readiness",
+            "Structuring behavioral answers, understanding the interview loop, communicating like a senior engineer, handling workplace conflict, and negotiating job offers.",
+            160, [lesson1, lesson2, lesson3, lesson4]);
+
+        return (module, [lesson1Checklist, lesson2Checklist, lesson3Checklist, lesson4Checklist]);
     }
 
     // ============================== Shared builders ==============================
