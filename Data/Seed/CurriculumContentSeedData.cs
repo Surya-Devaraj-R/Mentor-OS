@@ -20,15 +20,25 @@ public static class CurriculumContentSeedData
         var results = new List<(Module Module, List<ChecklistSeed> Checklists)>
         {
             BuildCSharpModule(topicIdBySlug["csharp"]),
+            BuildCSharpAsyncAndTestingModule(topicIdBySlug["csharp"]),
             BuildDotNetModule(topicIdBySlug["dotnet"]),
+            BuildDotNetProductionReadinessModule(topicIdBySlug["dotnet"]),
             BuildDsaModule(topicIdBySlug["dsa"]),
+            BuildDsaGraphsModule(topicIdBySlug["dsa"]),
             BuildSystemDesignModule(topicIdBySlug["system-design"]),
+            BuildApiGatewayAndCdnModule(topicIdBySlug["system-design"]),
             BuildSqlModule(topicIdBySlug["sql"]),
+            BuildSqlAdvancedModule(topicIdBySlug["sql"]),
             BuildCloudModule(topicIdBySlug["cloud"]),
+            BuildCloudObservabilityModule(topicIdBySlug["cloud"]),
             BuildGitModule(topicIdBySlug["git"]),
+            BuildGitInternalsModule(topicIdBySlug["git"]),
             BuildDevOpsModule(topicIdBySlug["devops"]),
+            BuildDevOpsReliabilityModule(topicIdBySlug["devops"]),
             BuildArchitectureModule(topicIdBySlug["architecture"]),
+            BuildEventDrivenArchitectureModule(topicIdBySlug["architecture"]),
             BuildSoftSkillsModule(topicIdBySlug["soft-skills"]),
+            BuildLeadershipAndCareerGrowthModule(topicIdBySlug["soft-skills"]),
         };
 
         return (
@@ -535,6 +545,295 @@ public static class CurriculumContentSeedData
             205, [lesson1, lesson2, lesson3, lesson4]);
 
         return (module, [lesson1Checklist, lesson2Checklist, lesson3Checklist, lesson4Checklist]);
+    }
+
+    private static (Module, List<ChecklistSeed>) BuildCSharpAsyncAndTestingModule(int topicId)
+    {
+        var lesson1 = BuildLesson(
+            slug: "async-await-task-based-concurrency",
+            title: "Async/Await & Task-Based Concurrency Deep Dive",
+            summary: "Task vs. Task<T>, what async/await actually compiles down to, ConfigureAwait, classic deadlock pitfalls, and cooperative cancellation.",
+            estimatedMinutes: 40,
+            objectives:
+            [
+                "Explain the difference between Task and Task<T>, and what the compiler generates for an `async` method",
+                "Identify why blocking on async code with `.Result` or `.Wait()` can deadlock under a synchronization context",
+                "Use `ConfigureAwait(false)` correctly, and explain why ASP.NET Core code rarely needs it",
+                "Wire a `CancellationToken` through an async call chain so an operation can be cancelled cooperatively",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    A `Task` represents an asynchronous operation that completes with no result; `Task<T>` represents one that completes with a value of type `T`. Both can be awaited, run concurrently, and inspected for completion/failure/cancellation state.
+
+                    `async`/`await` is compiler sugar over a **state machine**: marking a method `async` doesn't run it on a new thread by itself. The compiler rewrites the method into a class implementing `IAsyncStateMachine`, splitting it into pieces at every `await`. For I/O-bound work (HTTP calls, file/database reads), no thread is occupied at all while waiting — the underlying OS/driver signals completion, and a thread-pool thread only picks up the *continuation* after that. `Task.Run(...)` is different: it explicitly queues CPU-bound work onto the thread pool.
+
+                    By default, awaiting a `Task` captures the current `SynchronizationContext` (if one exists, e.g. in WPF/WinForms/classic ASP.NET) so the continuation resumes on the original thread. ASP.NET Core has **no** synchronization context, which is one reason the classic `.Result` deadlock is rare there — but `ConfigureAwait(false)` is still good practice in library code that might run under a context.
+                    """, 1),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    `await` is like placing an order at a restaurant counter and being handed a buzzer instead of standing there waiting — you go sit down (the thread is freed to do other work) and the buzzer (the continuation) goes off when the food's ready.
+
+                    Calling `.Result` or `.Wait()` synchronously is walking back up to the counter and physically blocking it with your body until your order arrives — and if the kitchen needs to hand the food to *you specifically, standing at the counter* to finish the order (the captured synchronization context), but you're the one blocking the counter, nobody can ever complete the handoff. That's the deadlock.
+                    """, 2),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Task basics**
+
+                    - `Task` — async operation, no return value
+                    - `Task<T>` — async operation returning `T`
+                    - `Task.Run(() => ...)` — offload CPU-bound work to the thread pool
+                    - `Task.WhenAll(t1, t2)` — await multiple tasks concurrently, wait for all
+                    - `Task.WhenAny(t1, t2)` — resolves as soon as the first one completes
+
+                    **Awaiting correctly**
+
+                    - `await someTask;` — the safe, non-blocking way to get a result
+                    - `someTask.Result` / `someTask.Wait()` — synchronous blocking, deadlock risk, avoid
+                    - `.ConfigureAwait(false)` — don't resume on the captured context; continue on any thread-pool thread
+
+                    **Cancellation**
+
+                    - `CancellationTokenSource cts = new();`
+                    - `cts.Token` — pass this into async APIs that accept a `CancellationToken`
+                    - `cts.Cancel();` — requests cancellation cooperatively (doesn't force-kill anything)
+                    - `token.ThrowIfCancellationRequested();` — check inside loops in your own async code
+                    """, 3),
+                Block(BlockType.CodeSnippet, "Concurrent Awaits, ConfigureAwait, and Cancellation", BodyFormat.PlainText, """
+                    public async Task<string> GetUserProfileAsync(int userId, CancellationToken cancellationToken)
+                    {
+                        // Start both independent calls before awaiting either one, so they
+                        // run concurrently instead of being serialized for no reason.
+                        Task<User> userTask = _userRepository.GetByIdAsync(userId, cancellationToken);
+                        Task<Preferences> prefsTask = _preferencesRepository.GetForUserAsync(userId, cancellationToken);
+
+                        await Task.WhenAll(userTask, prefsTask);
+
+                        User user = userTask.Result;        // safe here: both tasks are already complete
+                        Preferences prefs = prefsTask.Result;
+
+                        return $"{user.Name} ({prefs.Theme} theme)";
+                    }
+
+                    // Library code (as opposed to ASP.NET Core request-handling code) should
+                    // avoid capturing a caller's synchronization context when it doesn't need it:
+                    public async Task<byte[]> DownloadReportAsync(string url, CancellationToken cancellationToken)
+                    {
+                        using var response = await _httpClient
+                            .GetAsync(url, cancellationToken)
+                            .ConfigureAwait(false);
+
+                        response.EnsureSuccessStatusCode();
+
+                        return await response.Content
+                            .ReadAsByteArrayAsync(cancellationToken)
+                            .ConfigureAwait(false);
+                    }
+                    """, 4, language: "csharp"),
+                Block(BlockType.Diagram, "How .Result Deadlocks Under a Synchronization Context", BodyFormat.StructuredSteps, """
+                    [{"label":"UI/request thread calls DoWorkAsync().Result","note":"blocks that thread synchronously, waiting for completion"},{"label":"Inside DoWorkAsync, an inner await runs","note":"captures the current SynchronizationContext to resume on later"},{"label":"Inner task finishes on a thread-pool thread","note":"tries to post the continuation back onto the captured context"},{"label":"The captured context's thread is still blocked on .Result","note":"the continuation can never run -> permanent deadlock"}]
+                    """, 5),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Go "async all the way": once a call chain starts using `await`, keep it `async Task`/`async Task<T>` up through every caller instead of blocking on it partway up with `.Result`/`.Wait()`.
+
+                    Accept a `CancellationToken` parameter on any async method that does real work, and pass it into every awaited call inside it — don't just accept it and ignore it. Avoid `async void` entirely except for UI event handlers, since exceptions thrown from an `async void` method can't be caught by the caller and will crash the process.
+                    """, 6),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    A very common interview question is some variant of "why does this code hang?" showing a synchronous call to `.Result` or `.Wait()` on a task from a context that has a `SynchronizationContext` (classic ASP.NET, WPF, WinForms). Walk through it out loud: the blocked thread is exactly the thread the awaited continuation needs to resume on. Also be ready to state plainly that `async` does not imply "runs on a new thread" — for I/O-bound work, no thread is dedicated at all while waiting.
+                    """, 7),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Mixing synchronous blocking with asynchronous code — calling `.Result`/`.Wait()` on a `Task` instead of awaiting it — is the single most common way to introduce a deadlock or thread-pool starvation into otherwise-correct async code.
+
+                    A close second: accepting a `CancellationToken` parameter but never actually passing it into the async calls made inside the method, silently making cancellation a no-op.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "Why can calling `task.Result` from a WPF UI thread or classic ASP.NET request thread deadlock?",
+                    "The blocked thread is the exact same thread the awaited continuation needs to resume on (its captured SynchronizationContext). Since that thread is stuck synchronously waiting on .Result, the continuation can never run, and .Result can never return.",
+                    [
+                        new QuizOptionSeed("The Task becomes permanently faulted and never completes", false),
+                        new QuizOptionSeed("The blocked thread is the same thread the continuation needs in order to resume, so neither can proceed", true),
+                        new QuizOptionSeed("A Task can only be awaited once, and .Result counts as a second await", false),
+                        new QuizOptionSeed("The garbage collector cannot reach thread-pool tasks and stalls", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "What does calling `.ConfigureAwait(false)` on an awaited task actually do?",
+                    "It tells the awaiter not to try to resume the continuation on the original captured synchronization/execution context, allowing it to continue on any available thread-pool thread instead. It does not move work to a background thread by itself, nor does it change cancellation or timeout behavior.",
+                    [
+                        new QuizOptionSeed("It forces the awaited method to run on a background thread", false),
+                        new QuizOptionSeed("It skips resuming on the originally captured context, letting the continuation run on any thread-pool thread", true),
+                        new QuizOptionSeed("It cancels the task if it doesn't complete within a default timeout", false),
+                        new QuizOptionSeed("It makes the async method execute synchronously", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Asynchronous programming with async and await", "https://learn.microsoft.com/en-us/dotnet/csharp/asynchronous-programming/", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("Cancellation in managed threads", "https://learn.microsoft.com/en-us/dotnet/standard/threading/cancellation-in-managed-threads", LinkType.OfficialDocs),
+            ]);
+
+        var lesson1Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson1.Slug,
+        [
+            "Rewrite one blocking `.Result`/`.Wait()` call in your own code so it's awaited all the way up the call stack",
+            "Add a `CancellationToken` parameter to one of your own async methods and pass it through to every awaited call inside it",
+            "Explain out loud why `await Task.Delay(1000)` does not block a thread for one second",
+        ]);
+
+        var lesson2 = BuildLesson(
+            slug: "unit-testing-fundamentals-xunit",
+            title: "Unit Testing Fundamentals with xUnit",
+            summary: "Writing testable code, the Arrange-Act-Assert pattern, and isolating dependencies with mocks using xUnit and Moq.",
+            estimatedMinutes: 35,
+            objectives:
+            [
+                "Structure a unit test using the Arrange-Act-Assert pattern",
+                "Explain the difference between a mock and a stub, and when to reach for each",
+                "Write a testable class by depending on interfaces instead of concrete implementations (constructor injection)",
+                "Use `[Theory]`/`[InlineData]` to cover multiple input cases without duplicating near-identical test methods",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    A **unit test** exercises a single unit of behavior — typically one method or one class — in isolation from its real dependencies (databases, HTTP calls, the file system, the clock). In xUnit, a test method marked `[Fact]` runs exactly once; a `[Theory]` with one or more `[InlineData(...)]` attributes runs the same method body once per data row.
+
+                    Good unit tests are commonly summarized by **FIRST**: **F**ast, **I**solated (don't depend on other tests or shared state), **R**epeatable (same result every run, any environment), **S**elf-validating (pass/fail, no manual inspection), **T**imely (written close to the code, not months later).
+
+                    xUnit test methods can themselves be `async Task`, letting you `await` asynchronous code under test directly — no need to block on it with `.Result`/`.Wait()` (see the previous lesson for exactly why that would be a mistake even inside a test).
+                    """, 1),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    A unit test is like bench-testing a single car engine in isolation before it's ever bolted into a chassis — you feed it known inputs (fuel, electrical signal) and check its outputs directly, without needing a full car, a road, or a driver.
+
+                    An integration test, by contrast, is taking the whole assembled car for a test drive — realistic, but it can't tell you *which specific part* failed if something goes wrong.
+                    """, 2),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **xUnit attributes**
+
+                    - `[Fact]` — a test that always runs the same way, no parameters
+                    - `[Theory]` + `[InlineData(...)]` — one test method, many input rows
+                    - `Assert.Equal(expected, actual)` / `Assert.True(condition)` / `Assert.Throws<T>(() => ...)`
+
+                    **Moq basics**
+
+                    - `var mock = new Mock<IThing>();` — create a fake implementation of an interface
+                    - `mock.Setup(m => m.Method(args)).Returns(value);` — stub a return value
+                    - `mock.Object` — the fake instance to inject into the class under test
+                    - `mock.Verify(m => m.Method(args), Times.Once);` — assert a call actually happened
+
+                    **Test doubles, briefly**
+
+                    - **Stub** — supplies canned answers, no verification of how it was called
+                    - **Mock** — a stub that also lets you verify specific interactions occurred
+                    - **Fake** — a lightweight working implementation (e.g. an in-memory repository)
+                    """, 3),
+                Block(BlockType.CodeSnippet, "Testable Design + an xUnit/Moq Test", BodyFormat.PlainText, """
+                    public interface IShippingCostCalculator
+                    {
+                        decimal CalculateCost(decimal orderTotal, string destinationCountry);
+                    }
+
+                    public class OrderService
+                    {
+                        private readonly IShippingCostCalculator _shippingCalculator;
+
+                        public OrderService(IShippingCostCalculator shippingCalculator)
+                        {
+                            _shippingCalculator = shippingCalculator;
+                        }
+
+                        public decimal GetOrderTotalWithShipping(decimal orderTotal, string country)
+                            => orderTotal + _shippingCalculator.CalculateCost(orderTotal, country);
+                    }
+
+                    public class OrderServiceTests
+                    {
+                        [Fact]
+                        public void GetOrderTotalWithShipping_AddsCalculatedShippingCost()
+                        {
+                            // Arrange
+                            var mockCalculator = new Mock<IShippingCostCalculator>();
+                            mockCalculator
+                                .Setup(c => c.CalculateCost(100m, "US"))
+                                .Returns(9.99m);
+                            var sut = new OrderService(mockCalculator.Object);
+
+                            // Act
+                            var total = sut.GetOrderTotalWithShipping(100m, "US");
+
+                            // Assert
+                            Assert.Equal(109.99m, total);
+                            mockCalculator.Verify(c => c.CalculateCost(100m, "US"), Times.Once);
+                        }
+
+                        [Theory]
+                        [InlineData(0, "US", 5.00)]
+                        [InlineData(50, "CA", 12.50)]
+                        public void CalculateCost_ReturnsExpectedShipping(decimal orderTotal, string country, decimal expected)
+                        {
+                            var calculator = new StandardShippingCostCalculator();
+
+                            var cost = calculator.CalculateCost(orderTotal, country);
+
+                            Assert.Equal(expected, cost);
+                        }
+                    }
+                    """, 4, language: "csharp"),
+                Block(BlockType.Diagram, "Arrange, Act, Assert", BodyFormat.StructuredSteps, """
+                    [{"label":"Arrange","note":"build the object under test and its fakes/mocks; set up input data"},{"label":"Act","note":"make the single call to the method or behavior actually being tested"},{"label":"Assert","note":"verify the outcome: a return value, a thrown exception, or a recorded mock interaction"}]
+                    """, 5),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Name tests so a failure tells you what broke without opening the test body: `MethodName_Scenario_ExpectedResult` (e.g. `GetOrderTotalWithShipping_AddsCalculatedShippingCost`). Keep each test independent — no test should rely on another test having run first or on shared mutable state.
+
+                    Test observable behavior through a class's public API, not its private implementation details — that keeps tests from breaking every time you refactor internals without changing behavior.
+                    """, 6),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    "How would you unit test this class?" is a near-universal interview question once a class has any dependency. The expected answer is: extract the dependency behind an interface, inject it through the constructor, and substitute a mock/stub in the test. Be ready to explain, precisely, the difference between a mock (verifies interactions) and a stub (just supplies data) — interviewers often ask this as a quick follow-up.
+                    """, 7),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Testing private implementation details (e.g. via reflection, or by exposing internals just for the test) instead of the class's public, observable behavior — this makes tests brittle and breaks them on harmless refactors.
+
+                    Also common: letting tests share mutable static state or run order dependencies, so tests pass individually but fail when run together or in a different order; and over-mocking simple, side-effect-free value objects that don't need a test double at all.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "In the Arrange-Act-Assert pattern, what should the 'Act' section of a test contain?",
+                    "'Act' should be exactly one call to the method or behavior actually under test — setup belongs in 'Arrange' and verification belongs in 'Assert'. Keeping 'Act' to a single call makes it obvious what a failing test is actually exercising.",
+                    [
+                        new QuizOptionSeed("All of the test's assertions checking the outcome", false),
+                        new QuizOptionSeed("Exactly one call to the method or behavior being tested", true),
+                        new QuizOptionSeed("The setup of mock objects and test input data", false),
+                        new QuizOptionSeed("Disposal/cleanup of any resources the test used", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "What is the key difference between a mock and a stub in unit-testing terminology?",
+                    "A mock is a test double you can verify interactions on (e.g. 'was this method called with these arguments, exactly once?'), while a stub simply returns canned data and is never checked for how or whether it was called.",
+                    [
+                        new QuizOptionSeed("Stubs are only valid in integration tests, mocks only in unit tests", false),
+                        new QuizOptionSeed("A mock lets you verify specific interactions occurred; a stub just supplies canned data with no verification", true),
+                        new QuizOptionSeed("There is no real difference; the two terms are fully interchangeable", false),
+                        new QuizOptionSeed("A mock can only be created with Moq, a stub only with NSubstitute", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Unit testing C# with xUnit and .NET Core", "https://learn.microsoft.com/en-us/dotnet/core/testing/unit-testing-with-dotnet-test", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("Moq Quickstart", "https://github.com/devlooped/moq/wiki/Quickstart", LinkType.FurtherReading),
+            ],
+            prerequisites: [lesson1]);
+
+        var lesson2Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson2.Slug,
+        [
+            "Write one xUnit [Fact] test for a method in your own code following Arrange-Act-Assert",
+            "Refactor one class to depend on an interface instead of a concrete type so it can be unit tested with a mock",
+            "Convert two near-duplicate test methods into a single [Theory] with [InlineData] cases",
+        ]);
+
+        var module = BuildModule(topicId, "csharp-async-and-testing", "Async Programming & Unit Testing",
+            "Task-based asynchronous programming and the testing discipline needed to write and verify reliable, concurrent C# code.",
+            75, [lesson1, lesson2], sortOrder: 2);
+
+        return (module, [lesson1Checklist, lesson2Checklist]);
     }
 
     // ============================== .NET ==============================
@@ -1046,6 +1345,331 @@ public static class CurriculumContentSeedData
             200, [lesson1, lesson2, lesson3, lesson4], capstone);
 
         return (module, [lesson1Checklist, lesson2Checklist, lesson3Checklist, lesson4Checklist, capstoneChecklist]);
+    }
+
+    private static (Module, List<ChecklistSeed>) BuildDotNetProductionReadinessModule(int topicId)
+    {
+        var lesson1 = BuildLesson(
+            slug: "jwt-authentication-and-authorization",
+            title: "Authentication & Authorization in ASP.NET Core",
+            summary: "Issuing and validating JWT bearer tokens, protecting endpoints with [Authorize], and enforcing fine-grained access with role- and policy-based authorization.",
+            estimatedMinutes: 45,
+            objectives:
+            [
+                "Explain the difference between authentication and authorization and where each fits in the request pipeline",
+                "Configure JWT bearer authentication and validate tokens with the correct TokenValidationParameters",
+                "Protect minimal API endpoints with [Authorize]/RequireAuthorization using roles and custom policies",
+                "Explain why refresh tokens exist and how they reduce the blast radius of a stolen access token",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    **Authentication** answers "who are you?" — it establishes an identity (a `ClaimsPrincipal`) from credentials or a token. **Authorization** answers "are you allowed to do this?" — it runs *after* authentication and checks that established identity against rules (roles, policies, claims). ASP.NET Core keeps these as two distinct middleware components on purpose, and `app.UseAuthentication()` must be registered before `app.UseAuthorization()` in `Program.cs` — authorization has nothing to check against until authentication has populated `HttpContext.User`.
+
+                    A **JWT (JSON Web Token)** is a compact, URL-safe string with three base64url-encoded parts separated by dots: `header.payload.signature`. The header names the signing algorithm, the payload holds **claims** (name, role, expiry, custom data), and the signature is a cryptographic hash of the first two parts using a secret (or private key) — it proves the token wasn't tampered with, but it does **not** encrypt the payload. Anyone can base64-decode a JWT and read its claims; never put secrets in the payload.
+
+                    You wire JWT bearer authentication up with `builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer(options => { ... })`, configuring `TokenValidationParameters` to check the signing key, issuer, audience, and expiry on every incoming request. Once validated, the middleware builds a `ClaimsPrincipal` from the token's claims and attaches it to `HttpContext.User` for the rest of the pipeline — including your `[Authorize]` checks — to use.
+                    """, 1),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    A JWT is like a wristband at a concert venue: the box office (your login endpoint) checks your ticket once at the door, then stamps a tamper-evident wristband with your seating tier printed on it. Every checkpoint inside the venue (your API endpoints) just glances at the wristband — they don't call the box office again to re-verify you. But the wristband is visible to anyone standing next to you (unencrypted payload), and it expires at the end of the night (token expiry) so it can't be reused tomorrow.
+
+                    A refresh token is the re-entry stub the box office keeps on file: when your wristband expires, you don't need to buy a new ticket (re-enter your password) — you show the stub, they check it's still valid and not reported lost, and hand you a fresh wristband.
+                    """, 2),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Registering JWT bearer auth**
+
+                    - `builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer(options => { options.TokenValidationParameters = ...; })`
+                    - `builder.Services.AddAuthorization(options => options.AddPolicy("Name", policy => policy.RequireRole(...) / RequireClaim(...)));`
+                    - Pipeline order: `app.UseAuthentication(); app.UseAuthorization();` — authentication first, always
+
+                    **Protecting endpoints**
+
+                    - `[Authorize]` on a controller/action — any authenticated user
+                    - `[Authorize(Roles = "Admin,Manager")]` — any one of the listed roles
+                    - `[Authorize(Policy = "SeniorEngineerOnly")]` — a named policy
+                    - Minimal APIs: `app.MapGet(...).RequireAuthorization()` or `.RequireAuthorization(policy => policy.RequireRole("Admin"))`
+                    - `[AllowAnonymous]` — explicitly opt an endpoint out of a controller-wide `[Authorize]`
+                    """, 3),
+                Block(BlockType.CodeSnippet, "Configuring JWT Bearer Auth and Issuing Tokens", BodyFormat.PlainText, """
+                    // Program.cs
+                    builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+                        .AddJwtBearer(options =>
+                        {
+                            options.TokenValidationParameters = new TokenValidationParameters
+                            {
+                                ValidateIssuer = true,
+                                ValidateAudience = true,
+                                ValidateLifetime = true,
+                                ValidateIssuerSigningKey = true,
+                                ValidIssuer = builder.Configuration["Jwt:Issuer"],
+                                ValidAudience = builder.Configuration["Jwt:Audience"],
+                                IssuerSigningKey = new SymmetricSecurityKey(
+                                    Encoding.UTF8.GetBytes(builder.Configuration["Jwt:SigningKey"]!)),
+                                ClockSkew = TimeSpan.Zero, // don't grant a free 5-minute grace window
+                            };
+                        });
+
+                    builder.Services.AddAuthorization(options =>
+                    {
+                        options.AddPolicy("SeniorEngineerOnly", policy =>
+                            policy.RequireClaim("level", "senior", "staff", "principal"));
+                    });
+
+                    var app = builder.Build();
+                    app.UseAuthentication();
+                    app.UseAuthorization();
+
+                    app.MapGet("/api/admin/reports", () => Results.Ok("secret reports"))
+                        .RequireAuthorization(policy => policy.RequireRole("Admin"));
+
+                    // Issuing an access token after validating credentials
+                    public class TokenService(IConfiguration config)
+                    {
+                        public string CreateAccessToken(AppUser user)
+                        {
+                            var claims = new List<Claim>
+                            {
+                                new(ClaimTypes.NameIdentifier, user.Id.ToString()),
+                                new(ClaimTypes.Name, user.Email),
+                                new(ClaimTypes.Role, user.Role),
+                            };
+
+                            var key = new SymmetricSecurityKey(
+                                Encoding.UTF8.GetBytes(config["Jwt:SigningKey"]!));
+                            var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
+
+                            var token = new JwtSecurityToken(
+                                issuer: config["Jwt:Issuer"],
+                                audience: config["Jwt:Audience"],
+                                claims: claims,
+                                expires: DateTime.UtcNow.AddMinutes(15), // short-lived on purpose
+                                signingCredentials: creds);
+
+                            return new JwtSecurityTokenHandler().WriteToken(token);
+                        }
+
+                        public string CreateRefreshToken() =>
+                            Convert.ToBase64String(RandomNumberGenerator.GetBytes(64)); // opaque, stored + checked server-side
+                    }
+                    """, 4, language: "csharp"),
+                Block(BlockType.Diagram, "Token Issuance and Validation Flow", BodyFormat.StructuredSteps, """
+                    [{"label":"Client POSTs credentials to /login"},{"label":"Server validates credentials against the user store"},{"label":"Server issues a short-lived access token + an opaque refresh token","note":"e.g. 15 min access, 14 day refresh"},{"label":"Client calls APIs with Authorization: Bearer <access token>"},{"label":"JWT bearer middleware validates signature, issuer, audience, expiry"},{"label":"Claims populate HttpContext.User"},{"label":"Authorization middleware checks [Authorize]/role/policy requirements"},{"label":"Access token expires -> client POSTs refresh token to /refresh for a new access token","note":"no re-login needed"}]
+                    """, 5),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Keep access tokens **short-lived** (minutes, not days) so a leaked token has a small window of usefulness, and pair them with a longer-lived, server-tracked refresh token that can be revoked (e.g., on logout or a detected breach) independently of waiting for the access token to expire naturally.
+
+                    Always set `ValidateIssuer`, `ValidateAudience`, `ValidateLifetime`, and `ValidateIssuerSigningKey` to `true` in `TokenValidationParameters` — skipping any of them (a common shortcut in tutorials) reopens the exact attacks JWT validation exists to close, such as accepting a token minted for a completely different application. Store refresh tokens in an `HttpOnly`, `Secure` cookie rather than browser `localStorage`, since `localStorage` is readable by any JavaScript running on the page — including an XSS payload.
+                    """, 6),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    If asked "walk me through what happens when a request comes in with a bearer token," narrate the pipeline in order: authentication middleware extracts and validates the token (signature, issuer, audience, expiry) and builds a `ClaimsPrincipal`; that principal is attached to `HttpContext.User`; authorization middleware then evaluates whatever `[Authorize]`/role/policy requirement is on the matched endpoint against those claims. Interviewers are listening for whether you know authentication and authorization are two separate steps, not one.
+
+                    Also be ready to explain *why* refresh tokens exist rather than just what they are: they let you keep access tokens short-lived (limiting damage from theft) without forcing the user to re-enter credentials every few minutes — the refresh token is the thing you can actually revoke server-side.
+                    """, 7),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Forgetting `app.UseAuthentication()` entirely, or placing it after `app.UseAuthorization()` — every request then gets treated as anonymous, and `[Authorize]` attributes either reject everyone or (worse, if misconfigured) are silently skipped.
+
+                    Also common: treating a JWT's payload as confidential (it's only base64-encoded, not encrypted — never put a password, SSN, or internal-only data in a claim), and issuing access tokens with no expiry or absurdly long expiry "for convenience," which turns a single leaked token into a standing, unrevocable backdoor.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "Why must app.UseAuthentication() be called before app.UseAuthorization() in Program.cs?",
+                    "Authorization middleware decides access by inspecting the ClaimsPrincipal on HttpContext.User — but that principal is only populated by authentication middleware. If authorization runs first, there's no identity yet to check any [Authorize]/role/policy rule against.",
+                    [
+                        new QuizOptionSeed("It isn't required — ASP.NET Core reorders them automatically at startup", false),
+                        new QuizOptionSeed("Authorization checks depend on the ClaimsPrincipal that authentication attaches to HttpContext.User", true),
+                        new QuizOptionSeed("UseAuthorization() throws an exception if called first", false),
+                        new QuizOptionSeed("It only matters for MVC controllers, not minimal APIs", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "What problem do refresh tokens solve that access tokens alone don't?",
+                    "They let a client obtain a new short-lived access token without re-entering credentials, so access tokens can stay short-lived (limiting the damage if one is stolen) while the user's session still feels continuous and long-lived.",
+                    [
+                        new QuizOptionSeed("They let clients get a new access token without re-authenticating, so access tokens can safely stay short-lived", true),
+                        new QuizOptionSeed("They encrypt the JWT payload so claims can't be read by the client", false),
+                        new QuizOptionSeed("They replace the need for HTTPS on the login endpoint", false),
+                        new QuizOptionSeed("They allow one access token to work across unlimited different APIs forever", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Overview of ASP.NET Core Authentication", "https://learn.microsoft.com/en-us/aspnet/core/security/authentication/?view=aspnetcore-8.0", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("Policy-based authorization in ASP.NET Core", "https://learn.microsoft.com/en-us/aspnet/core/security/authorization/policies", LinkType.OfficialDocs),
+            ]);
+
+        var lesson1Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson1.Slug,
+        [
+            "Add [Authorize(Roles = \"Admin\")] (or RequireAuthorization on a minimal API) to one endpoint and verify a non-admin token gets a 403",
+            "Write out the exact TokenValidationParameters you'd set for a production API, including issuer/audience/lifetime validation, from memory",
+            "Explain out loud, in one paragraph, why access tokens should be short-lived while refresh tokens are longer-lived and revocable",
+        ]);
+
+        var lesson2 = BuildLesson(
+            slug: "testing-aspnet-core-applications",
+            title: "Testing ASP.NET Core Applications",
+            summary: "Unit testing services with mocked dependencies, and spinning up an in-memory server with WebApplicationFactory to integration-test minimal API endpoints end to end.",
+            estimatedMinutes: 45,
+            objectives:
+            [
+                "Distinguish unit tests (mocked dependencies, isolated logic) from integration tests (real pipeline, real HTTP) and know when to reach for each",
+                "Mock a dependency with Moq and verify a service's behavior in isolation using xUnit",
+                "Use WebApplicationFactory<Program> to boot an in-memory test server and call minimal API endpoints with a real HttpClient",
+                "Override a DI registration in a test fixture to swap a real dependency (like a DbContext) for a test double",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    A **unit test** exercises one piece of logic in isolation — typically a single method on a service class — with every collaborator replaced by a **mock** or **stub** so a failure can only mean the unit under test is wrong, not some dependency three layers away. **xUnit** is the most common .NET test framework: `[Fact]` marks a single test method, `[Theory]` plus `[InlineData(...)]` runs the same test body against multiple inputs. **Moq** creates fake implementations of interfaces at runtime: `new Mock<IThing>()`, `.Setup(x => x.Method(...)).Returns(...)` to script behavior, and `.Verify(x => x.Method(...), Times.Once)` to assert a call actually happened.
+
+                    An **integration test** instead boots the real application — real DI container, real middleware pipeline, real routing — and sends real HTTP requests against it in memory. `WebApplicationFactory<TEntryPoint>` (from the `Microsoft.AspNetCore.Mvc.Testing` package) does exactly this: it hosts your app on an in-memory `TestServer` and hands you an `HttpClient` wired straight to it, no real network socket involved. Because a minimal-API `Program.cs` written with top-level statements compiles to an `internal` `Program` class by default, you typically add one line — `public partial class Program { }` — at the bottom of `Program.cs` so `WebApplicationFactory<Program>` has a public type it's allowed to reference.
+
+                    You'll usually still want to replace a few real dependencies even in an integration test — most commonly the database — via `factory.WithWebHostBuilder(builder => builder.ConfigureServices(services => { ... }))`, removing the real `DbContext` registration and adding an in-memory or test-only one instead.
+                    """, 1),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    A unit test is like testing one gear on a workbench, spun by hand — you can tell instantly whether that one gear's teeth are cut correctly, with nothing else in the system able to confuse the result. An integration test is like running the fully assembled engine on a test stand: you're no longer isolating one part, you're confirming the gears, belts, and pistons all actually work together the way the blueprint says they should — closer to reality, but slower to run and harder to pinpoint exactly which part failed when something breaks.
+                    """, 2),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **xUnit basics**
+
+                    - `[Fact]` — a single test case; `[Theory]` + `[InlineData(...)]` — data-driven test cases
+                    - `Assert.Equal(expected, actual)`, `Assert.True(...)`, `Assert.ThrowsAsync<TException>(func)`
+                    - Constructor = setup that runs before every test in the class; `IDisposable.Dispose()` = teardown
+
+                    **Moq basics**
+
+                    - `var mock = new Mock<IInventoryClient>();`
+                    - `mock.Setup(x => x.GetQuantityAsync("SKU-1")).ReturnsAsync(0);`
+                    - `mock.Verify(x => x.GetQuantityAsync("SKU-1"), Times.Once);`
+                    - Pass `mock.Object` wherever the real interface implementation would go
+
+                    **WebApplicationFactory**
+
+                    - `public class MyTests : IClassFixture<WebApplicationFactory<Program>>`
+                    - `factory.CreateClient()` — real `HttpClient` wired to the in-memory `TestServer`
+                    - `factory.WithWebHostBuilder(b => b.ConfigureServices(services => { ... }))` — swap a real service for a test double
+                    """, 3),
+                Block(BlockType.CodeSnippet, "Unit Test (Moq) vs. Integration Test (WebApplicationFactory)", BodyFormat.PlainText, """
+                    // Unit test: OrderService in isolation, IInventoryClient mocked
+                    public class OrderServiceTests
+                    {
+                        [Fact]
+                        public async Task PlaceOrder_ThrowsWhenInventoryInsufficient()
+                        {
+                            // Arrange
+                            var inventoryMock = new Mock<IInventoryClient>();
+                            inventoryMock
+                                .Setup(x => x.GetAvailableQuantityAsync("SKU-1"))
+                                .ReturnsAsync(0);
+                            var sut = new OrderService(inventoryMock.Object);
+
+                            // Act
+                            var act = () => sut.PlaceOrderAsync("SKU-1", quantity: 5);
+
+                            // Assert
+                            await Assert.ThrowsAsync<InsufficientInventoryException>(act);
+                            inventoryMock.Verify(x => x.GetAvailableQuantityAsync("SKU-1"), Times.Once);
+                        }
+                    }
+
+                    // Integration test: real pipeline, in-memory database swapped in
+                    public class TasksEndpointsTests : IClassFixture<WebApplicationFactory<Program>>
+                    {
+                        private readonly HttpClient _client;
+
+                        public TasksEndpointsTests(WebApplicationFactory<Program> factory)
+                        {
+                            var customizedFactory = factory.WithWebHostBuilder(builder =>
+                            {
+                                builder.ConfigureServices(services =>
+                                {
+                                    var descriptor = services.Single(
+                                        d => d.ServiceType == typeof(DbContextOptions<AppDbContext>));
+                                    services.Remove(descriptor);
+
+                                    services.AddDbContext<AppDbContext>(options =>
+                                        options.UseInMemoryDatabase("TestsDb"));
+                                });
+                            });
+
+                            _client = customizedFactory.CreateClient();
+                        }
+
+                        [Fact]
+                        public async Task PostTask_ReturnsCreatedWithLocationHeader()
+                        {
+                            var response = await _client.PostAsJsonAsync("/api/tasks",
+                                new { Title = "Write integration tests" });
+
+                            Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+                            Assert.NotNull(response.Headers.Location);
+                        }
+                    }
+                    """, 4, language: "csharp"),
+                Block(BlockType.Diagram, "The Test Pyramid", BodyFormat.AsciiArt, """
+                                /\\
+                               /E2E\\           few, slow, expensive -- real browser, real deploy
+                              /------\\
+                             / Integ. \\        some -- WebApplicationFactory, real pipeline, real HTTP
+                            /----------\\
+                           /    Unit     \\     many, fast, cheap -- isolated logic, Moq for dependencies
+                          /--------------\\
+
+                    Speed and isolation decrease going up; realism and confidence increase going up.
+                    """, 5),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Keep unit tests fast and deterministic: no real database, no real network call, no `Thread.Sleep`. Every collaborator that talks to the outside world should be an interface you can mock. Structure each test as **Arrange / Act / Assert**, and aim for one meaningful assertion focus per test so a failure tells you exactly what broke.
+
+                    For integration tests, use `WebApplicationFactory<Program>.WithWebHostBuilder(...)` to replace only what genuinely needs replacing — usually the database and any external HTTP clients (payment providers, email senders) — while leaving your own middleware, routing, and DI wiring untouched, since testing that wiring is the entire point of an integration test.
+                    """, 6),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    If asked "how would you test this minimal API endpoint," give a two-tier answer: unit-test the service/business logic it calls into (mock its dependencies with Moq, assert behavior and edge cases fast and in isolation), then add a small number of integration tests via `WebApplicationFactory` that hit the actual route to confirm routing, model binding, DI wiring, and status codes are all correct end to end. Naming both tiers — and explaining *why* you wouldn't rely on only one — signals you understand the test pyramid, not just the tools.
+                    """, 7),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Writing a "unit test" that actually hits a real database or a real third-party API — it's slow, flaky under network conditions, and no longer isolates the one thing you meant to test. If a test needs a real database, it's an integration test; name and treat it as one.
+
+                    Also common: using `WebApplicationFactory` but forgetting to replace external dependencies (real payment gateways, real email senders) in `ConfigureServices`, which can cause a test run to actually send emails or hit third-party rate limits — and asserting on internal implementation details (e.g., a private field) instead of observable behavior (status code, response body, headers), which makes tests brittle to harmless refactors.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "What's the key difference between a unit test and an integration test for a minimal API endpoint?",
+                    "A unit test calls the service/handler logic directly with mocked dependencies (Moq), verifying one piece of logic in isolation. An integration test uses WebApplicationFactory to boot the real app — real DI, routing, and middleware — and sends an actual HTTP request through the full pipeline.",
+                    [
+                        new QuizOptionSeed("There is no real difference — both call the endpoint's C# method directly", false),
+                        new QuizOptionSeed("A unit test mocks dependencies and tests logic in isolation; an integration test boots the real pipeline and sends real HTTP requests", true),
+                        new QuizOptionSeed("Integration tests never use xUnit, only unit tests do", false),
+                        new QuizOptionSeed("Unit tests require a running database; integration tests never touch a database", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "Why does WebApplicationFactory<Program> typically require adding `public partial class Program { }` at the bottom of Program.cs?",
+                    "Program.cs written with top-level statements compiles to an internal Program class by default. WebApplicationFactory<TEntryPoint> needs a publicly accessible entry-point type to bootstrap the app in a test project, so the partial class declaration exposes one without changing any runtime behavior.",
+                    [
+                        new QuizOptionSeed("Top-level statements compile to an internal Program class, and WebApplicationFactory needs a public type reference to bootstrap the app in tests", true),
+                        new QuizOptionSeed("It's required so xUnit can discover [Fact] methods in Program.cs", false),
+                        new QuizOptionSeed("It enables Moq to mock the Program class directly", false),
+                        new QuizOptionSeed("It's only needed when using controllers, not minimal APIs", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Integration tests in ASP.NET Core", "https://learn.microsoft.com/en-us/aspnet/core/test/integration-tests", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("Moq — mocking library documentation", "https://github.com/devlooped/moq", LinkType.FurtherReading),
+            ]);
+
+        var lesson2Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson2.Slug,
+        [
+            "Write one unit test for a service method, using Moq to fake its one dependency",
+            "Spin up WebApplicationFactory<Program> and call one real endpoint end to end against an in-memory test database",
+            "Find one test in your own suite that's secretly an integration test disguised as a unit test (hits a real DB/network) and fix or relabel it",
+        ]);
+
+        var module = BuildModule(topicId, "aspnet-core-production-readiness", "Production Readiness: Security & Testing",
+            "Securing APIs with JWT bearer authentication and role/policy-based authorization, then verifying behavior with fast unit tests and real-pipeline integration tests via WebApplicationFactory.",
+            90, [lesson1, lesson2], sortOrder: 2);
+
+        return (module, [lesson1Checklist, lesson2Checklist]);
     }
 
     // ============================== DSA ==============================
@@ -1579,6 +2203,432 @@ public static class CurriculumContentSeedData
         return (module, [lesson1Checklist, lesson2Checklist, lesson3Checklist, lesson4Checklist]);
     }
 
+    private static (Module, List<ChecklistSeed>) BuildDsaGraphsModule(int topicId)
+    {
+        var lesson1 = BuildLesson(
+            slug: "graph-traversal-topological-sort",
+            title: "Graph Traversal & Topological Sort",
+            summary: "Adjacency-list representation, BFS/DFS on graphs, cycle detection, and topological sort via Kahn's algorithm.",
+            estimatedMinutes: 45,
+            objectives:
+            [
+                "Represent a graph as an adjacency list in C# and explain why it beats an adjacency matrix for sparse graphs",
+                "Implement BFS and DFS traversal on a graph, tracking visited nodes to avoid infinite loops on cycles",
+                "Detect a cycle in a directed graph using the recursion-stack technique, not just a visited set",
+                "Produce a valid topological order using Kahn's algorithm and explain what a leftover, unordered node means",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    A **graph** is a set of nodes (vertices) connected by edges, which may be **directed** (a one-way relationship, like "course A must come before course B") or **undirected** (a two-way relationship, like "these two people are friends"), and **weighted** or **unweighted**.
+
+                    Two common representations:
+
+                    - **Adjacency matrix** — an `n x n` grid where `matrix[i][j]` is true/weighted if an edge exists. `O(1)` edge lookup, but `O(n^2)` space even for a sparse graph.
+                    - **Adjacency list** — a map from each node to the list of its neighbors. `O(V + E)` space, which is far smaller than `O(V^2)` for sparse graphs (most interview graphs are sparse), at the cost of `O(degree)` edge lookup instead of `O(1)`.
+
+                    Both BFS and DFS visit every node and every edge once, so both run in `O(V + E)` time on an adjacency list. The difference is *order*: BFS explores level by level using a queue (nearest nodes first — the right tool for shortest path in an unweighted graph); DFS explores as deep as possible before backtracking, using recursion or an explicit stack.
+
+                    A **topological sort** is a linear ordering of a directed graph's nodes such that every edge `u -> v` has `u` appearing before `v` — it only exists if the graph is a **DAG** (directed, acyclic graph). If the graph has a cycle, no valid ordering exists.
+                    """, 1),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    A directed graph of course prerequisites is the clearest mental model for topological sort: "Intro to CS" must come before "Data Structures," which must come before "Algorithms." A topological sort is just a valid semester-by-semester course plan that never schedules a class before its prerequisite — and if the prerequisites contain a cycle (A requires B, B requires A), no valid plan can ever exist, which is exactly why cycle detection and topological sort are two sides of the same coin.
+
+                    BFS is like a phone tree — you call your direct contacts first, then they call their direct contacts, spreading out one ring at a time, which is why it finds the *nearest* person first. DFS is like fully exploring one hallway of a building to its end before backtracking to try the next hallway.
+                    """, 2),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Complexity (adjacency list, V vertices, E edges)**
+
+                    - Build adjacency list from an edge list: `O(V + E)`
+                    - BFS / DFS traversal: `O(V + E)` time, `O(V)` space (visited set + queue/recursion stack)
+                    - Kahn's algorithm (topological sort): `O(V + E)` time, `O(V)` space
+
+                    **Cycle detection in a DIRECTED graph**
+
+                    - A plain "visited" set is NOT enough — reaching an already-visited node from a *different, finished* branch is fine (not a cycle)
+                    - You need a second set: nodes currently on the **recursion stack** (in progress). Reaching one of *those* is a back-edge — a real cycle.
+
+                    **Kahn's algorithm (BFS on in-degrees)**
+
+                    1. Compute in-degree (number of incoming edges) for every node
+                    2. Enqueue all nodes with in-degree 0 (no unmet prerequisites)
+                    3. Dequeue a node, add it to the order, decrement its neighbors' in-degrees
+                    4. Any neighbor whose in-degree just hit 0 gets enqueued
+                    5. If the final order has fewer nodes than the graph, the rest form a cycle
+                    """, 3),
+                Block(BlockType.CodeSnippet, "Adjacency List, BFS, DFS, Cycle Detection, and Kahn's Algorithm", BodyFormat.PlainText, """
+                    // Adjacency list representation: node -> list of neighbors it points to.
+                    public class Graph
+                    {
+                        private readonly Dictionary<int, List<int>> _adjacency = new();
+
+                        public void AddEdge(int from, int to)
+                        {
+                            if (!_adjacency.ContainsKey(from)) _adjacency[from] = new List<int>();
+                            if (!_adjacency.ContainsKey(to)) _adjacency[to] = new List<int>();
+                            _adjacency[from].Add(to); // directed edge: from -> to
+                        }
+
+                        public IReadOnlyList<int> Neighbors(int node) =>
+                            _adjacency.TryGetValue(node, out var list) ? list : new List<int>();
+
+                        public IEnumerable<int> Nodes => _adjacency.Keys;
+                    }
+
+                    // BFS: explores level by level using a queue. O(V + E).
+                    public List<int> Bfs(Graph graph, int start)
+                    {
+                        var visited = new HashSet<int> { start };
+                        var order = new List<int>();
+                        var queue = new Queue<int>();
+                        queue.Enqueue(start);
+
+                        while (queue.Count > 0)
+                        {
+                            var node = queue.Dequeue();
+                            order.Add(node);
+
+                            foreach (var neighbor in graph.Neighbors(node))
+                            {
+                                if (visited.Add(neighbor)) // Add returns false if already present
+                                {
+                                    queue.Enqueue(neighbor);
+                                }
+                            }
+                        }
+
+                        return order;
+                    }
+
+                    // DFS (recursive): explores as deep as possible before backtracking.
+                    public void Dfs(Graph graph, int node, HashSet<int> visited, List<int> order)
+                    {
+                        if (!visited.Add(node)) return; // already visited -> stop (avoids infinite loops on cycles)
+
+                        order.Add(node);
+                        foreach (var neighbor in graph.Neighbors(node))
+                        {
+                            Dfs(graph, neighbor, visited, order);
+                        }
+                    }
+
+                    // Cycle detection in a DIRECTED graph: track nodes on the CURRENT
+                    // recursion stack, not just visited-ever. A back-edge to a node
+                    // still on the stack means a cycle.
+                    public bool HasCycle(Graph graph)
+                    {
+                        var visited = new HashSet<int>();
+                        var onStack = new HashSet<int>();
+
+                        bool Visit(int node)
+                        {
+                            if (onStack.Contains(node)) return true;  // back-edge -> cycle found
+                            if (visited.Contains(node)) return false; // already fully explored, no cycle here
+
+                            visited.Add(node);
+                            onStack.Add(node);
+
+                            foreach (var neighbor in graph.Neighbors(node))
+                            {
+                                if (Visit(neighbor)) return true;
+                            }
+
+                            onStack.Remove(node); // done exploring this node's branch
+                            return false;
+                        }
+
+                        return graph.Nodes.Any(Visit);
+                    }
+
+                    // Topological sort via Kahn's algorithm (BFS on in-degrees).
+                    public List<int> TopologicalSort(Graph graph)
+                    {
+                        var inDegree = graph.Nodes.ToDictionary(n => n, _ => 0);
+                        foreach (var node in graph.Nodes)
+                        {
+                            foreach (var neighbor in graph.Neighbors(node))
+                            {
+                                inDegree[neighbor] = inDegree.GetValueOrDefault(neighbor) + 1;
+                            }
+                        }
+
+                        var queue = new Queue<int>(inDegree.Where(kv => kv.Value == 0).Select(kv => kv.Key));
+                        var order = new List<int>();
+
+                        while (queue.Count > 0)
+                        {
+                            var node = queue.Dequeue();
+                            order.Add(node);
+
+                            foreach (var neighbor in graph.Neighbors(node))
+                            {
+                                inDegree[neighbor]--;
+                                if (inDegree[neighbor] == 0) queue.Enqueue(neighbor);
+                            }
+                        }
+
+                        if (order.Count != inDegree.Count)
+                        {
+                            throw new InvalidOperationException("Graph has a cycle -- no valid topological order exists.");
+                        }
+
+                        return order;
+                    }
+                    """, 4, language: "csharp"),
+                Block(BlockType.Diagram, "Tracing Kahn's Algorithm on a Prerequisite DAG", BodyFormat.AsciiArt, """
+                    Course prerequisite graph (edge = "must take before"):
+
+                      101 --> 201 --> 301
+                       \\            /
+                        ----> 202 --
+
+                    In-degrees:  101:0   201:1   202:1   301:2
+
+                    Queue: [101]                          Order: []
+                      dequeue 101 -> order:[101]
+                      neighbors 201,202: in-degree--  ->  201:0, 202:0
+                      enqueue 201, 202                    Queue: [201, 202]
+
+                      dequeue 201 -> order:[101,201]
+                      neighbor 301: in-degree-- -> 301:1   Queue: [202]
+
+                      dequeue 202 -> order:[101,201,202]
+                      neighbor 301: in-degree-- -> 301:0
+                      enqueue 301                          Queue: [301]
+
+                      dequeue 301 -> order:[101,201,202,301]
+                                                            Queue: []
+
+                    Topological order: 101, 201, 202, 301
+                    (order.Count == 4 == total nodes -> no cycle)
+                    """, 5),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    For directed-graph cycle detection, always maintain two sets: `visited` (ever explored) and `onStack` (on the *current* path). Checking `visited` alone gives false positives — two independent branches can legitimately point to the same already-finished node without forming a cycle.
+
+                    Prefer an adjacency list over a matrix by default in interviews unless the graph is dense or you need `O(1)` "is there an edge between u and v" lookups — most real-world and interview graphs are sparse, and the space savings are usually the whole point of bringing it up.
+                    """, 6),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    When a problem mentions "prerequisites," "dependencies," "build order," or "course schedule," say the words "topological sort" out loud immediately — it's one of the most recognizable interview signals, and naming it early shows pattern recognition before you've written a line of code. Then explicitly check: "is this a DAG, or do I need to detect a cycle first?"
+                    """, 7),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Using a single `visited` set to detect cycles in a *directed* graph — this only works for undirected graphs. In a directed graph, revisiting a finished node from another branch is normal and not a cycle; only revisiting a node still on the active recursion stack is.
+
+                    Also common: forgetting that Kahn's algorithm's final `order.Count` must equal the total node count — silently returning a partial order without checking for leftover nodes hides the fact that a cycle exists.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "You run DFS on a DIRECTED graph and mark nodes 'visited' the moment you first reach them, never removing them. Why is a visited-only set NOT enough to detect a cycle?",
+                    "Visited-only tracking can't distinguish a cross-edge to an already-finished node (fine, not a cycle) from a back-edge to a node still on the current recursion stack (a real cycle). You need a second set -- nodes currently 'in progress' on the active path -- to tell the two apart.",
+                    [
+                        new QuizOptionSeed("Visited-only tracking can't distinguish a finished cross-edge from a back-edge to a node still on the current recursion stack", true),
+                        new QuizOptionSeed("DFS cannot be run on directed graphs at all", false),
+                        new QuizOptionSeed("Directed graphs never contain cycles by definition", false),
+                        new QuizOptionSeed("Cycle detection requires BFS instead of DFS", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "After running Kahn's algorithm, the resulting topological order contains fewer nodes than the graph has in total. What does that indicate?",
+                    "A node only ever enters the queue once its in-degree reaches 0. Nodes stuck in a cycle can never reach in-degree 0 (each depends on another in the cycle), so they're permanently excluded from the order -- a shortfall means the leftover nodes form a cycle.",
+                    [
+                        new QuizOptionSeed("The leftover nodes form a cycle among themselves", true),
+                        new QuizOptionSeed("The graph is merely disconnected but still acyclic", false),
+                        new QuizOptionSeed("The leftover nodes simply have no edges at all", false),
+                        new QuizOptionSeed("The queue was dequeued in the wrong order", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Topological Sorting (GeeksforGeeks)", "https://www.geeksforgeeks.org/topological-sorting/", LinkType.FurtherReading),
+                new ReferenceLinkSeed("LeetCode Explore: Graph", "https://leetcode.com/explore/learn/card/graph/", LinkType.FurtherReading),
+            ]);
+
+        var lesson1Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson1.Slug,
+        [
+            "Build an adjacency list from a raw edge list and implement BFS and DFS on it from scratch",
+            "Implement directed-graph cycle detection using the recursion-stack technique, without looking at the solution",
+            "Implement Kahn's algorithm for topological sort and trace it by hand on a 4-node DAG",
+        ]);
+
+        var lesson2 = BuildLesson(
+            slug: "dynamic-programming-fundamentals",
+            title: "Dynamic Programming Fundamentals",
+            summary: "Recognizing overlapping subproblems and optimal substructure, then solving them with memoization or tabulation.",
+            estimatedMinutes: 45,
+            objectives:
+            [
+                "Identify overlapping subproblems and optimal substructure in a problem before writing any code",
+                "Implement a top-down memoized solution using a cache to avoid recomputing the same subproblem",
+                "Convert a memoized recursive solution into a bottom-up tabulated one, and further into O(1) space where possible",
+                "Solve classic DP problems (climbing stairs, coin change) using both memoization and tabulation",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    **Dynamic programming (DP)** applies when a problem has two properties:
+
+                    - **Overlapping subproblems** — a naive recursive solution solves the *exact same smaller subproblem* many times (e.g., `climbStairs(3)` gets recomputed dozens of times while computing `climbStairs(10)`).
+                    - **Optimal substructure** — the optimal answer to the whole problem can be built directly from optimal answers to its subproblems (e.g., `ways(n) = ways(n-1) + ways(n-2)`).
+
+                    There are two equivalent implementation styles:
+
+                    - **Memoization (top-down)** — write the natural recursive solution, then cache each subproblem's result the first time it's computed (usually in a dictionary or array keyed by the subproblem's parameters). Every later call for the same input becomes an `O(1)` cache hit.
+                    - **Tabulation (bottom-up)** — flip the recursion into an iterative loop that fills a table from the base cases upward, so every subproblem is computed exactly once, in dependency order, with no recursion or call-stack overhead. Often lets you shrink the table to just the last one or two values (rolling variables), reaching `O(1)` extra space.
+
+                    Both give the same asymptotic time complexity, roughly "number of distinct subproblems x work per subproblem" — the whole point of DP is collapsing exponential brute force into that much smaller number.
+                    """, 1),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    Memoization is like a student solving a hard homework set who writes each sub-answer on a sticky note the first time they work it out — the next time that exact same sub-question comes up in a later problem, they just glance at the sticky note instead of re-deriving it from scratch.
+
+                    Tabulation is like filling in a multiplication table starting from `1 x 1` and working up to `12 x 12` in order — by the time you need `7 x 8`, you've already filled in everything smaller, so you never have to stop and go compute a prerequisite value mid-row.
+                    """, 2),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Climbing Stairs** (ways to reach step n, moving 1 or 2 steps at a time)
+
+                    - Naive recursion: `O(2^n)` time — recomputes the same `climbStairs(k)` exponentially many times
+                    - Memoized (top-down): `O(n)` time, `O(n)` space (cache + call stack)
+                    - Tabulated (bottom-up, rolling variables): `O(n)` time, `O(1)` space
+
+                    **Coin Change** (fewest coins to make an amount; -1 if impossible)
+
+                    - Tabulated: `O(amount x coins.Length)` time, `O(amount)` space
+                    - Recurrence: `minCoins[a] = 1 + min(minCoins[a - coin])` over every usable coin
+
+                    **Spotting DP in an interview**
+
+                    - The brute force is recursive and clearly re-solves identical smaller inputs -> overlapping subproblems
+                    - The problem asks for a "best/min/max/count of ways" value built from smaller instances of itself -> optimal substructure
+                    """, 3),
+                Block(BlockType.CodeSnippet, "Climbing Stairs (Memo + Tabulation) and Coin Change (Tabulation)", BodyFormat.PlainText, """
+                    // --- Climbing Stairs: top-down memoization ---
+                    // "How many distinct ways to climb n stairs, taking 1 or 2 steps at a time?"
+                    public int ClimbStairsMemo(int n, Dictionary<int, int>? cache = null)
+                    {
+                        cache ??= new Dictionary<int, int>();
+
+                        if (n <= 2) return n; // base cases: 1 way for 1 stair, 2 ways for 2 stairs
+                        if (cache.TryGetValue(n, out var cached)) return cached; // overlapping subproblem already solved
+
+                        var result = ClimbStairsMemo(n - 1, cache) + ClimbStairsMemo(n - 2, cache);
+                        cache[n] = result; // store before returning
+                        return result;
+                    }
+
+                    // --- Climbing Stairs: bottom-up tabulation, O(1) space ---
+                    // Optimal substructure: ways(n) = ways(n-1) + ways(n-2), so we only ever
+                    // need the previous two values, not a full table.
+                    public int ClimbStairsTabulation(int n)
+                    {
+                        if (n <= 2) return n;
+
+                        var oneStepBack = 2;
+                        var twoStepsBack = 1;
+
+                        for (var i = 3; i <= n; i++)
+                        {
+                            var current = oneStepBack + twoStepsBack;
+                            twoStepsBack = oneStepBack;
+                            oneStepBack = current;
+                        }
+
+                        return oneStepBack;
+                    }
+
+                    // --- Coin Change: bottom-up tabulation ---
+                    // Fewest coins to make `amount`; -1 if impossible.
+                    public int CoinChange(int[] coins, int amount)
+                    {
+                        var minCoins = new int[amount + 1];
+                        Array.Fill(minCoins, amount + 1); // sentinel meaning "not yet reachable"
+                        minCoins[0] = 0; // base case: 0 coins needed to make amount 0
+
+                        for (var subAmount = 1; subAmount <= amount; subAmount++)
+                        {
+                            foreach (var coin in coins)
+                            {
+                                if (coin <= subAmount)
+                                {
+                                    minCoins[subAmount] = Math.Min(minCoins[subAmount], minCoins[subAmount - coin] + 1);
+                                }
+                            }
+                        }
+
+                        return minCoins[amount] > amount ? -1 : minCoins[amount];
+                    }
+                    """, 4, language: "csharp"),
+                Block(BlockType.Diagram, "Overlapping Subproblems in climbStairs(5)", BodyFormat.AsciiArt, """
+                    climbStairs(5)
+                    +-- climbStairs(4)
+                    |    +-- climbStairs(3)
+                    |    |    +-- climbStairs(2)
+                    |    |    +-- climbStairs(1)
+                    |    +-- climbStairs(2)          <-- recomputed! (overlapping subproblem)
+                    +-- climbStairs(3)               <-- recomputed! (overlapping subproblem)
+                         +-- climbStairs(2)          <-- recomputed again!
+                         +-- climbStairs(1)          <-- recomputed again!
+
+                    Without memoization: the same climbStairs(k) is re-derived from
+                    scratch every time it reappears -> O(2^n) total calls.
+
+                    With memoization: each distinct climbStairs(k) for k = 1..5 is
+                    computed exactly once and cached -> only 5 real computations,
+                    every repeat is an O(1) lookup -> O(n) total.
+                    """, 5),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Always write the naive recursive solution first and identify the recurrence relation (e.g., `ways(n) = ways(n-1) + ways(n-2)`) before jumping to code — memoization and tabulation are just two mechanical ways to execute the same recurrence efficiently, and neither makes sense until the recurrence itself is right.
+
+                    Once a tabulated solution only reads the last one or two entries of the table (as in Climbing Stairs), replace the array with a couple of rolling variables to drop space from `O(n)` to `O(1)` — a common interview follow-up question.
+                    """, 6),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    Name the two DP properties out loud before coding: "This has overlapping subproblems because [specific reason], and optimal substructure because [specific reason]." Interviewers use this exact vocabulary to gauge whether you actually understand DP or are just pattern-matching to "the problem looks like a past LeetCode question."
+                    """, 7),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Adding a cache dictionary to a recursive solution but forgetting to check it *before* recomputing, or forgetting to actually store the result *after* computing it — either mistake silently degrades back to the exponential naive solution while looking like memoization.
+
+                    Also common: getting the base cases wrong (e.g., off-by-one on `climbStairs(0)` or `climbStairs(1)`), which then quietly propagates a wrong answer through every larger subproblem built on top of it.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "A naive recursive climbStairs(n) runs in O(2^n) time. After adding memoization (caching each climbStairs(k) result the first time it's computed), what is the new time complexity, and why?",
+                    "There are only n distinct subproblems -- climbStairs(1) through climbStairs(n). Memoization guarantees each one is fully computed exactly once; every later call for the same k becomes an O(1) cache lookup, so total work is O(n).",
+                    [
+                        new QuizOptionSeed("O(n) -- each distinct subproblem is computed exactly once and cached", true),
+                        new QuizOptionSeed("Still O(2^n) -- memoization doesn't help recursive solutions", false),
+                        new QuizOptionSeed("O(log n) -- memoization turns it into a binary search", false),
+                        new QuizOptionSeed("O(n^2) -- every cache lookup costs an extra linear scan", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "What two properties must a problem have for dynamic programming to apply?",
+                    "Overlapping subproblems (the same smaller subproblem recurs many times in a naive recursive solution) and optimal substructure (the optimal answer to the whole problem can be built directly from optimal answers to its subproblems).",
+                    [
+                        new QuizOptionSeed("Overlapping subproblems and optimal substructure", true),
+                        new QuizOptionSeed("Sorted input and a monotonic condition", false),
+                        new QuizOptionSeed("A single base case and no recursion allowed", false),
+                        new QuizOptionSeed("O(1) space and tail recursion", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Dynamic Programming (GeeksforGeeks)", "https://www.geeksforgeeks.org/dynamic-programming/", LinkType.FurtherReading),
+                new ReferenceLinkSeed("LeetCode Explore: Dynamic Programming", "https://leetcode.com/explore/learn/card/dynamic-programming/", LinkType.FurtherReading),
+            ]);
+
+        var lesson2Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson2.Slug,
+        [
+            "Solve Climbing Stairs with a memoized recursive solution, then convert it to bottom-up tabulation",
+            "Solve Coin Change with tabulation and explain the sentinel value used for 'unreachable'",
+            "For one classic DP problem, state its overlapping subproblems and optimal substructure out loud before writing any code",
+        ]);
+
+        var module = BuildModule(topicId, "graphs-and-dynamic-programming", "Graphs & Dynamic Programming",
+            "Graph representations and traversal algorithms — BFS, DFS, cycle detection, topological sort — plus the memoization and tabulation techniques that turn exponential brute force into polynomial time.",
+            90, [lesson1, lesson2], sortOrder: 2);
+
+        return (module, [lesson1Checklist, lesson2Checklist]);
+    }
+
     // ============================== System Design ==============================
 
     private static (Module, List<ChecklistSeed>) BuildSystemDesignModule(int topicId)
@@ -2059,6 +3109,297 @@ public static class CurriculumContentSeedData
         return (module, [lesson1Checklist, lesson2Checklist, lesson3Checklist, lesson4Checklist]);
     }
 
+    private static (Module, List<ChecklistSeed>) BuildApiGatewayAndCdnModule(int topicId)
+    {
+        var lesson1 = BuildLesson(
+            slug: "api-gateway-rate-limiting",
+            title: "API Gateway & Rate Limiting Design",
+            summary: "What an API gateway centralizes for every service behind it, and the token-bucket and sliding-window algorithms that make rate limiting actually work.",
+            estimatedMinutes: 45,
+            objectives:
+            [
+                "Explain what cross-cutting responsibilities an API gateway centralizes on behalf of backend services",
+                "Implement the token bucket algorithm and explain why it allows controlled bursts",
+                "Compare fixed window, sliding window, and token bucket rate limiting and their failure modes",
+                "Decide where to enforce a rate limit (client, gateway, or per-service) and why the gateway is usually right",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    An **API gateway** sits between clients and a fleet of backend services and centralizes work that every service would otherwise have to duplicate:
+
+                    - **Routing** — mapping a public path (`/orders/*`) to the right internal service, hiding internal topology from clients.
+                    - **Authentication/authorization** — validating a token or API key once, at the edge, instead of in every downstream service.
+                    - **TLS termination** — decrypting HTTPS once at the gateway so internal services can speak plain HTTP within a trusted network.
+                    - **Rate limiting & throttling** — protecting backends from being overwhelmed, whether by a traffic spike, a buggy client in a retry loop, or deliberate abuse.
+                    - **Request/response transformation and aggregation** — reshaping payloads, or fanning one client request out to several internal services and combining the results.
+
+                    **Rate limiting** specifically answers "how many requests is this client allowed in a given period, and what happens when they exceed it?" Three common algorithms:
+
+                    - **Fixed window** — count requests in discrete windows (e.g., per calendar minute). Simple, but allows up to 2x the limit right across a window boundary (a burst at 0:59 plus a burst at 1:00 both fit their own windows).
+                    - **Sliding window** (log or counter) — counts requests in a continuously moving window ending "now," avoiding the boundary-burst problem at the cost of more state.
+                    - **Token bucket** — a bucket holds up to `capacity` tokens, refilling at a steady rate; each request consumes one token and is rejected when the bucket is empty. This is the industry-standard choice because it allows a controlled burst (spend the full bucket at once) while still enforcing a steady-state average rate over time.
+                    """, 1),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    An API gateway is like the front desk of a large office building: visitors check in once (auth), get directed to the right floor and department (routing) without knowing the building's internal layout, and the front desk staff turn away anyone trying to bring in an unreasonable number of guests at once (rate limiting) — no individual department has to re-check IDs at their own door.
+
+                    A token bucket is like a movie theater that hands out a fixed number of tickets that "regenerate" one every few minutes: you can burn through a small stockpile of saved-up tickets to bring a big group in all at once, but once they're gone you're limited to however fast new ones trickle in.
+                    """, 2),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Rate limiting algorithms, compared**
+
+                    - Fixed window — simplest, cheapest; allows up to ~2x burst at window boundaries
+                    - Sliding window log — most accurate; stores a timestamp per request, memory grows with request rate
+                    - Sliding window counter — approximates the sliding log cheaply by weighting the previous window's count
+                    - Token bucket — allows bursts up to bucket capacity, enforces a steady average rate; the common default
+                    - Leaky bucket — like token bucket but smooths output to a strictly constant rate (queues excess instead of allowing bursts)
+
+                    **Where to enforce a limit**
+
+                    - Client-side throttling — cooperative only, never trust it alone
+                    - API gateway — the standard place: one enforcement point in front of every service
+                    - Per-service — sometimes still needed for a resource-specific limit (e.g., an expensive search endpoint), layered on top of the gateway's general limit
+                    """, 3),
+                Block(BlockType.CodeSnippet, "Token Bucket Rate Limiter", BodyFormat.PlainText, """
+                    public class TokenBucketRateLimiter
+                    {
+                        private readonly int capacity;
+                        private readonly double refillTokensPerSecond;
+                        private double tokens;
+                        private DateTime lastRefillUtc;
+                        private readonly object gate = new();
+
+                        public TokenBucketRateLimiter(int capacity, double refillTokensPerSecond)
+                        {
+                            this.capacity = capacity;
+                            this.refillTokensPerSecond = refillTokensPerSecond;
+                            tokens = capacity;
+                            lastRefillUtc = DateTime.UtcNow;
+                        }
+
+                        // Returns true (and consumes a token) if the request is allowed.
+                        public bool TryConsume()
+                        {
+                            lock (gate)
+                            {
+                                Refill();
+                                if (tokens < 1)
+                                {
+                                    return false; // caller should respond 429 Too Many Requests
+                                }
+
+                                tokens -= 1;
+                                return true;
+                            }
+                        }
+
+                        private void Refill()
+                        {
+                            var now = DateTime.UtcNow;
+                            var elapsedSeconds = (now - lastRefillUtc).TotalSeconds;
+                            tokens = Math.Min(capacity, tokens + elapsedSeconds * refillTokensPerSecond);
+                            lastRefillUtc = now;
+                        }
+                    }
+
+                    // 100 requests allowed to burst, refilling at 10/sec (i.e. ~10 req/s sustained)
+                    var limiter = new TokenBucketRateLimiter(capacity: 100, refillTokensPerSecond: 10);
+                    """, 4, language: "csharp"),
+                Block(BlockType.Diagram, "A Request's Path Through the Gateway", BodyFormat.StructuredSteps, """
+                    [{"label":"Client"},{"label":"API Gateway","note":"TLS termination, authn/authz"},{"label":"Rate Limiter","note":"token bucket per API key; reject with 429 if empty"},{"label":"Router"},{"label":"Service A / B / C","note":"internal, trusted network"}]
+                    """, 5),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Key rate limits by API key or authenticated user ID, not just by client IP — many legitimate users can share one IP (corporate NAT, mobile carrier NAT), and a single IP-based limit punishes all of them for one user's traffic.
+
+                    When a request is rejected, return `429 Too Many Requests` with a `Retry-After` header telling the client exactly when to try again, instead of a bare error the client has to guess how to handle.
+
+                    If the gateway runs as multiple replicas, back the limiter with a shared store (e.g., Redis with an atomic `INCR`/Lua script) instead of in-process memory — otherwise each replica enforces its own independent limit, and the effective limit becomes (configured limit x replica count).
+                    """, 6),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    If asked to design rate limiting, name the algorithm trade-off explicitly (token bucket allows bursts; sliding window is more precise but costlier) and then immediately raise the distributed-state problem: a gateway that scales to N replicas can't count accurately without a shared, atomic counter, which is usually where the interesting discussion (Redis, race conditions, clock skew) actually lives.
+                    """, 7),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Implementing a fixed window counter and not noticing it permits roughly double the intended rate at the boundary between two windows (a burst at the end of one window plus a burst at the start of the next both pass, even though they land within one another's true "the last 60 seconds").
+
+                    Also common: storing rate-limit counters in each gateway instance's local memory behind a load balancer — with 5 replicas and no shared state, a client can get roughly 5x the intended limit simply by having requests spread across instances.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "Why does the token bucket algorithm allow a burst of requests, while still enforcing a long-run average rate?",
+                    "Tokens accumulate up to the bucket's capacity even while idle, so a client that hasn't made requests in a while can spend that saved-up capacity all at once (a burst) — but once the bucket is empty, requests are limited to however fast it refills, which is the steady-state average rate.",
+                    [
+                        new QuizOptionSeed("It doesn't allow bursts — it enforces a strictly constant rate like the leaky bucket", false),
+                        new QuizOptionSeed("Unused capacity accumulates as tokens (up to the bucket size), letting a burst spend that saved-up allowance at once", true),
+                        new QuizOptionSeed("It resets to full capacity at the start of every calendar minute", false),
+                        new QuizOptionSeed("It only counts requests from authenticated users", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "An API gateway runs as 5 replicas behind a load balancer, each tracking rate limit counters in local process memory. What goes wrong?",
+                    "With no shared state, each of the 5 replicas independently allows up to the configured limit — so a client whose requests get spread across replicas can effectively get up to 5x the intended limit. A shared, atomic store (e.g., Redis) is required for the limit to hold across replicas.",
+                    [
+                        new QuizOptionSeed("Nothing — in-memory counters are accurate as long as the limiter code is correct", false),
+                        new QuizOptionSeed("The effective limit becomes roughly (configured limit x number of replicas), since each replica counts independently", true),
+                        new QuizOptionSeed("The gateway will crash under any load", false),
+                        new QuizOptionSeed("Rate limiting stops working entirely and no requests are ever rejected", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("System Design Primer: Rate limiting", "https://github.com/donnemartin/system-design-primer", LinkType.FurtherReading),
+                new ReferenceLinkSeed("Cloudflare: What is rate limiting?", "https://www.cloudflare.com/learning/bots/what-is-rate-limiting/", LinkType.FurtherReading),
+            ]);
+
+        var lesson1Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson1.Slug,
+        [
+            "Implement a token bucket limiter from scratch and explain why it allows bursts",
+            "Explain the fixed-window boundary-burst problem to someone else without looking it up",
+            "Describe how you'd make rate limiting correct across multiple gateway replicas",
+        ]);
+
+        var lesson2 = BuildLesson(
+            slug: "cdn-edge-caching",
+            title: "CDN & Edge Caching",
+            summary: "How a CDN moves content physically closer to users, and the cache-control headers and invalidation strategies that keep edge caches correct.",
+            estimatedMinutes: 40,
+            objectives:
+            [
+                "Explain how a CDN reduces latency by serving content from edge locations near users",
+                "Distinguish origin-pull from origin-push CDN behavior and know when each fits",
+                "Use Cache-Control directives (max-age, s-maxage, no-store, must-revalidate) correctly for static vs. dynamic content",
+                "Choose a cache invalidation strategy (TTL, versioned URLs, explicit purge) for a given deployment scenario",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    A **CDN (Content Delivery Network)** is a globally-distributed set of proxy servers ("edge" points of presence, or PoPs) that cache and serve content from a location physically close to the requesting user, instead of every request traveling all the way to your **origin** server. Physical distance is a hard latency floor — round-trip time is bounded by the speed of light — so serving from a nearby edge node instead of a distant origin is often the single biggest latency win available.
+
+                    Two ways content gets onto the edge:
+
+                    - **Origin pull (reverse proxy mode)** — the CDN has no content until the first request for it arrives; on a miss, it fetches from the origin, caches the response, and serves it to that request and every subsequent one until the entry expires. This is the common default and requires no separate upload step.
+                    - **Origin push** — you explicitly upload/publish content to the CDN ahead of time. Better suited to a fixed catalog of large assets (e.g., video files) where you don't want the first requester in each region to pay a cold-cache penalty.
+
+                    Whether an edge node can cache a response — and for how long — is governed by HTTP caching headers, primarily `Cache-Control`:
+
+                    - `max-age=N` — how long (seconds) a **browser** may cache the response
+                    - `s-maxage=N` — how long a **shared cache** (CDN, reverse proxy) may cache it, overriding `max-age` for shared caches specifically
+                    - `no-cache` — may be cached, but must be revalidated with the origin before each use
+                    - `no-store` — must not be cached anywhere, ever (e.g., responses containing sensitive per-user data)
+                    - `public` / `private` — whether shared caches are allowed to store the response at all (`private` means only the end-user's own browser may cache it)
+                    """, 1),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    A CDN is like a national retail chain building regional warehouses close to customers instead of shipping every single order from one central warehouse across the country — most orders (cache hits) ship from the nearby warehouse in a day; only the rare item the regional warehouse doesn't stock (a cache miss) has to be requested from the central warehouse first.
+
+                    `Cache-Control: no-store` is like a "do not photocopy, shred after reading" stamp on a document — no intermediate stop, however convenient, is allowed to keep a copy.
+                    """, 2),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Cache-Control directives**
+
+                    - `max-age=<seconds>` — browser cache lifetime
+                    - `s-maxage=<seconds>` — shared/CDN cache lifetime (wins over `max-age` for shared caches)
+                    - `no-cache` — cacheable, but must revalidate with origin every time (via `ETag`/`If-None-Match`)
+                    - `no-store` — never cache, anywhere
+                    - `public` — shared caches (CDN) may store it
+                    - `private` — only the end-user's browser may store it
+                    - `must-revalidate` — once stale, must not be served without revalidating, even if the origin is unreachable
+                    - `stale-while-revalidate=<seconds>` — serve a stale copy immediately while revalidating in the background
+
+                    **Invalidation strategies**
+
+                    - Short TTL — accept some staleness; simplest, no purge mechanism needed
+                    - Versioned/fingerprinted URLs (`app.a1b2c3.js`) — cache the asset "forever" (`max-age=31536000, immutable`); a new deploy is a new URL, so invalidation is automatic and instant
+                    - Explicit purge/cache tags — actively evict specific edge-cached entries on demand; needed for content that changes unpredictably and can't wait out a TTL
+                    """, 3),
+                Block(BlockType.CodeSnippet, "Setting Cache-Control per Content Type", BodyFormat.PlainText, """
+                    app.Use(async (context, next) =>
+                    {
+                        await next();
+
+                        var path = context.Request.Path;
+
+                        if (path.StartsWithSegments("/static") && path.Value!.Contains('.'))
+                        {
+                            // Fingerprinted, immutable build assets: cache forever at the
+                            // browser AND the CDN edge. A new deploy ships a new filename,
+                            // so there is nothing to invalidate.
+                            context.Response.Headers.CacheControl =
+                                "public, max-age=31536000, immutable";
+                        }
+                        else if (path.StartsWithSegments("/api/catalog"))
+                        {
+                            // Semi-dynamic: browsers must revalidate on every use, but the
+                            // CDN edge may serve a copy for 60s and refresh it in the
+                            // background for up to 30s after that while still serving fast.
+                            context.Response.Headers.CacheControl =
+                                "public, max-age=0, s-maxage=60, stale-while-revalidate=30";
+                        }
+                        else if (path.StartsWithSegments("/api/account"))
+                        {
+                            // Per-user, sensitive: never cache at a shared edge node.
+                            context.Response.Headers.CacheControl = "private, no-store";
+                        }
+                    });
+                    """, 4, language: "csharp"),
+                Block(BlockType.Diagram, "Cache Hit vs. Cache Miss at the Edge", BodyFormat.StructuredSteps, """
+                    [{"label":"Client (nearest region)"},{"label":"Edge PoP","note":"cache HIT -> serve immediately, no origin round-trip"},{"label":"Edge PoP (on MISS)","note":"forwards request to origin"},{"label":"Origin Server","note":"generates/serves response, sets Cache-Control"},{"label":"Edge PoP caches response","note":"serves this and future requests until TTL expires"}]
+                    """, 5),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Fingerprint (hash the content into the filename of) static build assets and serve them with a far-future `max-age`/`immutable` — this turns cache invalidation into a non-problem, since a changed file is, by definition, a new URL that was never cached.
+
+                    Never mark a response `public` if it can contain per-user or sensitive data (session tokens, account details, personalized pricing) — a shared edge cache serving user A's response to user B is a real, embarrassing data leak, not a hypothetical one.
+                    """, 6),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    Be ready to name what a CDN does *not* solve: highly personalized, per-user, write-heavy, or rapidly-changing data gets little benefit from edge caching and may need a different approach entirely (e.g., edge compute/edge functions, or simply accepting the origin round-trip). A design that reflexively says "put a CDN in front of everything" without this caveat reads as memorized rather than understood.
+                    """, 7),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Deploying a new version of an app but keeping the same asset filenames (no fingerprinting/versioning) — users can be stuck on a stale, previously-cached JS/CSS bundle for as long as its `max-age`, sometimes long past the point where it's now incompatible with the current API.
+
+                    Also common: setting `Cache-Control: public` on a response that includes a `Set-Cookie` header or other per-user content — some caches will store and replay that exact response, including its cookie, to a different user entirely.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "Why does versioning/fingerprinting static asset filenames (e.g., `app.a1b2c3.js`) make cache invalidation simple?",
+                    "A changed file produces a different hash and therefore a different URL. Old cached entries are simply never requested again (they're not \"invalidated\" so much as abandoned), while the new URL is a guaranteed cache miss the first time anyone requests it — so you can safely cache each version forever with no purge step required.",
+                    [
+                        new QuizOptionSeed("It forces the CDN to check the origin on every single request", false),
+                        new QuizOptionSeed("A content change produces a new URL, so old cached entries are simply never re-requested and the new URL is naturally a fresh cache miss", true),
+                        new QuizOptionSeed("It disables caching for that asset entirely", false),
+                        new QuizOptionSeed("It only works for HTML pages, not JS or CSS", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "A response contains per-user account data and is accidentally marked `Cache-Control: public, max-age=300`. What's the risk?",
+                    "`public` permits shared caches, including CDN edge nodes, to store the response and serve it to other users who request the same URL — meaning one user's private account data could be served to a different user entirely until the entry expires.",
+                    [
+                        new QuizOptionSeed("None — max-age=300 is short enough to be safe", false),
+                        new QuizOptionSeed("A shared/edge cache may store and replay that user's private response to a different user requesting the same URL", true),
+                        new QuizOptionSeed("The response will simply never be cached because it's dynamic", false),
+                        new QuizOptionSeed("It only affects the user's own browser cache, which is safe by definition", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("System Design Primer: Content Delivery Network (CDN)", "https://github.com/donnemartin/system-design-primer", LinkType.FurtherReading),
+                new ReferenceLinkSeed("MDN: Cache-Control header", "https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Cache-Control", LinkType.OfficialDocs),
+            ],
+            prerequisites: [lesson1]);
+
+        var lesson2Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson2.Slug,
+        [
+            "Explain the difference between max-age and s-maxage to someone else correctly",
+            "Design a cache invalidation strategy for a hypothetical app's static assets and its semi-dynamic API responses",
+            "List one scenario where putting a CDN in front of a service would NOT help, and explain why",
+        ]);
+
+        var module = BuildModule(topicId, "traffic-management-gateways-and-cdns", "Traffic Management: API Gateways & CDNs",
+            "How systems manage and shape incoming traffic before it reaches application servers — centralizing cross-cutting concerns at an API gateway, protecting backends with real rate-limiting algorithms, and pushing static content out to the edge with a CDN.",
+            85, [lesson1, lesson2], sortOrder: 2);
+
+        return (module, [lesson1Checklist, lesson2Checklist]);
+    }
+
     // ============================== SQL ==============================
 
     private static (Module, List<ChecklistSeed>) BuildSqlModule(int topicId)
@@ -2531,6 +3872,293 @@ public static class CurriculumContentSeedData
             210, [lesson1, lesson2, lesson3, lesson4]);
 
         return (module, [lesson1Checklist, lesson2Checklist, lesson3Checklist, lesson4Checklist]);
+    }
+
+    private static (Module, List<ChecklistSeed>) BuildSqlAdvancedModule(int topicId)
+    {
+        var lesson1 = BuildLesson(
+            slug: "schema-design-and-normalization",
+            title: "Schema Design & Normalization",
+            summary: "Normal forms up through 3NF, foreign keys and referential integrity, and when to deliberately break the rules by denormalizing.",
+            estimatedMinutes: 40,
+            objectives:
+            [
+                "Define 1NF, 2NF, and 3NF and identify which normal form a given table violates",
+                "Design foreign keys with correct referential integrity actions (CASCADE, RESTRICT, SET NULL)",
+                "Explain the difference between a partial dependency and a transitive dependency",
+                "Decide, with justification, when deliberately denormalizing a schema is the right engineering trade-off",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    **Normalization** is the process of organizing a schema to eliminate redundancy and the update anomalies redundancy causes. It's defined as a series of **normal forms**, each stricter than the last.
+
+                    A table is in **First Normal Form (1NF)** when every column holds a single, atomic value (no comma-separated lists or repeating groups) and there's a well-defined primary key. A column like `phone_numbers = "555-1234, 555-5678"` violates 1NF.
+
+                    **Second Normal Form (2NF)** requires 1NF, plus: every non-key column must depend on the *entire* primary key, not just part of it. This only matters for tables with a **composite primary key** — a **partial dependency** is when a column depends on only one part of that key (e.g., in `order_items(order_id, product_id, product_name, quantity)`, `product_name` depends only on `product_id`, not on the full `(order_id, product_id)` key).
+
+                    **Third Normal Form (3NF)** requires 2NF, plus: no non-key column depends on another non-key column (a **transitive dependency**). If `employees(employee_id, department_id, department_name)` stores `department_name` redundantly on every employee row, that's a transitive dependency — `department_name` depends on `department_id`, which depends on `employee_id`, not directly on the key.
+
+                    A **functional dependency** X -> Y means: given a value of X, Y is uniquely determined. Every normal form rule is really a rule about which functional dependencies are allowed to exist in a table.
+
+                    **Foreign keys** enforce **referential integrity** — a foreign key column's value must either be `NULL` or match an existing value in the referenced table's primary key. `ON DELETE`/`ON UPDATE` actions control what happens to dependent rows: `CASCADE` (propagate the delete/update), `RESTRICT`/`NO ACTION` (block the operation if dependents exist), or `SET NULL` (clear the foreign key on dependents).
+                    """, 1),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    Denormalized data is like writing your friend's address on every single birthday card list, holiday card list, and wedding invite list you keep — when they move, you have to hunt down and update every list, and if you miss one, you now have contradictory addresses on file for the same person.
+
+                    Normalization is keeping one shared address book: every list just points to "friend #42," and you update the address in exactly one place. Foreign keys are the rule that says you're not allowed to write down "friend #99" on a list unless friend #99 actually exists in the address book.
+                    """, 2),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Normal forms at a glance**
+
+                    - 1NF: atomic columns, no repeating groups, a primary key exists
+                    - 2NF: 1NF + no partial dependency on part of a composite key
+                    - 3NF: 2NF + no transitive dependency between non-key columns
+                    - (BCNF, 4NF, 5NF exist but 3NF is sufficient for the overwhelming majority of application schemas)
+
+                    **Foreign key referential actions**
+
+                    - `ON DELETE CASCADE` — deleting the parent deletes its children too
+                    - `ON DELETE RESTRICT` / `NO ACTION` — block deleting a parent that still has children
+                    - `ON DELETE SET NULL` — deleting the parent nulls out the child's foreign key (column must be nullable)
+                    - The same three options exist for `ON UPDATE`, though updating primary keys is rare in practice
+
+                    **When to denormalize deliberately**: read-heavy reporting tables, caching a computed/aggregated value to avoid an expensive join on every request, or a documented performance trade-off — never as a substitute for understanding the normalized design first.
+                    """, 3),
+                Block(BlockType.CodeSnippet, "Normalizing a Schema and Adding Referential Actions", BodyFormat.PlainText, """
+                    -- Before: violates 2NF and 3NF. product_name depends only on
+                    -- product_id (partial dependency), and customer_city depends on
+                    -- customer_id, not on the order_item key (transitive dependency).
+                    CREATE TABLE order_items_denormalized (
+                        order_id      INTEGER,
+                        product_id    INTEGER,
+                        product_name  VARCHAR(100),
+                        customer_id   INTEGER,
+                        customer_city VARCHAR(100),
+                        quantity      INTEGER,
+                        PRIMARY KEY (order_id, product_id)
+                    );
+
+                    -- After: normalized to 3NF with foreign keys enforcing referential
+                    -- integrity and explicit referential actions.
+                    CREATE TABLE customers (
+                        customer_id INTEGER PRIMARY KEY,
+                        city        VARCHAR(100) NOT NULL
+                    );
+
+                    CREATE TABLE products (
+                        product_id   INTEGER PRIMARY KEY,
+                        product_name VARCHAR(100) NOT NULL
+                    );
+
+                    CREATE TABLE orders (
+                        order_id    INTEGER PRIMARY KEY,
+                        customer_id INTEGER NOT NULL,
+                        FOREIGN KEY (customer_id) REFERENCES customers (customer_id)
+                            ON DELETE RESTRICT
+                    );
+
+                    CREATE TABLE order_items (
+                        order_id   INTEGER NOT NULL,
+                        product_id INTEGER NOT NULL,
+                        quantity   INTEGER NOT NULL,
+                        PRIMARY KEY (order_id, product_id),
+                        FOREIGN KEY (order_id) REFERENCES orders (order_id)
+                            ON DELETE CASCADE,
+                        FOREIGN KEY (product_id) REFERENCES products (product_id)
+                            ON DELETE RESTRICT
+                    );
+                    """, 4, language: "sql"),
+                Block(BlockType.Diagram, "From Unnormalized Table to 3NF", BodyFormat.StructuredSteps, """
+                    [{"label":"Unnormalized table","note":"repeating groups, e.g. a comma-separated phone_numbers column"},{"label":"1NF","note":"split repeating groups out; every column becomes atomic"},{"label":"2NF","note":"remove partial dependencies; move columns that depend on only part of a composite key into their own table"},{"label":"3NF","note":"remove transitive dependencies; move columns that depend on a non-key column into their own table"},{"label":"Normalized schema","note":"customers, products, orders, order_items — each fact stored exactly once"}]
+                    """, 5),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Design to 3NF by default — it eliminates the update anomalies (insert, update, and delete anomalies) that come from storing the same fact in more than one place. Only denormalize deliberately, for a measured performance reason, and document *why* directly in the schema (a comment on the column) so the next engineer doesn't "fix" it by re-normalizing and silently breaking the cache.
+
+                    Always name a referential action explicitly (`ON DELETE CASCADE`/`RESTRICT`/`SET NULL`) rather than relying on the database's default — the default varies by engine, and silently picking the wrong one is how you either get orphaned rows or accidentally cascade-delete data you meant to keep.
+                    """, 6),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    "Design a database schema for X" (a library, a ride-sharing app, a social network) is one of the most common SQL/system-design crossover questions. Walk through your entities and their relationships first, name your primary and foreign keys out loud, and explicitly state your normalization decisions — "I'm keeping `product_name` only in the `products` table, not duplicated on every order line, to avoid it going stale" is exactly the kind of reasoning interviewers are listening for.
+                    """, 7),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Storing a derived or duplicated value (a customer's city copied onto every order row, a running total stored instead of computed) without a clear, deliberate reason and a plan for keeping it in sync — this is how two "copies" of the same fact quietly drift apart over time.
+
+                    Also common: adding a foreign key without deciding on its `ON DELETE` behavior, then being surprised in production when deleting a parent row either fails unexpectedly (default `RESTRICT`/`NO ACTION` in many engines) or silently cascades further than intended.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "A table `order_items(order_id, product_id, product_name, quantity)` has a composite primary key of `(order_id, product_id)`, but `product_name` only depends on `product_id`. Which normal form does this violate?",
+                    "This is a partial dependency: product_name depends on only part of the composite key (product_id), not the whole key (order_id, product_id). That's exactly what 2NF prohibits.",
+                    [
+                        new QuizOptionSeed("1NF, because product_name is not atomic", false),
+                        new QuizOptionSeed("2NF, because product_name has a partial dependency on only part of the composite key", true),
+                        new QuizOptionSeed("3NF, because product_name depends on another non-key column", false),
+                        new QuizOptionSeed("It doesn't violate any normal form", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "You delete a customer row and want every one of that customer's orders deleted automatically as part of the same operation. Which foreign key referential action achieves this?",
+                    "ON DELETE CASCADE propagates the delete to dependent rows automatically. ON DELETE RESTRICT would block the delete while orders still reference the customer, and ON DELETE SET NULL would leave the orders in place with a null customer_id instead of deleting them.",
+                    [
+                        new QuizOptionSeed("ON DELETE RESTRICT", false),
+                        new QuizOptionSeed("ON DELETE CASCADE", true),
+                        new QuizOptionSeed("ON DELETE SET NULL", false),
+                        new QuizOptionSeed("Foreign keys can't trigger any action automatically", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("PostgreSQL: Foreign Keys", "https://www.postgresql.org/docs/current/ddl-constraints.html", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("Database normalization overview", "https://en.wikipedia.org/wiki/Database_normalization", LinkType.FurtherReading),
+            ]);
+
+        var lesson1Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson1.Slug,
+        [
+            "Take one denormalized table you've worked with and normalize it to 3NF on paper",
+            "Add a foreign key with an explicit ON DELETE action and explain why you chose CASCADE, RESTRICT, or SET NULL",
+            "Explain the difference between a partial dependency and a transitive dependency in your own words",
+        ]);
+
+        var lesson2 = BuildLesson(
+            slug: "cte-and-recursive-queries",
+            title: "Common Table Expressions & Recursive Queries",
+            summary: "Using WITH to name subqueries for readability, and recursive CTEs to walk hierarchical data like org charts and category trees.",
+            estimatedMinutes: 40,
+            objectives:
+            [
+                "Rewrite a nested subquery as a named CTE using WITH to improve readability",
+                "Explain the anchor member / recursive member structure of a recursive CTE",
+                "Write a recursive CTE that walks a self-referencing hierarchy (e.g., an employee/manager org chart)",
+                "Recognize the risk of an infinite recursive CTE and how to guard against it",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    A **Common Table Expression (CTE)** is a named, temporary result set defined with a `WITH` clause and used within a single query, as if it were a table. CTEs exist purely for readability and reuse *within one query* — they don't persist beyond it, and they're not a materialized view or an index.
+
+                    This is functionally identical to writing the same logic as a nested subquery — the benefit is purely that a well-named CTE reads top-to-bottom like a sentence, instead of forcing the reader to parse inside-out.
+
+                    A **recursive CTE** (`WITH RECURSIVE` in the ANSI standard, PostgreSQL, SQLite, and MySQL 8+; plain `WITH` in SQL Server, which treats recursion as implicit) can reference *itself*, which makes it the standard tool for walking self-referencing hierarchical data — org charts, category trees, bill-of-materials explosions, folder structures. It has two parts joined by `UNION ALL`:
+
+                    1. **Anchor member** — a normal query with no self-reference; it produces the starting row(s) (e.g., the top-level employee with no manager).
+                    2. **Recursive member** — a query that references the CTE's own name, joining the previous result to find the "next level." The engine re-runs this repeatedly, feeding each iteration's output back in as input, until an iteration produces zero rows.
+
+                    Because a recursive CTE keeps re-running until it produces no new rows, a self-referencing table with a cycle (row A points to B, B points back to A) can recurse forever — most engines provide a safety limit (SQL Server's `MAXRECURSION`; PostgreSQL requires you to break cycles yourself) but you shouldn't rely on that as your only protection.
+                    """, 1),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    A plain CTE is like giving a long, complicated phrase a nickname at the top of a conversation ("let's call the customers who spent over $1,000 'VIPs'") so the rest of the conversation can just say "VIPs" instead of repeating the whole definition every time.
+
+                    A recursive CTE is like passing a message down a chain of command and asking each person to add their own name before passing it further: you start with the CEO (the anchor), each step asks "who reports to the people I just found?" (the recursive member), and you keep going until someone has no one reporting to them — at which point the chain naturally stops growing.
+                    """, 2),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **CTE anatomy**
+
+                    - `WITH name AS (subquery) SELECT ... FROM name` — a plain CTE, scoped to the one statement that follows it
+                    - Multiple CTEs: `WITH a AS (...), b AS (...) SELECT ... FROM a JOIN b ...`
+                    - A CTE is not indexed, not cached across queries, and not a substitute for a real table or materialized view
+
+                    **Recursive CTE anatomy**
+
+                    - `WITH RECURSIVE name AS (anchor UNION ALL recursive-member-referencing-name) SELECT ... FROM name`
+                    - Anchor member: runs once, no self-reference
+                    - Recursive member: references `name`, runs repeatedly until it returns 0 rows
+                    - Must use `UNION ALL`, not `UNION` (a plain `UNION` would try to de-duplicate against a still-growing result, which most engines disallow or handle inconsistently)
+                    - Always include a depth counter or path column to detect/limit cycles in real (not guaranteed acyclic) data
+                    """, 3),
+                Block(BlockType.CodeSnippet, "A Plain CTE, Then a Recursive CTE Over an Org Chart", BodyFormat.PlainText, """
+                    -- Plain CTE: named subquery for readability, no recursion.
+                    WITH department_totals AS (
+                        SELECT department_id, SUM(salary) AS total_salary
+                        FROM employees
+                        GROUP BY department_id
+                    )
+                    SELECT d.department_id, d.total_salary
+                    FROM department_totals d
+                    WHERE d.total_salary > 500000;
+
+                    -- Recursive CTE: walk an org chart from the top down, tracking depth.
+                    WITH RECURSIVE org_chart AS (
+                        -- Anchor member: employees with no manager (the top of the chart).
+                        SELECT
+                            employee_id,
+                            manager_id,
+                            name,
+                            0 AS depth
+                        FROM employees
+                        WHERE manager_id IS NULL
+
+                        UNION ALL
+
+                        -- Recursive member: find each employee whose manager was just found.
+                        SELECT
+                            e.employee_id,
+                            e.manager_id,
+                            e.name,
+                            oc.depth + 1
+                        FROM employees e
+                        INNER JOIN org_chart oc ON e.manager_id = oc.employee_id
+                    )
+                    SELECT employee_id, name, depth
+                    FROM org_chart
+                    ORDER BY depth, employee_id;
+                    """, 4, language: "sql"),
+                Block(BlockType.Diagram, "How a Recursive CTE Executes", BodyFormat.StructuredSteps, """
+                    [{"label":"Anchor member runs once","note":"employees WHERE manager_id IS NULL -> e.g. just the CEO, depth 0"},{"label":"Recursive member, iteration 1","note":"find employees whose manager_id matches the anchor's employee_id -> CEO's direct reports, depth 1"},{"label":"Recursive member, iteration 2","note":"find employees reporting to depth-1 rows -> depth 2, and so on"},{"label":"Iteration N","note":"recursive member returns 0 new rows -> recursion stops"},{"label":"Final result","note":"UNION ALL of every iteration's rows, i.e. the whole org chart with a depth per employee"}]
+                    """, 5),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Reach for a CTE whenever naming an intermediate result would make a query easier to read, especially when the same subquery would otherwise be repeated more than once in the statement — a CTE lets you define it once and reference it multiple times.
+
+                    For recursive CTEs over real-world data, always add a `depth` (or accumulated `path`) column and a `WHERE depth < N` guard in the recursive member — even a schema you believe is a strict tree can end up with bad data that forms a cycle, and an unguarded recursive CTE against a cycle will run until it exhausts memory or hits the engine's hard recursion limit.
+                    """, 6),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    "Given an employee table with a self-referencing manager_id, find everyone under a given manager" (the full reporting chain, not just direct reports) is an extremely common SQL interview question, and it's a near-verbatim recursive CTE: anchor on the given manager, recursive member joins employees to the growing result on `manager_id`. Naming it immediately as "a recursive CTE" and sketching the anchor/recursive-member split signals real fluency, not just syntax memorization.
+                    """, 7),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Using `UNION` instead of `UNION ALL` in a recursive CTE — `UNION` tries to de-duplicate against a result set that's still being built, which most engines either reject outright or handle in a way that silently produces wrong results; recursive CTEs require `UNION ALL`.
+
+                    Also common: writing a recursive CTE with no depth guard against data that isn't guaranteed acyclic (a `manager_id` that could, through bad data, eventually point back up the chain) — this can recurse indefinitely and take down the query (or the whole connection) instead of failing fast.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "In a recursive CTE, what is the purpose of the anchor member?",
+                    "The anchor member is a normal query with no self-reference; it produces the starting row(s) that the recursive member then repeatedly builds on. Without it, there would be nothing for the recursive member to join against on the first iteration.",
+                    [
+                        new QuizOptionSeed("It runs repeatedly until no new rows are produced", false),
+                        new QuizOptionSeed("It provides the starting row(s), with no reference to the CTE itself", true),
+                        new QuizOptionSeed("It de-duplicates the final result", false),
+                        new QuizOptionSeed("It sets the engine's recursion limit", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "Why must a recursive CTE use UNION ALL instead of UNION?",
+                    "UNION would need to de-duplicate the recursive member's output against a result set that is still being built iteration by iteration, which isn't well-defined for most engines. UNION ALL simply appends each iteration's rows without attempting de-duplication, which is what recursive evaluation requires.",
+                    [
+                        new QuizOptionSeed("UNION ALL is only a stylistic preference with no functional difference", false),
+                        new QuizOptionSeed("UNION would require de-duplicating against a result set that's still being built recursively, which isn't well-defined; UNION ALL avoids that", true),
+                        new QuizOptionSeed("UNION is not valid syntax inside a WITH clause at all", false),
+                        new QuizOptionSeed("UNION ALL is required only for performance, not correctness", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("PostgreSQL: WITH Queries (CTEs)", "https://www.postgresql.org/docs/current/queries-with.html", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("SQLite: The WITH Clause", "https://www.sqlite.org/lang_with.html", LinkType.OfficialDocs),
+            ]);
+
+        var lesson2Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson2.Slug,
+        [
+            "Rewrite a nested subquery you've written before as a named CTE",
+            "Write a recursive CTE that walks a self-referencing hierarchy (org chart, category tree, or folder structure) from scratch",
+            "Explain, out loud, why a recursive CTE must use UNION ALL and needs a cycle/depth guard on real-world data",
+        ]);
+
+        var module = BuildModule(topicId, "schema-design-and-advanced-queries", "Schema Design & Advanced Queries",
+            "Normalization and referential integrity for solid schema design, plus common table expressions for readable and recursive queries.",
+            80, [lesson1, lesson2], sortOrder: 2);
+
+        return (module, [lesson1Checklist, lesson2Checklist]);
     }
 
     // ============================== Cloud ==============================
@@ -3028,6 +4656,288 @@ public static class CurriculumContentSeedData
             145, [lesson1, lesson2, lesson3, lesson4]);
 
         return (module, [lesson1Checklist, lesson2Checklist, lesson3Checklist, lesson4Checklist]);
+    }
+
+    private static (Module, List<ChecklistSeed>) BuildCloudObservabilityModule(int topicId)
+    {
+        var lesson1 = BuildLesson(
+            slug: "serverless-functions-and-event-triggers",
+            title: "Serverless & Functions-as-a-Service",
+            summary: "When serverless fits a workload (and when it doesn't), what actually causes a cold start, and the statelessness constraints that shape how a function must be written.",
+            estimatedMinutes: 35,
+            objectives:
+            [
+                "Decide whether serverless functions are a good fit for a given workload, or whether containers/VMs are the better choice",
+                "Explain what causes a cold start and how to reduce its impact",
+                "Design a function around statelessness: no reliance on local disk/memory surviving between invocations, and safe handling of duplicate/retried events",
+                "Wire a function to at least two different event-driven trigger types (HTTP, queue, storage, schedule)",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    **Functions-as-a-Service (FaaS)** is the most abstracted compute option: you provide only a function's code, and the platform provisions the runtime, scales the number of running instances (including down to zero when idle), and bills per invocation and execution duration rather than per hour of a running server.
+
+                    Functions are **event-driven** — each invocation is triggered by something happening: an HTTP request, a message landing in a queue, a file uploaded to object storage, or a schedule (cron-style). The platform is responsible for matching incoming events to available (or newly created) function instances.
+
+                    Two properties fall directly out of this model:
+
+                    - **Statelessness** — nothing an invocation writes to local memory or local disk is guaranteed to exist on the next invocation, because that next invocation may run on a completely different instance. Anything that must persist (a processed-order record, a session) has to live in external storage (a database, cache, or object store).
+                    - **Cold starts** — when no idle ("warm") instance is available to handle an incoming event, the platform must provision a brand-new execution environment: start a container/sandbox, load the language runtime, and load your code and its dependencies, before your function's first line even runs. A "warm" invocation, reusing an existing instance, skips all of that and starts almost instantly.
+
+                    Serverless is a strong fit for **spiky, sporadic, short-lived** workloads (an image-resize triggered by an upload, a nightly report, a low-traffic API). It's a poor fit for **long-running, persistently-connected, or highly latency-sensitive** workloads (a WebSocket held open for hours, a process needing consistent sub-millisecond response with no cold-start risk) — those still belong on containers or VMs.
+                    """, 1),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    A serverless function is like a pop-up food stall that only assembles itself when a customer walks up, and disassembles when there's no one in line — you never pay rent for it sitting idle, but the very first customer of the day waits slightly longer while the stall is being set up (the cold start). A dedicated restaurant (a VM or long-running container) is always staffed and ready the instant someone walks in, but you're paying for that staff whether anyone shows up or not.
+
+                    Statelessness is like a hotel room, not your own bedroom: whatever you leave lying around isn't guaranteed to be there (or even in the same room) the next time you check in — anything you actually need again has to go in your suitcase (external storage), not on the nightstand.
+                    """, 2),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Good fit for serverless**
+
+                    - Sporadic, bursty, or low-traffic HTTP APIs
+                    - Reacting to an event: file uploaded, message queued, row inserted
+                    - Scheduled/cron-style jobs (nightly cleanup, periodic report)
+                    - Short-lived data transforms (resize an image, parse a file)
+
+                    **Poor fit for serverless**
+
+                    - Long-running or persistently-connected work (WebSockets, long batch jobs beyond the platform's max execution duration)
+                    - Workloads needing guaranteed low, consistent latency with zero cold-start tolerance
+                    - Heavy in-memory caching that needs to survive across requests
+
+                    **Common trigger types**
+
+                    - HTTP request (synchronous API)
+                    - Queue/topic message (asynchronous, at-least-once delivery)
+                    - Object storage event (file created/updated/deleted)
+                    - Schedule (cron expression)
+                    - Stream (e.g., a change-data-capture or event-stream record)
+                    """, 3),
+                Block(BlockType.CodeSnippet, "A Stateless, Idempotent Queue-Triggered Function", BodyFormat.PlainText, """
+                    public class OrderCreatedFunction
+                    {
+                        private readonly IOrderStore _orderStore;
+                        private readonly IEmailClient _emailClient;
+                        private readonly ILogger<OrderCreatedFunction> _logger;
+
+                        public OrderCreatedFunction(IOrderStore orderStore, IEmailClient emailClient, ILogger<OrderCreatedFunction> logger)
+                        {
+                            _orderStore = orderStore;
+                            _emailClient = emailClient;
+                            _logger = logger;
+                        }
+
+                        [Function("OrderCreatedFunction")]
+                        public async Task Run([QueueTrigger("order-created-queue")] OrderCreatedEvent orderEvent)
+                        {
+                            // Queue triggers are at-least-once: the platform may redeliver the
+                            // same message (after a timeout, a retry, or an instance restart).
+                            // Checking an idempotency key makes a duplicate delivery a safe no-op
+                            // instead of double-charging or double-emailing the customer.
+                            if (await _orderStore.HasProcessedAsync(orderEvent.IdempotencyKey))
+                            {
+                                _logger.LogInformation("Duplicate delivery for {Key}, skipping", orderEvent.IdempotencyKey);
+                                return;
+                            }
+
+                            await _orderStore.MarkProcessedAsync(orderEvent.IdempotencyKey);
+                            await _emailClient.SendOrderConfirmationAsync(orderEvent.CustomerEmail, orderEvent.OrderId);
+
+                            // Nothing durable is kept in local memory or on local disk here --
+                            // the next invocation could land on a brand-new instance with none
+                            // of this one's state, warm or cold.
+                        }
+                    }
+                    """, 4, language: "csharp"),
+                Block(BlockType.Diagram, "Event to Response, Cold vs. Warm", BodyFormat.StructuredSteps, """
+                    [{"label":"Event Source","note":"HTTP request, queue message, storage upload, or schedule fires"},{"label":"Platform Receives Event"},{"label":"Warm instance available?","note":"no: cold start -- provision sandbox, load runtime + code | yes: reuse existing instance"},{"label":"Function Instance Executes","note":"one invocation, treated as stateless"},{"label":"Response / Downstream Call"}]
+                    """, 5),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Design every function to be **idempotent** against retries — event-driven triggers are typically at-least-once, not exactly-once, so the same event can and eventually will be delivered more than once.
+
+                    Keep deployment packages small and dependencies minimal; a smaller package loads faster during a cold start. Where the platform supports it (e.g., provisioned/reserved concurrency) and cold-start latency genuinely matters for the workload, pay to keep a minimum number of instances warm rather than trying to eliminate cold starts entirely.
+
+                    Separate the trigger-handling code from the actual business logic (a thin function wrapper calling into a plain, unit-testable class) — this keeps the logic testable without needing to invoke the real cloud trigger infrastructure in tests.
+                    """, 6),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    When asked to compare serverless to containers for a given workload, lead with the trade-off, not a definition: "serverless minimizes idle cost and operational overhead, but pays for that with cold-start latency and an execution-time ceiling, so it's a strong fit for this sporadic image-processing workload but a poor fit for the always-on matching service that needs consistent sub-50ms latency." That framing shows you understand the constraint, not just the buzzword.
+                    """, 7),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Assuming a value written to a local variable, in-memory cache, or local disk during one invocation will still be there on the next one — it might be, if the same warm instance happens to be reused, but that's never guaranteed and code that depends on it will fail unpredictably in production.
+
+                    Also common: not handling duplicate event delivery (treating "at-least-once" as if it were "exactly-once"), and shipping an oversized deployment package full of unused dependencies that quietly makes every cold start slower than it needs to be.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "What primarily causes a serverless function's 'cold start'?",
+                    "A cold start happens when no idle (warm) execution environment exists for the incoming event, so the platform must provision a new sandbox, start the language runtime, and load the function's code and dependencies before the function's first line can run.",
+                    [
+                        new QuizOptionSeed("A syntax error in the function's code", false),
+                        new QuizOptionSeed("No warm instance is available, so the platform must provision a new runtime and load the code before executing", true),
+                        new QuizOptionSeed("The cloud provider intentionally throttles requests during business hours", false),
+                        new QuizOptionSeed("Cold starts only happen for functions triggered by HTTP requests", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "Which workload is the poorest fit for a serverless function, all else being equal?",
+                    "A long-running, persistently-connected process with in-memory session state clashes with two core constraints of serverless: statelessness (no guaranteed in-memory persistence across invocations) and a maximum execution duration -- it belongs on a container or VM instead.",
+                    [
+                        new QuizOptionSeed("A REST endpoint invoked a few times per minute", false),
+                        new QuizOptionSeed("A nightly batch job triggered on a schedule", false),
+                        new QuizOptionSeed("A long-running WebSocket connection held open for hours with in-memory session state", true),
+                        new QuizOptionSeed("Resizing an image in response to a storage upload event", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("AWS Lambda: Understanding Lambda function scaling", "https://docs.aws.amazon.com/lambda/latest/dg/lambda-scaling.html", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("Azure Functions triggers and bindings concepts", "https://learn.microsoft.com/en-us/azure/azure-functions/functions-triggers-bindings", LinkType.OfficialDocs),
+            ]);
+
+        var lesson1Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson1.Slug,
+        [
+            "List one workload from your own experience that fits serverless well, and one that doesn't, with your reasoning",
+            "Find (or add) an idempotency check in a queue- or event-triggered function you've written or reviewed",
+            "Explain out loud two ways to reduce cold-start impact for a latency-sensitive function",
+        ]);
+
+        var lesson2 = BuildLesson(
+            slug: "cloud-observability-metrics-logs-tracing",
+            title: "Cloud Observability: Metrics, Logs & Distributed Tracing",
+            summary: "The three pillars of observability, propagating a correlation ID, and reading a distributed trace as a request crosses multiple services.",
+            estimatedMinutes: 35,
+            objectives:
+            [
+                "Distinguish metrics, logs, and traces, and pick the right one for a given debugging question",
+                "Explain how a correlation/trace ID lets events from a single logical request be linked across service boundaries",
+                "Read a distributed trace spanning multiple services to find which downstream call is responsible for added latency",
+                "Set an alert on a user-facing signal (an SLI) instead of a raw resource metric that produces noisy, low-value alerts",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    **Observability** is commonly described as three pillars, each answering a different kind of question:
+
+                    - **Metrics** — numeric measurements sampled over time (request count, p99 latency, CPU usage, error rate). Cheap to store and aggregate, great for dashboards and "is something wrong right now" alerting, but they can't tell you *which specific request* caused a spike.
+                    - **Logs** — discrete, timestamped events with arbitrary detail ("order 4821 failed validation: missing shipping address"). Great for "what exactly happened," but scanning raw logs across many service instances to reconstruct one request's journey is slow and error-prone without a shared identifier.
+                    - **Traces** — the record of a single request's journey as it moves through a system, made of **spans**: one span per unit of work (an HTTP handler, a downstream call, a database query), each with a start time, duration, and a parent span. All spans belonging to one request share a **trace ID**, so a tracing backend can stitch them back into a single tree showing exactly where time was spent.
+
+                    A **correlation ID** (in a full tracing system, the trace ID) is generated at the entry point of a request and passed along on every downstream call — typically via an HTTP header — so that every log line, span, and metric emitted anywhere in the system for that request can be tied back together. The W3C **Trace Context** standard defines a common `traceparent` header so that services built with different languages and vendors can still propagate the same trace ID consistently.
+
+                    Because capturing a full trace for every single request at high volume is expensive, most tracing systems apply **sampling** — recording a representative subset of traces (e.g., 1 in 100, or always sampling slow/error requests) rather than every one.
+                    """, 1),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    Think of a package shipped through several carriers before reaching your door. **Metrics** are the carrier's daily dashboard: "12,000 packages delivered today, average transit time 2.1 days" — useful for spotting a company-wide slowdown, useless for finding *your* package. **Logs** are the individual scan events at each depot: timestamped, detailed, but scattered across different carriers' systems. A **trace** is what you get by following one specific tracking number across every carrier that touched your package — the same identifier links every scan into one door-to-door story, showing you exactly which depot held onto it the longest.
+                    """, 2),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Three pillars at a glance**
+
+                    - Metrics — numeric, aggregated, cheap, great for dashboards/alerting, no per-request detail
+                    - Logs — detailed, per-event, hard to correlate across services without a shared ID
+                    - Traces — one request's full journey as a tree of spans, linked by a trace ID
+
+                    **Key terms**
+
+                    - **Span** — one unit of work within a trace (a handler, a downstream call, a query)
+                    - **Trace ID / correlation ID** — the identifier shared by everything belonging to one logical request
+                    - **p50 / p95 / p99 latency** — the median / 95th-percentile / 99th-percentile response time; p99 exposes the slow tail that an average hides
+                    - **SLI / SLO / error budget** — Service Level Indicator (a measured signal, e.g., error rate), Objective (the target for it, e.g., 99.9%), and the allowed room to miss it before it's a problem
+
+                    **Common tooling** — Prometheus/Grafana and CloudWatch (metrics); the ELK stack and CloudWatch Logs (logs); Jaeger, Zipkin, AWS X-Ray, and Application Insights (traces); OpenTelemetry as the vendor-neutral instrumentation standard tying all three together.
+                    """, 3),
+                Block(BlockType.CodeSnippet, "Correlated Logging with .NET's Built-In Activity API", BodyFormat.PlainText, """
+                    public class OrderService
+                    {
+                        private static readonly ActivitySource ActivitySource = new("OrderService");
+                        private readonly ILogger<OrderService> _logger;
+
+                        public OrderService(ILogger<OrderService> logger) => _logger = logger;
+
+                        public async Task<Order> CreateOrderAsync(CreateOrderRequest request)
+                        {
+                            // Starting an Activity creates a new span; if a traceparent header
+                            // was received from an upstream caller, this span is automatically
+                            // linked as a child of that same trace -- no manual ID plumbing needed.
+                            using var activity = ActivitySource.StartActivity("CreateOrder");
+                            activity?.SetTag("order.customerId", request.CustomerId);
+
+                            // Activity.Current.TraceId flows into the logging scope, so every
+                            // log line emitted here -- and in any downstream service that
+                            // received the propagated traceparent header -- can be filtered
+                            // down to exactly this one request.
+                            using var _ = _logger.BeginScope(new Dictionary<string, object>
+                            {
+                                ["TraceId"] = Activity.Current?.TraceId.ToString() ?? "none",
+                            });
+
+                            _logger.LogInformation("Creating order for customer {CustomerId}", request.CustomerId);
+
+                            var order = await PersistAndChargeAsync(request);
+
+                            _logger.LogInformation("Order {OrderId} created in {ElapsedMs}ms", order.Id, activity?.Duration.TotalMilliseconds);
+                            return order;
+                        }
+                    }
+                    """, 4, language: "csharp"),
+                Block(BlockType.Diagram, "One Trace ID, Stitched Across Three Services", BodyFormat.StructuredSteps, """
+                    [{"label":"Client Request","note":"generates a trace id, or forwards one it already received"},{"label":"API Gateway","note":"root span begins here"},{"label":"Order Service","note":"child span, same trace id, called by the gateway"},{"label":"Payment Service","note":"child span, called by Order Service"},{"label":"Database Call","note":"innermost span -- often where latency is hiding"},{"label":"Trace Assembled","note":"the tracing backend stitches every span sharing this trace id into one tree"}]
+                    """, 5),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Use **structured logging** (named fields like `{CustomerId}`, not string concatenation) so log fields can be filtered and aggregated, and always propagate trace context using the standard W3C `traceparent` header rather than a homegrown one, so every service and vendor tool in the stack can read it consistently.
+
+                    Alert on **SLIs that reflect what users actually experience** (p99 latency, error rate, availability) with a defined SLO and error budget, rather than alerting directly on raw resource metrics like CPU or memory, which can be perfectly normal while users are still failing requests (or can spike harmlessly with no user impact at all).
+
+                    Sample traces deliberately: capture a small baseline percentage of all requests, but always capture requests that are slow or that error, so the traces you keep are the ones actually worth looking at.
+                    """, 6),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    If asked "how would you debug a request that's slow somewhere across five microservices," don't describe grepping logs in each service one at a time — describe pulling up the distributed trace for that request's trace ID and reading straight to the span with the largest duration. If the system doesn't have full tracing yet, the fallback answer is still solid: "at minimum, I'd make sure a correlation ID is generated at the edge and logged by every service it touches, so I can filter all their logs down to one request even without a full trace view."
+                    """, 7),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Logging without any correlation or trace ID, so a single slow or failed request leaves behind scattered log lines across several services with nothing tying them together — reconstructing what happened becomes guesswork.
+
+                    Also common: alerting purely on infrastructure metrics (CPU, memory, disk) instead of user-facing SLIs, which either misses real user-facing incidents entirely or pages someone for a CPU blip nobody actually experienced as a problem; and leaving trace sampling unset, which either produces blind spots (too little sampled) or an unexpectedly large tracing bill (too much sampled).
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "A request takes 4 seconds end-to-end across three microservices. Which observability pillar is best suited to pinpoint exactly which downstream call caused the slowdown?",
+                    "Distributed tracing breaks a single request into a tree of spans, each with its own duration, so you can see precisely which span (and therefore which service/call) accounts for the time -- something aggregated metrics and uncorrelated logs can't show for one specific request.",
+                    [
+                        new QuizOptionSeed("An aggregated metrics dashboard showing average latency", false),
+                        new QuizOptionSeed("Centralized logs searched without any shared correlation or trace id", false),
+                        new QuizOptionSeed("A distributed trace showing the full span tree for that one request", true),
+                        new QuizOptionSeed("Increasing log verbosity to Debug level across all services", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "What is the main purpose of propagating a trace/correlation ID across service-to-service calls?",
+                    "Propagating a shared trace/correlation id lets every log line, span, and metric emitted anywhere in the system for one logical request be linked back together, even as that request crosses process and service boundaries -- without it, there's no reliable way to reconstruct one request's full journey.",
+                    [
+                        new QuizOptionSeed("To encrypt the request payload in transit", false),
+                        new QuizOptionSeed("To let every log line, span, and metric from one logical request be linked together across services", true),
+                        new QuizOptionSeed("To reduce the total number of HTTP headers sent", false),
+                        new QuizOptionSeed("To automatically retry any request that fails", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("OpenTelemetry: Traces", "https://opentelemetry.io/docs/concepts/signals/traces/", LinkType.OfficialDocs),
+                new ReferenceLinkSeed(".NET distributed tracing concepts", "https://learn.microsoft.com/en-us/dotnet/core/diagnostics/distributed-tracing", LinkType.OfficialDocs),
+            ]);
+
+        var lesson2Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson2.Slug,
+        [
+            "Add a correlation/trace id to one log statement in your own project and confirm it appears on every related log line for that request",
+            "Sketch the span tree for a request that crosses 2+ services you've worked with, marking where you'd expect latency to hide",
+            "Replace one raw-resource-metric alert (CPU/memory) with an alert based on a user-facing SLI (p99 latency or error rate)",
+        ]);
+
+        var module = BuildModule(topicId, "serverless-and-observability", "Serverless & Observability",
+            "Building event-driven, stateless functions-as-a-service, and seeing inside a distributed system once it's running in production — metrics, logs, and distributed traces working together.",
+            70, [lesson1, lesson2], sortOrder: 2);
+
+        return (module, [lesson1Checklist, lesson2Checklist]);
     }
 
     // ============================== Git ==============================
@@ -3537,6 +5447,298 @@ public static class CurriculumContentSeedData
         return (module, [lesson1Checklist, lesson2Checklist, lesson3Checklist, lesson4Checklist]);
     }
 
+    private static (Module, List<ChecklistSeed>) BuildGitInternalsModule(int topicId)
+    {
+        var lesson1 = BuildLesson(
+            slug: "git-internals-objects-refs-and-the-git-directory",
+            title: "Git Internals: Objects, Refs & the .git Directory",
+            summary: "What blobs, trees, and commits actually are on disk, how refs and HEAD really point at things, and what 'detached HEAD' means.",
+            estimatedMinutes: 35,
+            objectives:
+            [
+                "Explain what a blob, tree, and commit object each store, and how they reference each other by hash",
+                "Explain what a ref actually is, and how HEAD normally points at a branch, which points at a commit",
+                "Explain what 'detached HEAD' means and why it is not inherently dangerous, just easy to lose track of",
+                "Locate and interpret the key contents of the .git directory (objects, refs, HEAD, index)",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    Git is, underneath the porcelain commands (`git commit`, `git checkout`, ...), a **content-addressable object database** — every piece of content Git tracks is stored as an object, named by the SHA-1 hash (SHA-256 on newer repos) of its own content. There are four object types:
+
+                    - **blob** — the raw content of a single file, nothing else. No filename, no permissions, just bytes. Two files with identical content anywhere in the repo (or its entire history) hash to the same blob and are stored only once.
+                    - **tree** — a directory listing: a set of entries, each with a file mode, a type (`blob` or `tree`), a name, and the hash of that entry. A tree referencing sub-trees is how Git represents nested folders.
+                    - **commit** — a pointer to exactly one tree (the project's full state at that point), the hash(es) of its parent commit(s), author/committer identity and timestamps, and a message. Note there's no "diff" stored anywhere — a commit's diff is *computed* on demand by comparing its tree to its parent's tree.
+                    - **tag** (annotated tags only) — a pointer to a commit plus a message and optionally a GPG signature.
+
+                    A **ref** is nothing more than a small file containing a 40-(or 64-)character hash — `.git/refs/heads/main` contains the hash of the commit `main` currently points to. Moving a branch is just overwriting that one file with a new hash.
+
+                    **HEAD** is normally a *symbolic* ref: `.git/HEAD` contains the text `ref: refs/heads/main`, i.e. "look at whatever `main` points to." When you check out a branch, Git updates HEAD to point at that branch's ref, and the branch ref moves as you commit. When you instead check out a raw commit hash or a tag directly, Git can't attach HEAD to a branch — so it writes the raw commit hash straight into `.git/HEAD` instead. This is a **detached HEAD**: HEAD points directly at a commit, with no branch pointing at it. Commits you make in this state are real commits, but if you switch to another branch afterward with nothing pointing at them, they become unreachable and are eventually garbage-collected.
+                    """, 1),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    Blobs, trees, and commits are like a filing system built entirely out of content-addressed folders: a blob is a single sheet of paper, filed under a code that's computed from its exact text — so two identical sheets anywhere in the building end up filed under the same code, only once. A tree is an index card listing which sheets (or other index cards) belong in a folder. A commit is a Post-it note stuck to one specific index card, listing who filed it, when, and which earlier Post-it note came before it.
+
+                    A ref is a labeled sticky arrow pointing at one of those Post-it notes — moving the "main" arrow to a new note is trivial, it's just re-sticking one arrow. HEAD is normally "the arrow that follows wherever the main arrow points." Detached HEAD is what happens when you point HEAD's arrow directly at one specific Post-it note instead of at another arrow — perfectly fine to look at, but if you walk away and nothing else is pointing at that note, it can get cleared out later.
+                    """, 2),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Inspecting objects**
+
+                    - `git cat-file -t <hash>` — print an object's type (blob/tree/commit/tag)
+                    - `git cat-file -p <hash>` — pretty-print an object's content
+                    - `git hash-object <file>` — compute the hash a file's content would get (add `-w` to actually write it)
+                    - `git rev-parse HEAD` — resolve HEAD all the way down to its concrete commit hash
+
+                    **Refs and HEAD**
+
+                    - `cat .git/HEAD` — see whether HEAD is symbolic (`ref: refs/heads/...`) or detached (a raw hash)
+                    - `git symbolic-ref HEAD` — print which branch HEAD currently points at (errors if detached)
+                    - `git update-ref refs/heads/main <hash>` — move a branch pointer directly, bypassing commit/merge
+
+                    **Where things live under `.git/`**
+
+                    - `.git/objects/` — the object database (loose objects, later compacted into pack files)
+                    - `.git/refs/heads/`, `.git/refs/tags/` — one file per branch/tag, each holding a commit hash
+                    - `.git/index` — the staging area (a binary file, not human-readable)
+                    - `.git/logs/` — the reflog, a local history of everywhere HEAD and branches have pointed
+                    """, 3),
+                Block(BlockType.CodeSnippet, "Poking at the Object Database Directly", BodyFormat.PlainText, """
+                    # Create a blob object directly, bypassing the working directory entirely
+                    echo "hello world" | git hash-object -w --stdin
+                    # ce013625030ba8dba906f756967f9e9ca394464a
+
+                    # Ask Git what type of object that hash actually is
+                    git cat-file -t ce013625030ba8dba906f756967f9e9ca394464a
+                    # blob
+
+                    # Print its raw content
+                    git cat-file -p ce013625030ba8dba906f756967f9e9ca394464a
+                    # hello world
+
+                    # A commit's tree, in raw form (mode, type, hash, name per entry)
+                    git cat-file -p HEAD^{tree}
+                    # 100644 blob a1b2c3d4e5f6...  README.md
+                    # 040000 tree e5f6a7b8c9d0...  src
+
+                    # What HEAD actually contains right now
+                    cat .git/HEAD
+                    # ref: refs/heads/main
+
+                    # Detach HEAD by checking out a commit hash directly instead of a branch
+                    git checkout 4f2c9a1
+
+                    cat .git/HEAD
+                    # 4f2c9a1d8e7b...   <- a raw commit hash, no "ref:" prefix => detached HEAD
+
+                    # If you commit here and want to keep the work, give it a branch NOW:
+                    git switch -c rescue-this-work
+
+                    # Otherwise, get back onto a real branch (fine if nothing new was committed):
+                    git checkout main
+                    """, 4, language: "bash"),
+                Block(BlockType.Diagram, "The Object Graph, and What HEAD Points At", BodyFormat.AsciiArt, """
+                    refs/heads/main --> commit C2 --(parent)--> commit C1
+                                            |                      |
+                                          tree T2                tree T1
+                                        /         \\                |
+                                 blob(a.txt)   blob(b.txt)     blob(a.txt v1)
+
+                    Normal (attached) HEAD:
+                      HEAD --> refs/heads/main --> C2
+                      (HEAD is a symbolic ref: "follow whatever main points to")
+
+                    Detached HEAD (after `git checkout C1` directly):
+                      HEAD --> C1
+                      (HEAD holds C1's raw hash; no branch ref points at C1 --
+                       a new commit made here is unreachable the moment you switch away)
+                    """, 5),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    If you end up in detached HEAD on purpose (inspecting an old release, bisecting) and make a commit worth keeping, immediately run `git switch -c <some-branch-name>` before doing anything else — that attaches a real ref to the commit you just made, so it survives switching away and is safe from garbage collection.
+
+                    Reach for `git cat-file -p` when you want to *understand* something Git did, not just accept it — seeing the literal tree/commit objects a merge or rebase produced turns "Git did something confusing" into "here is exactly what changed and why."
+                    """, 6),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    If asked "what is a Git commit, really," the strongest answer names the object model directly: a commit object pointing at one tree (a full snapshot, not a diff) and at its parent commit(s) — and that a diff is computed on demand by comparing trees, never stored. Being able to say "blobs store content, trees store structure, commits store history" in one breath is a reliable signal you've gone past memorizing commands.
+                    """, 7),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Panicking after `git checkout <commit-hash>` prints "You are in 'detached HEAD' state" — it's a normal, safe mode for looking at old code; the actual mistake is committing new work there and then switching branches without first running `git switch -c <name>` to keep it.
+
+                    Also common: assuming a commit's diff is stored somewhere — it isn't. Every diff you see (`git show`, `git log -p`) is computed on the fly by comparing that commit's tree object to its parent's tree object.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "What does a Git blob object actually store?",
+                    "A blob stores only the raw bytes of a file's content — no filename, no path, no file mode. Those live in the tree object that references the blob by hash, which is also why identical content anywhere in the repo's history is stored as a single blob.",
+                    [
+                        new QuizOptionSeed("Just the file's raw content, with no filename or file mode attached", true),
+                        new QuizOptionSeed("The file's content plus its filename and path", false),
+                        new QuizOptionSeed("A directory listing of files and sub-directories", false),
+                        new QuizOptionSeed("The author, message, and parent pointer for a change", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "You run `git checkout 4f2c9a1` (a raw commit hash, not a branch name). What does `.git/HEAD` contain afterward, and what's the risk?",
+                    "HEAD becomes 'detached' — .git/HEAD holds the raw commit hash directly instead of a symbolic 'ref: refs/heads/...' line. New commits made in this state have no branch pointing at them, so switching away without first creating a branch (git switch -c) can leave them unreachable and eligible for garbage collection.",
+                    [
+                        new QuizOptionSeed("The raw commit hash directly (detached HEAD); unreferenced new commits there can be lost if you switch away", true),
+                        new QuizOptionSeed("ref: refs/heads/4f2c9a1, functioning exactly like checking out a normal branch", false),
+                        new QuizOptionSeed("Nothing changes — Git automatically creates a branch for you", false),
+                        new QuizOptionSeed("Git refuses the checkout unless the hash matches an existing branch or tag", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Git Internals — Git Objects", "https://git-scm.com/book/en/v2/Git-Internals-Git-Objects", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("Git Internals — Git References", "https://git-scm.com/book/en/v2/Git-Internals-Git-References", LinkType.OfficialDocs),
+            ]);
+
+        var lesson1Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson1.Slug,
+        [
+            "Use git hash-object -w and git cat-file -p to create and read back a blob by hand",
+            "Run cat .git/HEAD before and after deliberately checking out a commit hash, and explain the difference",
+            "Recover from a self-induced detached HEAD by creating a branch with git switch -c before switching away",
+        ]);
+
+        var lesson2 = BuildLesson(
+            slug: "git-hooks-and-automating-your-workflow",
+            title: "Git Hooks & Automating Your Workflow",
+            summary: "Running linters and tests automatically at commit/push time with Git hooks, and why teams use Husky or the pre-commit framework instead of raw .git/hooks scripts.",
+            estimatedMinutes: 30,
+            objectives:
+            [
+                "Explain what a Git hook is, where hooks live, and why they must be made executable",
+                "Write a pre-commit hook that blocks a commit when linting or tests fail",
+                "Explain why scripts placed directly in .git/hooks aren't shared with teammates, and how core.hooksPath, Husky, or the pre-commit framework solve that",
+                "Distinguish client-side hooks (pre-commit, commit-msg, pre-push) from server-side hooks (pre-receive, update)",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    A **Git hook** is a script Git runs automatically at a specific point in its normal command lifecycle — before a commit is finalized, before a push leaves your machine, after a commit lands, and more. Hooks live as individual executable files in `.git/hooks/`, named after the event they run on (`pre-commit`, `commit-msg`, `pre-push`, ...); a fresh repo ships that directory full of `*.sample` files showing the expected format, disabled until you remove the `.sample` suffix and make the file executable (`chmod +x`).
+
+                    **Client-side hooks** run on a developer's own machine as part of everyday commands: `pre-commit` (runs before the commit message editor even opens; a non-zero exit aborts the commit — ideal for linting/tests), `prepare-commit-msg` and `commit-msg` (can generate or validate the commit message itself, e.g. enforcing a format), `post-commit` (runs after the commit exists; notification-only, can't stop anything), and `pre-push` (runs before anything is sent to the remote — a natural place to run a fuller test suite than pre-commit has time for).
+
+                    **Server-side hooks** (`pre-receive`, `update`, `post-receive`) run on the *remote* when it receives pushed commits — used for centrally-enforced policy (rejecting force-pushes to protected branches, running CI, triggering deployments) that no individual developer can bypass by skipping their local hooks.
+
+                    The critical gotcha: `.git/` is Git's own local metadata directory — it is never tracked, committed, or pushed as part of the repository's content. A hook script sitting in `.git/hooks/` on your machine exists only on your machine. To actually *share* a hook with a team, either point Git at a tracked directory with `git config core.hooksPath <dir>`, or use a wrapper tool — **Husky** (Node ecosystem) or the **pre-commit framework** (language-agnostic, Python-based) — which installs a tiny script into `.git/hooks` for you that then runs whatever tracked, version-controlled hook definitions live in the repo.
+                    """, 1),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    A Git hook is like a security checkpoint at a specific doorway in a building — the `pre-commit` checkpoint stands right before the "finalize this submission" door and can turn you back before you ever get through; the `post-commit` checkpoint stands just past a door that's already closed, so it can only ring a bell, not stop you.
+
+                    Raw `.git/hooks` scripts are like a checkpoint guard's personal notes taped to their own desk — helpful to that one guard, invisible to every other guard at every other desk (teammate's machine), because those notes never leave the building along with anything else. Husky or the pre-commit framework is like publishing the checkpoint's official rulebook company-wide and having every guard's desk automatically load a copy of it.
+                    """, 2),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Common client-side hooks, in the order they can fire**
+
+                    - `pre-commit` — before the commit message prompt; can abort (lint/tests)
+                    - `prepare-commit-msg` — can programmatically edit the default message template
+                    - `commit-msg` — validates/rewrites the message itself; can abort (e.g. enforce Conventional Commits)
+                    - `post-commit` — after the commit exists; notification only, cannot abort
+                    - `pre-push` — before anything is sent to the remote; can abort (fuller test suite)
+
+                    **Server-side hooks (run on the remote, unavoidable by clients)**
+
+                    - `pre-receive` — before any refs are updated; can reject the whole push
+                    - `update` — once per ref being updated; can reject individual branches
+                    - `post-receive` — after the push is accepted; triggers CI/CD, notifications
+
+                    **Sharing hooks with a team**
+
+                    - `git config core.hooksPath .githooks` — point Git at a tracked directory instead of `.git/hooks`
+                    - Husky (`npx husky init`) — Node-ecosystem wrapper that installs and syncs hooks automatically
+                    - pre-commit framework (`pre-commit install`) — language-agnostic, config-driven hook manager
+                    """, 3),
+                Block(BlockType.CodeSnippet, "A Pre-Commit Lint Hook, Shared with the Whole Team", BodyFormat.PlainText, """
+                    #!/bin/sh
+                    # .githooks/pre-commit -- must be executable: chmod +x .githooks/pre-commit
+
+                    # Only lint the files that are actually staged for this commit
+                    files=$(git diff --cached --name-only --diff-filter=ACM -- '*.js' '*.jsx')
+                    if [ -n "$files" ]; then
+                      npx eslint $files
+                      if [ $? -ne 0 ]; then
+                        echo "ESLint failed -- fix the errors above before committing."
+                        exit 1
+                      fi
+                    fi
+
+                    # ---- Making Git actually use this tracked script ----
+
+                    # Raw .git/hooks/pre-commit is NOT tracked by git and is never pushed --
+                    # core.hooksPath fixes that by pointing Git at a committed directory instead:
+                    git config core.hooksPath .githooks
+                    git add .githooks/pre-commit
+                    git commit -m "Share the pre-commit lint hook with the team via core.hooksPath"
+
+                    # Husky (Node projects) automates the same idea, synced through package.json:
+                    npx husky init
+                    echo "npx lint-staged" > .husky/pre-commit
+                    git add .husky/pre-commit package.json
+                    git commit -m "Add Husky pre-commit hook running lint-staged"
+
+                    # pre-commit framework (language-agnostic) reads a tracked .pre-commit-config.yaml:
+                    pip install pre-commit
+                    pre-commit install   # writes the actual .git/hooks/pre-commit shim for you
+                    """, 4, language: "bash"),
+                Block(BlockType.Diagram, "What Runs, In Order, When You Run `git commit`", BodyFormat.StructuredSteps, """
+                    [{"label":"pre-commit","note":"runs first; non-zero exit aborts before a message is even requested"},{"label":"prepare-commit-msg","note":"can pre-fill or template the default commit message"},{"label":"commit-msg","note":"validates the final message; non-zero exit aborts the commit"},{"label":"commit object is created"},{"label":"post-commit","note":"runs after the fact; notification only, cannot abort anything"}]
+                    """, 5),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Keep `pre-commit` hooks fast (seconds, not minutes) and scoped to only the staged files — a slow pre-commit hook trains developers to reach for `git commit --no-verify` out of habit, which quietly defeats the entire point of having the hook.
+
+                    Put the slower, fuller test suite in `pre-push` instead of `pre-commit` — it only runs once per push rather than once per commit, so it can afford to be more thorough without punishing every single small commit along the way.
+                    """, 6),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    If asked how you'd enforce code quality automatically before code reaches CI, mention hooks specifically by name (pre-commit for fast local lint, pre-push for a fuller local test pass, server-side pre-receive as the real, unbypassable gate) rather than a vague "we run linters" — and mention that raw `.git/hooks` scripts don't sync across a team on their own, which is exactly why tools like Husky or the pre-commit framework exist.
+                    """, 7),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Writing a great `pre-commit` script directly in `.git/hooks/pre-commit`, committing the rest of the project, and being confused when a teammate's machine doesn't run it — `.git/` is never tracked or pushed, so that script only ever existed locally. Use `core.hooksPath`, Husky, or the pre-commit framework so the hook itself lives in tracked, version-controlled files.
+
+                    Also common: treating client-side hooks as a security boundary — any developer can bypass `pre-commit`/`pre-push` with `--no-verify` or by simply not installing them, so anything that must be enforced (not just encouraged) belongs in a server-side hook or CI, not only a local one.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "You write a great linting script directly into .git/hooks/pre-commit and commit the rest of the repo. Why doesn't a teammate who clones the repo get this hook automatically?",
+                    ".git/ is Git's own local metadata directory — it is never tracked, committed, or pushed as part of the repository's content, so a script placed directly in .git/hooks exists only on the machine it was created on. Sharing a hook requires core.hooksPath pointing at a tracked directory, or a tool like Husky or the pre-commit framework.",
+                    [
+                        new QuizOptionSeed("Because .git/ is never tracked or pushed, so its contents never leave the original machine", true),
+                        new QuizOptionSeed("Because hooks are disabled by default and must be manually re-enabled per developer", false),
+                        new QuizOptionSeed("Because Git hooks only run on the same operating system they were written on", false),
+                        new QuizOptionSeed("Because pre-commit hooks require a paid Git hosting plan to sync", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "Which client-side hook runs after a commit already exists, and therefore cannot prevent that commit from happening?",
+                    "post-commit fires only after the commit object has already been created — it's useful for notifications or triggering local tooling, but by the time it runs, there's nothing left to abort. pre-commit and commit-msg both run before the commit is finalized and can still fail the commit.",
+                    [
+                        new QuizOptionSeed("pre-commit", false),
+                        new QuizOptionSeed("commit-msg", false),
+                        new QuizOptionSeed("post-commit", true),
+                        new QuizOptionSeed("pre-push", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Customizing Git — Git Hooks", "https://git-scm.com/book/en/v2/Customizing-Git-Git-Hooks", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("pre-commit — a framework for managing Git hooks", "https://pre-commit.com/", LinkType.FurtherReading),
+            ],
+            prerequisites: [lesson1]);
+
+        var lesson2Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson2.Slug,
+        [
+            "Write and enable a pre-commit hook that blocks the commit when a lint command fails",
+            "Share that hook with a team using core.hooksPath (or Husky / the pre-commit framework) instead of leaving it in .git/hooks",
+            "Explain out loud why a client-side hook is not a security boundary, and what belongs server-side or in CI instead",
+        ]);
+
+        var module = BuildModule(topicId, "git-internals-and-automation", "Git Internals & Automation",
+            "What Git actually stores on disk (blobs, trees, commits, refs) and how detached HEAD really works, plus automating your workflow with pre-commit/pre-push hooks and tools like Husky and the pre-commit framework.",
+            65, [lesson1, lesson2], sortOrder: 2);
+
+        return (module, [lesson1Checklist, lesson2Checklist]);
+    }
+
     // ============================== DevOps ==============================
 
     private static (Module, List<ChecklistSeed>) BuildDevOpsModule(int topicId)
@@ -3988,6 +6190,301 @@ public static class CurriculumContentSeedData
             140, [lesson1, lesson2, lesson3, lesson4]);
 
         return (module, [lesson1Checklist, lesson2Checklist, lesson3Checklist, lesson4Checklist]);
+    }
+
+    private static (Module, List<ChecklistSeed>) BuildDevOpsReliabilityModule(int topicId)
+    {
+        var lesson1 = BuildLesson(
+            slug: "infrastructure-as-code-terraform-deep-dive",
+            title: "Infrastructure as Code Deep Dive with Terraform",
+            summary: "Managing infrastructure as versioned, reviewable code: what the state file actually is, the plan/apply workflow as a safety gate, reusable modules, and catching drift before it causes an incident.",
+            estimatedMinutes: 40,
+            objectives:
+            [
+                "Explain why infrastructure as code makes infrastructure changes reviewable, repeatable, and versioned like application code",
+                "Describe what Terraform's state file is for, and why it must be stored remotely with locking in a team setting",
+                "Walk through the init -> plan -> apply workflow and explain why 'plan' is a safety gate, not a formality",
+                "Detect infrastructure drift and explain why a reusable module reduces it across environments",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    **Infrastructure as code (IaC)** means infrastructure (servers, networks, databases, load balancers) is defined in declarative configuration files, checked into version control, reviewed like any other code change, and applied by a tool — instead of being clicked together by hand in a cloud console, where changes are undocumented and unrepeatable.
+
+                    **Terraform** is a widely used IaC tool built around a declarative loop: you write HCL config describing the desired end state ("one S3 bucket, one VPC with 3 subnets"), and Terraform figures out what API calls are needed to make reality match it — you never script the individual create/update/delete calls yourself.
+
+                    To do that, Terraform needs to remember what it already created. That's the **state file** — a JSON record mapping each resource in your config to the real-world object it corresponds to (an actual AWS bucket ARN, a real VPC ID). Without state, Terraform would have no way to know "this bucket already exists, just update its tags" versus "create a new one from scratch."
+
+                    Because state is the single source of truth about what's real, it must be shared across a team via a **remote backend** (e.g., an S3 bucket) with **locking** (e.g., a DynamoDB table) — otherwise two engineers running `apply` at the same time can corrupt the state or apply conflicting changes to the same real infrastructure.
+
+                    A **module** is a reusable, parameterized bundle of resources (e.g., "a standard VPC" or "a standard S3 bucket with the right tags and encryption") — used the same way across dev/staging/prod so environments don't quietly diverge from each other over time.
+                    """, 1),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    The state file is like a warehouse's shipping manifest: it doesn't just describe what *should* be on the shelves, it records exactly what's already there and where, so a new shipment can be reconciled against reality instead of guessing. If someone rearranges the warehouse by hand without updating the manifest, the next shipment gets calculated wrong — that mismatch between manifest and reality is exactly what infrastructure **drift** is.
+
+                    A Terraform module is like a standardized IKEA furniture kit: instead of every store re-inventing "a bookshelf" from raw lumber with slightly different measurements each time, everyone assembles the same numbered kit — so every bookshelf in every store is consistent, and improving the design once improves it everywhere it's used.
+                    """, 2),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Core concepts**
+
+                    - Provider — plugin that talks to an API (AWS, Azure, GCP, Kubernetes, ...)
+                    - Resource — one managed object (`aws_s3_bucket`, `aws_instance`, ...)
+                    - Data source — read-only lookup of something Terraform doesn't manage
+                    - Variable / Output — parameterize a config / expose a value to callers
+                    - Module — reusable, parameterized bundle of resources
+
+                    **CLI workflow**
+
+                    - `terraform init` — download providers, configure the backend
+                    - `terraform validate` / `terraform fmt` — syntax check / auto-format
+                    - `terraform plan` — dry run: shows add/change/destroy diff, changes nothing
+                    - `terraform apply` — executes exactly the reviewed plan
+                    - `terraform state list` / `state show <addr>` — inspect what's tracked
+                    - `terraform import` — bring an existing, unmanaged resource under management
+                    - `terraform destroy` — tear down everything the config manages
+                    """, 3),
+                Block(BlockType.CodeSnippet, "Remote State Backend, a Module, and a Managed Resource", BodyFormat.PlainText, """
+                    terraform {
+                      required_version = ">= 1.5.0"
+
+                      # Remote backend: state lives in S3, locking via DynamoDB so two
+                      # engineers can never apply against the same state at once.
+                      backend "s3" {
+                        bucket         = "acme-tfstate"
+                        key            = "prod/network/terraform.tfstate"
+                        region         = "us-east-1"
+                        dynamodb_table = "acme-tfstate-lock"
+                        encrypt        = true
+                      }
+                    }
+
+                    provider "aws" {
+                      region = var.aws_region
+                    }
+
+                    # Reusable module — same VPC shape used in dev/staging/prod,
+                    # parameterized instead of copy-pasted per environment.
+                    module "vpc" {
+                      source     = "./modules/vpc"
+                      cidr_block = "10.0.0.0/16"
+                      az_count   = 3
+                    }
+
+                    resource "aws_s3_bucket" "artifacts" {
+                      bucket = "acme-build-artifacts-${var.environment}"
+
+                      tags = {
+                        Environment = var.environment
+                        ManagedBy   = "terraform"
+                      }
+                    }
+
+                    output "bucket_name" {
+                      value = aws_s3_bucket.artifacts.bucket
+                    }
+                    """, 4, language: "hcl"),
+                Block(BlockType.Diagram, "The Init -> Plan -> Apply Workflow", BodyFormat.StructuredSteps, """
+                    [{"label":"terraform init","note":"downloads providers, configures remote backend"},{"label":"terraform plan","note":"dry run — shows add/change/destroy diff, changes nothing"},{"label":"Review the plan","note":"human or CI approval gate before anything real happens"},{"label":"terraform apply","note":"executes only the reviewed diff"},{"label":"State updated","note":"real resource IDs recorded for the next plan"}]
+                    """, 5),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Always store state remotely with locking (S3+DynamoDB, Terraform Cloud, or equivalent) the moment more than one person touches an environment — local state files are a guaranteed source of corruption and conflicting applies, and they can't be safely shared or reviewed.
+
+                    Run `terraform plan` in CI on every pull request that touches infrastructure and require a human to read the diff before `apply` runs — treating the plan output as a real code-review artifact, not a formality to click past, is what catches an accidental "destroy and recreate" before it happens to a production database.
+                    """, 6),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    If asked how you'd manage infrastructure safely across a team, mention the state file and locked remote backend by name — it's the detail that separates "I've used Terraform" from actually understanding why concurrent applies are dangerous without it. Also explicitly frame `plan` as a safety gate: it previews exactly what will change before anything real happens.
+                    """, 7),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Manually editing or deleting a resource in the cloud console after it's under Terraform management — this creates drift (state says one thing, reality says another), and the next `plan`/`apply` can produce confusing or destructive results trying to reconcile the mismatch.
+
+                    Also common: committing local state files to git (they can contain secrets like database passwords in plaintext) or skipping the locking mechanism on a "just this once" apply — the one time two people apply concurrently without a lock is the time state gets corrupted.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "What is the primary purpose of Terraform's state file?",
+                    "The state file maps each resource declared in configuration to the real-world object it corresponds to, so Terraform knows what already exists and exactly what needs to change on the next plan/apply — without it, every apply would have no memory of prior runs.",
+                    [
+                        new QuizOptionSeed("It's just a human-readable log of past terraform commands", false),
+                        new QuizOptionSeed("It maps configuration to real infrastructure IDs so Terraform knows what already exists", true),
+                        new QuizOptionSeed("It stores a cached copy of the Terraform binary and providers", false),
+                        new QuizOptionSeed("It replaces the need to ever run terraform plan", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "Why is terraform plan considered a critical safety gate rather than an optional step?",
+                    "Plan is a dry run: it shows exactly which resources will be added, changed, or destroyed without touching real infrastructure, giving a human (or CI) the chance to catch a dangerous change — like an accidental destroy-and-recreate — before apply makes it real.",
+                    [
+                        new QuizOptionSeed("It shows the exact add/change/destroy diff before any real infrastructure is touched", true),
+                        new QuizOptionSeed("It's only useful for generating documentation", false),
+                        new QuizOptionSeed("It automatically fixes any configuration errors it finds", false),
+                        new QuizOptionSeed("It permanently locks the state file so no one else can ever run apply", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Terraform: State", "https://developer.hashicorp.com/terraform/language/state", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("Terraform: Modules", "https://developer.hashicorp.com/terraform/language/modules", LinkType.OfficialDocs),
+            ]);
+
+        var lesson1Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson1.Slug,
+        [
+            "Write a minimal Terraform config for one resource and run terraform plan against it",
+            "Explain why the state file needs a remote backend with locking in a team setting",
+            "Describe one example of infrastructure drift and how you'd detect it before it causes an incident",
+        ]);
+
+        var lesson2 = BuildLesson(
+            slug: "chaos-engineering-reliability-testing",
+            title: "Chaos Engineering & Reliability Testing",
+            summary: "Deliberately injecting controlled failure into a system to prove it's actually as resilient as you believe — before an outage runs the experiment for you.",
+            estimatedMinutes: 35,
+            objectives:
+            [
+                "Explain the core chaos engineering loop: hypothesize about steady-state behavior, then test it under injected failure",
+                "Design a chaos experiment with a deliberately minimized, controlled blast radius",
+                "Distinguish chaos engineering from simply causing an outage on purpose",
+                "Identify the steady-state metrics and abort condition needed before running an experiment safely",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    **Chaos engineering** is the discipline of deliberately injecting failure into a system — killing an instance, adding network latency, exhausting memory — to verify it actually behaves the way you assume, instead of finding out for the first time during a real outage.
+
+                    The core loop, per the widely-cited **Principles of Chaos Engineering**: first define a measurable **steady state** (e.g., "p99 checkout latency stays under 300ms, error rate stays under 0.1%"). Then form a **hypothesis** that steady state holds even under a specific real-world failure ("...even if one checkout-service instance is killed"). Then run a controlled experiment that injects exactly that failure, with a deliberately **minimized blast radius** (one instance, one availability zone, a small percentage of traffic — never "everything, everywhere" on the first attempt).
+
+                    This is fundamentally different from an unplanned outage: it's hypothesis-driven, measured against a defined steady state, scoped to limit real user impact, and — critically — reversible, with an automated **abort condition** that halts the experiment the instant the steady state is actually violated.
+
+                    If the hypothesis holds, confidence in that failure mode is now backed by evidence, not assumption. If it doesn't hold, a real weakness was found in a controlled setting, with responders watching and ready to intervene — instead of at 3 a.m. during a genuine incident.
+                    """, 1),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    Chaos engineering is like a fire drill: a building doesn't wait for a real fire to discover whether its evacuation plan actually works — it deliberately triggers the alarm under controlled conditions, with staff ready to intervene, specifically so gaps in the plan are found on a Tuesday afternoon instead of during an actual emergency.
+
+                    It's also like a vaccine: a small, controlled, deliberately limited-scope challenge is introduced specifically to test and strengthen a system's response — not a full-blown uncontrolled infection. The scope is the whole point; nobody would call an actual illness "medicine."
+                    """, 2),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Principles of chaos engineering, roughly**
+
+                    - Define a measurable steady state (a metric, not a vibe)
+                    - Hypothesize the steady state holds under a specific real-world event
+                    - Vary real-world events: instance/pod loss, added latency, dependency failure, resource exhaustion, AZ/network partition
+                    - Minimize blast radius, and only expand it as confidence grows
+                    - Automate experiments and their abort condition — don't rely on a human noticing fast enough
+
+                    **Common failure injections**
+
+                    - Kill a single instance/pod
+                    - Inject artificial network latency or packet loss
+                    - Fail a downstream dependency / third-party API
+                    - Exhaust CPU, memory, or disk on one node
+                    - Partition network traffic between two services or availability zones
+                    """, 3),
+                Block(BlockType.CodeSnippet, "A Chaos Toolkit Experiment: Kill One Pod, Check Steady State", BodyFormat.PlainText, """
+                    {
+                      "version": "1.0.0",
+                      "title": "Checkout service stays healthy when one instance is killed",
+                      "description": "Verifies p99 latency and error rate stay within SLO after terminating a single checkout-service pod",
+                      "steady-state-hypothesis": {
+                        "title": "Checkout service is healthy",
+                        "probes": [
+                          {
+                            "type": "probe",
+                            "name": "p99-latency-below-300ms",
+                            "tolerance": true,
+                            "provider": {
+                              "type": "python",
+                              "module": "chaosprometheus.probes",
+                              "func": "query_bool_threshold",
+                              "arguments": {
+                                "query": "histogram_quantile(0.99, checkout_latency_seconds)",
+                                "threshold": 0.3
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      "method": [
+                        {
+                          "type": "action",
+                          "name": "terminate-one-checkout-pod",
+                          "provider": {
+                            "type": "python",
+                            "module": "chaosk8s.pod.actions",
+                            "func": "terminate_pods",
+                            "arguments": { "label_selector": "app=checkout-service", "rand": true, "qty": 1 }
+                          }
+                        }
+                      ],
+                      "rollbacks": [
+                        {
+                          "type": "action",
+                          "name": "restore-replica-count",
+                          "provider": {
+                            "type": "python",
+                            "module": "chaosk8s.actions",
+                            "func": "scale_deployment",
+                            "arguments": { "name": "checkout-service", "replicas": 6 }
+                          }
+                        }
+                      ]
+                    }
+                    """, 4, language: "json"),
+                Block(BlockType.Diagram, "Chaos Experiment Lifecycle", BodyFormat.StructuredSteps, """
+                    [{"label":"Define steady state","note":"e.g., p99 latency + error rate SLO"},{"label":"Form a hypothesis","note":"'stays healthy if one instance dies'"},{"label":"Design minimal blast radius","note":"one pod, one AZ, small traffic slice"},{"label":"Run experiment with an abort switch","note":"auto-stop if steady state is violated"},{"label":"Measure vs. steady state","note":"hypothesis holds, or a real bug was found"},{"label":"Fix or expand scope","note":"widen blast radius only once confident"}]
+                    """, 5),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Start every new experiment in staging, with the smallest blast radius that still tests the hypothesis (one instance, not the whole fleet) — only run it in production, and only widen its scope, after it's passed safely at a smaller scale with responders watching.
+
+                    Always build in an automated abort condition tied to the same steady-state metric being tested (e.g., auto-stop the experiment if error rate crosses a threshold) — a chaos experiment without a kill switch is just an outage you started on purpose.
+                    """, 6),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    If asked how you'd validate a distributed system's resilience claims, name chaos engineering specifically and frame it around a steady-state hypothesis and blast-radius control — naming a concrete failure injection (kill a pod, add latency, fail a dependency) plus how you'd measure and abort shows you understand it as a rigorous, measured experiment rather than "randomly break things and see what happens."
+                    """, 7),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Running an experiment directly against production with no abort condition and without informing on-call — this turns a controlled experiment into an actual unplanned incident, with no safety net and a confused on-call engineer who wasn't expecting the alert.
+
+                    Also common: treating chaos engineering as "randomly turning things off" with no steady-state hypothesis or measurement plan — without a defined baseline to compare against, there's no way to tell whether the system passed, failed, or the result was meaningless noise.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "What distinguishes chaos engineering from simply causing an outage on purpose?",
+                    "Chaos engineering is a controlled experiment: it starts from a specific hypothesis about steady-state behavior, uses a deliberately minimized (and only gradually expanded) blast radius, and includes a way to measure results and automatically abort — an uncontrolled outage has none of that structure.",
+                    [
+                        new QuizOptionSeed("Nothing — they're the same thing, just with different names", false),
+                        new QuizOptionSeed("It's a hypothesis-driven, blast-radius-controlled, measured, and abortable experiment", true),
+                        new QuizOptionSeed("Chaos engineering only happens in staging and never touches production", false),
+                        new QuizOptionSeed("It requires no metrics, since the goal is just to see what breaks", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "Why should a chaos experiment begin with a small, controlled blast radius instead of testing the whole production system at once?",
+                    "A small blast radius limits real user impact if the hypothesis turns out to be wrong or uncovers a genuine bug, and lets the team build confidence incrementally — expanding scope only after smaller experiments have already passed safely.",
+                    [
+                        new QuizOptionSeed("It limits real user impact if something goes wrong, and lets confidence build incrementally before expanding scope", true),
+                        new QuizOptionSeed("Small-scale experiments are the only kind current tooling supports", false),
+                        new QuizOptionSeed("A large blast radius always produces more statistically valid results", false),
+                        new QuizOptionSeed("It's purely a cost-saving measure with no safety implications", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Principles of Chaos Engineering", "https://principlesofchaos.org/", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("Chaos Toolkit: Core Concepts", "https://chaostoolkit.org/reference/concepts/", LinkType.OfficialDocs),
+            ]);
+
+        var lesson2Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson2.Slug,
+        [
+            "Write a concrete steady-state hypothesis for a service you know (e.g., a latency/error-rate threshold under a specific failure)",
+            "Design one minimal-blast-radius chaos experiment, including its automated abort condition",
+            "Explain why chaos engineering requires a hypothesis and measurement, not just 'turning things off'",
+        ]);
+
+        var module = BuildModule(topicId, "infrastructure-as-code-and-reliability", "Infrastructure as Code & Reliability Engineering",
+            "Managing infrastructure as versioned, reviewable code with Terraform's state file, module, and plan/apply workflow — then proving that resilience by deliberately injecting controlled failure instead of waiting for production to fail on its own.",
+            75, [lesson1, lesson2], sortOrder: 2);
+
+        return (module, [lesson1Checklist, lesson2Checklist]);
     }
 
     // ============================== Architecture ==============================
@@ -4513,6 +7010,335 @@ public static class CurriculumContentSeedData
         return (module, [lesson1Checklist, lesson2Checklist, lesson3Checklist, lesson4Checklist]);
     }
 
+    private static (Module, List<ChecklistSeed>) BuildEventDrivenArchitectureModule(int topicId)
+    {
+        var lesson1 = BuildLesson(
+            slug: "event-driven-architecture-and-cqrs",
+            title: "Event-Driven Architecture & CQRS",
+            summary: "Decoupling services with events, replaying history with event sourcing, and separating read models from write models with CQRS — and knowing when that complexity actually pays off.",
+            estimatedMinutes: 45,
+            objectives:
+            [
+                "Explain the difference between event-driven messaging, event sourcing, and CQRS — related but independent ideas",
+                "Describe how an event store lets you rebuild current state by replaying history",
+                "Explain why CQRS separates read and write models and what problem that solves",
+                "Recognize when the added complexity of CQRS/event sourcing pays off vs. when a simple CRUD model is enough",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    **Event-driven architecture (EDA)** is a style where services communicate by publishing and reacting to **events** — immutable facts about something that already happened ("OrderPlaced", "PaymentCaptured") — rather than calling each other directly. Producers don't know or care who (if anyone) is listening; an **event bus/broker** (Kafka, RabbitMQ, Azure Service Bus, ...) decouples them.
+
+                    **Event sourcing** is a persistence style, not just a messaging style: instead of storing only the current state of an entity ("Order: Shipped"), you store the full sequence of events that produced it ("OrderCreated -> OrderPaid -> OrderShipped") as the system of record. Current state is a *derived* value, computed by replaying events from the beginning (or from the last snapshot).
+
+                    **CQRS (Command Query Responsibility Segregation)** separates the model used to write data (**commands** — validate business rules, produce state changes/events) from the model used to read data (**queries** — a shape optimized purely for display, often denormalized and only eventually consistent with the write side).
+
+                    These three ideas are related but independent: you can have an event bus with no event sourcing (just notifying other services), event sourcing with no CQRS (store events, but query the same replayed aggregate), or CQRS with no event sourcing (separate read/write models, but the write side is still a normal mutable table). They're often combined because each solves a bordering problem, but none requires the other two.
+                    """, 1),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    Event sourcing is like a bank ledger: your bank doesn't overwrite a single "balance" field for your account — it records every deposit and withdrawal as an immutable line item, and your current balance is *calculated* by summing the ledger. If a dispute arises, the bank can replay the entire transaction history to explain how you got there, not just show you "the number."
+
+                    CQRS is like a restaurant's front of house and kitchen: waitstaff (the command side) take orders, enforce rules ("kitchen's closed for that dish"), and send tickets back — a very different job, with different tools, than the menu board or table-status display (the query side) that customers and hosts read from, which is just an optimized view for browsing, not for placing an order.
+                    """, 2),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **When the complexity pays off**
+
+                    - Event-driven messaging — services need to react to things happening elsewhere without tight, synchronous coupling ("when an order ships, notify billing, the warehouse, and analytics" without OrderService knowing any of those three exist)
+                    - Event sourcing — a full audit trail/history is a first-class requirement (financial ledgers, compliance), or you need to reconstruct past state, or you want multiple projections derived from the same history
+                    - CQRS — read and write workloads have genuinely different shapes or scaling needs (complex validation on write, high-volume denormalized reads for a dashboard)
+
+                    **When it's not worth it**
+
+                    - A standard CRUD resource with no audit requirement and no read/write scaling mismatch — one model with a repository is simpler and correct
+                    - "We might need it later" — introduce these patterns when the specific pain (coupling, audit gaps, read/write contention) actually shows up
+                    """, 3),
+                Block(BlockType.CodeSnippet, "Event-Sourced Aggregate Behind a CQRS Command/Query Split", BodyFormat.PlainText, """
+                    // --- Event sourcing: events are the source of truth, not a mutable row ---
+                    public abstract record OrderEvent(int OrderId, DateTime OccurredUtc);
+                    public record OrderCreated(int OrderId, DateTime OccurredUtc, string Sku, int Quantity) : OrderEvent(OrderId, OccurredUtc);
+                    public record OrderShipped(int OrderId, DateTime OccurredUtc, string TrackingNumber) : OrderEvent(OrderId, OccurredUtc);
+
+                    public class Order
+                    {
+                        public int Id { get; private set; }
+                        public bool IsShipped { get; private set; }
+                        private readonly List<OrderEvent> _uncommittedEvents = [];
+                        public IReadOnlyList<OrderEvent> UncommittedEvents => _uncommittedEvents.AsReadOnly();
+
+                        public static Order Create(int id, string sku, int quantity)
+                        {
+                            var order = new Order();
+                            order.Apply(new OrderCreated(id, DateTime.UtcNow, sku, quantity));
+                            return order;
+                        }
+
+                        public void Ship(string trackingNumber)
+                        {
+                            if (IsShipped) throw new InvalidOperationException("Already shipped.");
+                            Apply(new OrderShipped(Id, DateTime.UtcNow, trackingNumber));
+                        }
+
+                        // Rebuilds current state by replaying history — this IS what "event sourcing" means.
+                        public static Order Rehydrate(IEnumerable<OrderEvent> history)
+                        {
+                            var order = new Order();
+                            foreach (var e in history) order.Apply(e, isNew: false);
+                            return order;
+                        }
+
+                        private void Apply(OrderEvent e, bool isNew = true)
+                        {
+                            switch (e)
+                            {
+                                case OrderCreated c: Id = c.OrderId; break;
+                                case OrderShipped: IsShipped = true; break;
+                            }
+                            if (isNew) _uncommittedEvents.Add(e);
+                        }
+                    }
+
+                    // --- CQRS write side: validates rules, appends events ---
+                    public class ShipOrderCommandHandler(IEventStore eventStore)
+                    {
+                        public async Task HandleAsync(int orderId, string trackingNumber)
+                        {
+                            var history = await eventStore.LoadAsync(orderId);
+                            var order = Order.Rehydrate(history);
+                            order.Ship(trackingNumber);                          // domain rule enforced here
+                            await eventStore.AppendAsync(orderId, order.UncommittedEvents);
+                        }
+                    }
+
+                    // --- CQRS read side: a separate, denormalized model built purely for display ---
+                    public record OrderSummaryDto(int OrderId, string Status, string? TrackingNumber);
+
+                    public class OrderSummaryQueryService(OrderReadDbContext readDb)
+                    {
+                        // Reads a projection table kept up to date by an event handler —
+                        // never the Order aggregate or its event stream directly.
+                        public async Task<OrderSummaryDto?> GetAsync(int orderId)
+                        {
+                            var row = await readDb.OrderSummaries.FindAsync(orderId);
+                            return row is null ? null : new OrderSummaryDto(row.OrderId, row.Status, row.TrackingNumber);
+                        }
+                    }
+                    """, 4, language: "csharp"),
+                Block(BlockType.Diagram, "CQRS: Different Models for Writes and Reads", BodyFormat.AsciiArt, """
+                    Write side (commands)                        Read side (queries)
+
+                    Client --command--> Command Handler          Client --query--> Read Model
+                                            |                                          ^
+                                            v                                          |
+                                       Order Aggregate                        Denormalized
+                                       (validates rules)                      Projection Table
+                                            |                                          ^
+                                            v                                          |
+                                        Event Store  -------- events applied ---------+
+                                     (OrderCreated, OrderShipped, ...)
+
+                    The write side and read side use DIFFERENT models. The read side is
+                    updated asynchronously as events are applied — it can lag slightly
+                    behind the write side (eventual consistency).
+                    """, 5),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Start with a single shared read/write model (plain CRUD) and only split into CQRS when a specific pain shows up — the read side needs a shape wildly different from the write side, or read and write load need to scale independently. Introducing the split preemptively adds two models, a projection pipeline, and eventual-consistency bugs for a problem you don't have yet.
+
+                    If you do event-source an aggregate, snapshot periodically once event streams get long (store "state as of event #500" alongside the events) so rehydration doesn't mean replaying an ever-growing history from event #1 on every load. Version your event schemas from day one (`OrderCreatedV2`) — old events on disk can never be edited, only superseded, so plan for that up front.
+                    """, 6),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    If asked "would you use CQRS/event sourcing for this system," the strong answer names the specific pain that justifies it ("the audit/compliance requirement means we need full history, not just current state" or "the dashboard's read pattern is nothing like the transactional write pattern") rather than reaching for it as a default. Interviewers listen for judgment about when NOT to use a pattern as much as when to use it.
+                    """, 7),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Treating "eventually consistent" as a free property instead of a real UX and correctness concern — if a user ships an order and immediately queries the read model before the projection catches up, they may see stale state. Either design the UI to tolerate that lag, or read from the write side immediately after a write when strict consistency is required.
+
+                    Also common: conflating the three concepts covered here — saying "we do event-driven architecture" to imply event sourcing and CQRS are also in place, when a team might just have a message bus notifying other services with no event store and no separate read model at all. Being precise about which of the three is actually in use avoids confusing an interviewer or a teammate.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "What problem does CQRS's read/write model separation primarily solve?",
+                    "CQRS is worth it when read and write workloads have genuinely different shapes or scaling needs, so each side can use a model optimized for its own job. It commonly introduces eventual consistency between the two sides rather than guaranteeing strong consistency.",
+                    [
+                        new QuizOptionSeed("Read and write workloads that have genuinely different shapes or scaling needs can each use a model optimized for that job", true),
+                        new QuizOptionSeed("It makes relational databases unnecessary", false),
+                        new QuizOptionSeed("It removes the need for validation on writes", false),
+                        new QuizOptionSeed("It guarantees strong consistency between reads and writes", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "In event sourcing, what is the actual 'source of truth' for an entity's state?",
+                    "The full ordered sequence of events is the source of truth. Current state (or a snapshot) is a derived value, reconstructed by replaying those events — it is never itself the record of what happened.",
+                    [
+                        new QuizOptionSeed("A single row holding the latest state", false),
+                        new QuizOptionSeed("The full ordered sequence of events; current state is derived by replaying them", true),
+                        new QuizOptionSeed("A cached DTO returned by the last query", false),
+                        new QuizOptionSeed("Whatever the read model currently shows", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("CQRS (Martin Fowler)", "https://martinfowler.com/bliki/CQRS.html", LinkType.FurtherReading),
+                new ReferenceLinkSeed("Event Sourcing pattern (Azure Architecture Center)", "https://learn.microsoft.com/en-us/azure/architecture/patterns/event-sourcing", LinkType.OfficialDocs),
+            ]);
+
+        var lesson1Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson1.Slug,
+        [
+            "Identify one place in a system you know where an event bus decouples two services, and name what would break if they called each other directly instead",
+            "Describe a scenario in your domain where full event-sourced history (not just current state) would be a real requirement, not a nice-to-have",
+            "Explain, in your own words, why CQRS's read model is allowed to be eventually consistent, and what UX decision that forces",
+        ]);
+
+        var lesson2 = BuildLesson(
+            slug: "api-design-rest-graphql-grpc",
+            title: "API Design: REST, GraphQL & gRPC",
+            summary: "Designing resource-oriented REST APIs, recognizing when GraphQL solves genuine over/under-fetching problems, and when gRPC's performance characteristics justify leaving JSON-over-HTTP behind.",
+            estimatedMinutes: 45,
+            objectives:
+            [
+                "Apply REST resource-design conventions (nouns not verbs, correct HTTP methods/status codes) to a real endpoint",
+                "Explain the over-fetching/under-fetching problem GraphQL solves, and the N+1 problem it can introduce",
+                "Explain what makes gRPC fast (HTTP/2 multiplexing, Protobuf binary serialization, streaming) and when that speed matters",
+                "Choose the right API style for a given scenario based on client diversity, performance needs, and contract stability",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    **REST** models an API as a set of **resources** identified by URLs (nouns: `/orders/42`, not verbs: `/getOrder?id=42`), manipulated with standard HTTP methods (`GET` read, `POST` create, `PUT`/`PATCH` update, `DELETE` remove) and standard status codes (`200`, `201`, `404`, `409`, ...). The Richardson Maturity Model ranges from Level 0 ("HTTP as a tunnel for RPC") up to Level 3 (full hypermedia/HATEOAS) — most real APIs stop at Level 2 (resources + verbs + status codes) without full hypermedia, and that's a legitimate, pragmatic stopping point.
+
+                    **GraphQL** exposes a single endpoint and a typed schema; the *client* specifies exactly which fields it wants in a query, and a set of **resolvers** on the server fetch each field. This directly solves REST's **over-fetching** (getting back fields you don't need) and **under-fetching** (needing several round trips to assemble one screen) problems — at the cost of shifting complexity server-side (resolver performance, the N+1 query problem, no free HTTP caching by URL).
+
+                    **gRPC** is a contract-first RPC framework: you define services and messages in a `.proto` file, and code generation produces strongly-typed client/server stubs in many languages. It runs over **HTTP/2** (multiplexed streams over one connection, unlike HTTP/1.1's per-request overhead) and serializes with **Protocol Buffers** (a compact binary format, smaller and faster to parse than JSON), and natively supports streaming (client, server, or bidirectional). The trade-off: it isn't natively browser-friendly (needs gRPC-Web/a proxy) and payloads aren't human-readable on the wire.
+                    """, 1),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    REST is like ordering from a diner's printed menu: a fixed, well-known set of dishes (resources), each with a name (URL) and a small number of standard ways to interact with it (verbs) — simple and predictable, but every dish comes as a whole plate whether you wanted all of it or not.
+
+                    GraphQL is like a buffet where you build your own plate: you walk down the line and take exactly the items you want in a single pass, instead of ordering three separate fixed plates from three counters to get the toppings you actually wanted. But the kitchen (the server) now has to handle far more distinct plate combinations behind the scenes.
+
+                    gRPC is like a dedicated courier contract between two companies that have already agreed on exact packaging, routes, and paperwork (the `.proto` contract, code-generated on both ends) — extremely fast and efficient between the two parties who signed the contract, but not something a random public customer can just walk up and use without the same paperwork.
+                    """, 2),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Choose REST when**
+                    - Public/third-party API, broad unknown client base, wide tooling/caching support matters (HTTP caching, browsers, curl-ability)
+
+                    **Choose GraphQL when**
+                    - Many different clients (web, mobile, various screens) need different slices of the same underlying data, and over/under-fetching is a real, measured problem — not just a theoretical one
+
+                    **Choose gRPC when**
+                    - Service-to-service calls inside your own infrastructure, where both ends can regenerate stubs from the same `.proto`, and low latency/high throughput or streaming genuinely matters
+
+                    **Red flags regardless of style**
+                    - Verbs in REST URLs (`/getUser`, `/createOrder`) — RPC-style thinking wearing a REST costume
+                    - A GraphQL resolver making one database query per item in a list (N+1) instead of batching
+                    - Choosing gRPC for a public browser-facing API without accounting for the extra proxy layer needed
+                    """, 3),
+                Block(BlockType.CodeSnippet, "REST Endpoint, Contrasted with GraphQL and gRPC Contracts", BodyFormat.PlainText, """
+                    // REST: resource-oriented Minimal API endpoint (nouns + HTTP verbs + status codes)
+                    app.MapGet("/orders/{id:int}", async (int id, IOrderRepository repo) =>
+                        await repo.FindAsync(id) is { } order
+                            ? Results.Ok(new OrderDto(order.Id, order.Status))
+                            : Results.NotFound());
+
+                    app.MapPost("/orders", async (CreateOrderRequest req, IOrderRepository repo) =>
+                    {
+                        var order = await repo.CreateAsync(req.Sku, req.Quantity);
+                        return Results.Created($"/orders/{order.Id}", new OrderDto(order.Id, order.Status));
+                    });
+
+                    // GraphQL (for contrast): the client specifies exactly the fields it needs,
+                    // fetching an order AND its customer's name in one round trip:
+                    //
+                    //   query {
+                    //     order(id: 42) {
+                    //       status
+                    //       customer { name }
+                    //     }
+                    //   }
+
+                    // gRPC (for contrast): contract-first .proto — client and server both
+                    // generate strongly-typed stubs from this single definition:
+                    //
+                    //   service OrderService {
+                    //     rpc GetOrder (GetOrderRequest) returns (Order);
+                    //     rpc StreamOrderUpdates (GetOrderRequest) returns (stream OrderStatusUpdate);
+                    //   }
+                    //
+                    //   message Order {
+                    //     int32 id = 1;
+                    //     string status = 2;
+                    //   }
+                    """, 4, language: "csharp"),
+                Block(BlockType.Diagram, "Over-Fetching and Under-Fetching: REST vs. GraphQL", BodyFormat.AsciiArt, """
+                    REST (fixed shape per endpoint):
+
+                      GET /orders/42     -> { id, status, total, items[], customer_id, ... }
+                                             (over-fetching: fields the screen never uses)
+                      GET /customers/7   -> a second round trip just to get the customer's name
+                                             (under-fetching: needed data wasn't in the first call)
+
+                    GraphQL (client-specified shape, one round trip):
+
+                      query { order(id: 42) { status customer { name } } }
+                           -> { "order": { "status": "Shipped", "customer": { "name": "Grace" } } }
+
+                      Exactly the fields asked for, from both "resources," in a single request.
+                    """, 5),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    For REST: version your API from day one (`/v1/orders`) even before you think you need it — the day you need a breaking change without a version prefix is a bad day. Support pagination and rate limiting on any collection endpoint before it's a production incident, not after.
+
+                    For GraphQL: use a batching/caching layer (the DataLoader pattern) in resolvers that fetch related data, or a single list-of-100-orders query will silently issue 100+ individual database round trips (the N+1 problem) instead of one batched query.
+
+                    For gRPC: only reach for it when both ends of the call are under your control (or willing to consume a `.proto` contract) — internal service-to-service calls are the sweet spot; a public API consumed by arbitrary browser clients is not, without an extra gRPC-Web proxy layer.
+                    """, 6),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    If asked "REST or GraphQL or gRPC for this system," anchor the answer in the actual client and performance constraints in the question — number of distinct client types, whether over/under-fetching is a measured problem, whether the calls are public or internal, whether raw throughput/latency is a stated requirement — rather than picking a favorite. Naming the specific trade-off you're accepting ("gRPC's speed, at the cost of needing a proxy for browser clients") reads as far more senior than a one-word answer.
+                    """, 7),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Building an "RPC in REST's clothing" API — URLs full of verbs (`/api/getUserOrders`, `/api/createOrderForUser`) and everything as `POST`, ignoring HTTP methods and status codes entirely. It looks like REST at a glance but gets none of REST's actual benefits (cacheability, predictable semantics, tooling that understands HTTP verbs).
+
+                    Also common: adopting GraphQL to "fix" over-fetching without ever addressing resolver-level N+1 queries, trading one performance problem (too many fields) for a worse one (too many database round trips) — and adopting gRPC for a public API only to discover, late, that browsers can't call it directly without an added proxy layer.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "What specific problem does GraphQL solve that plain REST endpoints often don't?",
+                    "GraphQL lets the client specify exactly which fields it needs, across related resources, in a single request — directly addressing REST's tendency toward over-fetching (unused fields) and under-fetching (extra round trips).",
+                    [
+                        new QuizOptionSeed("It lets the client specify exactly which fields it needs across related resources in a single request, avoiding over-fetching and under-fetching", true),
+                        new QuizOptionSeed("It replaces the need for a database", false),
+                        new QuizOptionSeed("It's always faster than REST regardless of use case", false),
+                        new QuizOptionSeed("It removes the need for authentication", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "What primarily makes gRPC faster than typical JSON-over-HTTP/1.1 REST calls?",
+                    "gRPC runs over HTTP/2, which multiplexes many requests over a single connection, and serializes messages with Protocol Buffers, a compact binary format that's smaller and faster to parse than JSON — together, not either alone, driving the speed advantage.",
+                    [
+                        new QuizOptionSeed("HTTP/2 multiplexing plus compact binary Protobuf serialization", true),
+                        new QuizOptionSeed("gRPC uses a different, faster version of JSON", false),
+                        new QuizOptionSeed("gRPC bypasses TCP entirely", false),
+                        new QuizOptionSeed("gRPC never validates request data", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("RESTful web API design (Azure Architecture Center)", "https://learn.microsoft.com/en-us/azure/architecture/best-practices/api-design", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("Introduction to gRPC (official docs)", "https://grpc.io/docs/what-is-grpc/introduction/", LinkType.FurtherReading),
+            ]);
+
+        var lesson2Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson2.Slug,
+        [
+            "Rewrite one verb-in-the-URL endpoint from your own code (or a public API you've used) as proper REST nouns + HTTP verbs",
+            "Identify one screen in an app you use that likely over-fetches or under-fetches data with its current API, and describe how GraphQL would change that one request",
+            "Explain, in your own words, why gRPC is a strong fit for internal service-to-service calls but a poor default for a public browser-facing API",
+        ]);
+
+        var module = BuildModule(topicId, "event-driven-architecture-and-api-design", "Event-Driven Architecture & API Design",
+            "Decoupling services with events and CQRS, and choosing the right API style — REST, GraphQL, or gRPC — for a given client and performance profile.",
+            90, [lesson1, lesson2], sortOrder: 2);
+
+        return (module, [lesson1Checklist, lesson2Checklist]);
+    }
+
     // ============================== Soft Skills ==============================
 
     private static (Module, List<ChecklistSeed>) BuildSoftSkillsModule(int topicId)
@@ -4936,11 +7762,232 @@ public static class CurriculumContentSeedData
         return (module, [lesson1Checklist, lesson2Checklist, lesson3Checklist, lesson4Checklist]);
     }
 
+    private static (Module, List<ChecklistSeed>) BuildLeadershipAndCareerGrowthModule(int topicId)
+    {
+        var lesson1 = BuildLesson(
+            slug: "mentoring-and-leading-without-authority",
+            title: "Mentoring & Technical Leadership Without Authority",
+            summary: "Leading through influence instead of authority, mentoring engineers without creating dependency, and giving code review feedback that builds skill.",
+            estimatedMinutes: 30,
+            objectives:
+            [
+                "Distinguish leading through influence from leading through positional authority, and identify the levers you actually have as an individual contributor",
+                "Mentor a less experienced engineer in a way that builds their independent judgment instead of creating dependency on you",
+                "Give code review feedback that is specific, calibrated to risk, and paired with a concrete suggestion",
+                "Recognize when to step in directly on a struggling teammate's problem versus when to let them struggle productively",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    Technical leadership on most engineering teams has almost nothing to do with a title — the majority of "leading" a senior engineer does happens without any formal authority over the people involved. You can't order a teammate to adopt your design, and you usually can't performance-manage a peer. What you actually have is **influence**: technical credibility, the quality of your reasoning, relationships built over time, and the example you set through your own work.
+
+                    **Mentoring** is a specific, high-leverage form of this influence. The goal of mentoring someone isn't to make them dependent on your answers — it's to build their own judgment so they need you less over time. A mentor who always just fixes the bug themselves feels helpful in the moment but is quietly making the mentee worse at debugging.
+
+                    **Code review** is where most engineers exercise technical leadership day to day, and it's easy to get wrong in two opposite directions: rubber-stamping everything (no real leadership happening) or nitpicking everything as if every comment carries equal weight (feedback fatigue, and the reviewer starts to look like a gatekeeper rather than a collaborator). The fix is **calibration** — distinguishing a must-fix blocking issue from a stylistic preference from a genuine question, and saying explicitly which one each comment is.
+                    """, 1),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    Mentoring well is like scaffolding on a building under construction: the scaffolding supports work that can't yet stand on its own, but a good builder deliberately removes sections as each part becomes self-supporting — leaving it up forever doesn't protect the building, it just means it never learns to bear its own weight. Leading through influence, meanwhile, is more like being a rudder than an engine: a rudder contributes no propulsion of its own, but it can steer a huge amount of momentum other people are already generating, provided the crew trusts the person holding it.
+                    """, 2),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Levers of influence you have without formal authority**
+
+                    - Technical credibility earned through past decisions being right
+                    - The quality and clarity of your reasoning, written down where others can evaluate it
+                    - Relationships and trust built before you need to spend them
+                    - Setting the example yourself, publicly, before asking others to follow it
+
+                    **Calibrating a code review comment — say which one it is**
+
+                    - **Blocking** — must be fixed before merge (a real bug, a security issue, a broken contract)
+                    - **Suggestion** — worth considering, author's call whether to take it
+                    - **Nit** — pure style/preference, explicitly non-blocking (prefix with "nit:")
+                    - **Question** — you genuinely don't understand something, not a disguised criticism
+                    """, 3),
+                Block(BlockType.CodeSnippet, "Code Review Feedback: Weak vs. Calibrated", BodyFormat.PlainText, """
+                    // Vague, unprioritized — the author can't tell what's a blocker
+                    // and what's a preference, so everything reads as equally urgent.
+                    "This isn't how I'd do it. Also this variable name is bad. Also
+                    what about errors here?"
+
+                    // Calibrated — each comment says what kind of comment it is and
+                    // why, so the author can triage in seconds.
+                    "blocking: this doesn't handle the case where `items` is empty —
+                    line 42 will throw. suggestion: consider extracting this into a
+                    helper, it's reused in two other places. nit: `tmp` -> `pendingItems`
+                    would read more clearly. question: is retry-on-failure intentional
+                    here, or should this bubble up the error?"
+                    """, 4),
+                Block(BlockType.Diagram, "The Mentoring Loop", BodyFormat.StructuredSteps, """
+                    [{"label":"Let them attempt it first","note":"resist doing it for them"},{"label":"Ask a guiding question","note":"instead of giving the answer"},{"label":"Let them struggle a bit","note":"productive struggle builds judgment"},{"label":"Step in only if truly stuck","note":"or the cost of struggle exceeds the learning"},{"label":"Debrief afterward","note":"what worked, what you'd try next time"},{"label":"Widen their scope next time","note":"gradually remove the scaffolding"}]
+                    """, 5),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Before jumping in to solve a struggling teammate's problem for them, ask one guiding question first ("what have you tried so far?" or "what does the error actually say?") — most of the time it's enough to unstick them while leaving the learning, and the actual solution, theirs.
+
+                    In code review, say out loud (in the comment itself) which category a piece of feedback is — "nit:", "blocking:", "question:" — so the author isn't left guessing how much weight to give each comment.
+                    """, 6),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    "Tell me about a time you led without formal authority" or "tell me about mentoring someone" are both extremely common behavioral prompts — a strong answer names a specific person and situation, describes what you did to build their capability (not just what you personally fixed), and ideally closes with evidence that they could handle something similar independently afterward.
+                    """, 7),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Rewriting a mentee's pull request yourself instead of commenting on it — it's faster in the moment, but it teaches them that struggling gets rescued rather than resolved, and it quietly erodes their ownership of the code.
+
+                    Also common: burying a genuinely blocking issue in a wall of nitpicks with no signal of severity, so the author either misses the real problem or dismisses the whole review as excessive.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "A junior engineer is stuck debugging a failing test. What's the risk of just fixing it yourself instead of walking them through it?",
+                    "It creates dependency — the junior engineer doesn't build the debugging judgment needed to solve similar problems on their own next time, even though the immediate bug gets fixed either way.",
+                    [
+                        new QuizOptionSeed("It takes slightly longer than fixing it yourself", false),
+                        new QuizOptionSeed("It creates dependency and the junior doesn't build the underlying debugging judgment", true),
+                        new QuizOptionSeed("There is no real risk, since the bug gets fixed either way", false),
+                        new QuizOptionSeed("It will make you look less capable to your manager", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "Why explicitly label a code review comment as 'nit:', 'blocking:', or 'question:'?",
+                    "It tells the author how much weight to give each comment, so a real blocking issue doesn't get lost among stylistic nitpicks, and a genuine question isn't mistaken for a hidden criticism.",
+                    [
+                        new QuizOptionSeed("It makes the reviewer look more thorough", false),
+                        new QuizOptionSeed("It lets the author triage feedback correctly instead of treating every comment as equally urgent", true),
+                        new QuizOptionSeed("It is required by most version control systems", false),
+                        new QuizOptionSeed("It removes the need to explain the reasoning behind a comment", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("HBR: The Necessary Art of Persuasion", "https://hbr.org/1998/05/the-necessary-art-of-persuasion", LinkType.FurtherReading),
+                new ReferenceLinkSeed("Google Engineering Practices: How to Do a Code Review", "https://google.github.io/eng-practices/review/reviewer/", LinkType.FurtherReading),
+            ]);
+
+        var lesson1Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson1.Slug,
+        [
+            "Identify one task you currently do yourself that you could instead teach a teammate to own, and plan the handoff",
+            "Rewrite one of your own recent code review comments to explicitly label it (blocking/suggestion/nit/question) and pair it with a concrete suggestion",
+            "Next time a teammate asks you how to fix something, practice asking one guiding question before giving the answer",
+        ]);
+
+        var lesson2 = BuildLesson(
+            slug: "promotion-packets-and-self-advocacy",
+            title: "Career Growth: Promotion Packets & Self-Advocacy",
+            summary: "Documenting impact continuously, building a promotion case around scope and influence rather than activity, and advocating for yourself without over-selling.",
+            estimatedMinutes: 30,
+            objectives:
+            [
+                "Explain why continuous impact documentation beats a pre-cycle scramble",
+                "Structure a promotion case around scope, ambiguity, and influence rather than raw activity or hours",
+                "Self-advocate for a promotion or raise using calibrated, evidence-based language instead of over-selling or under-selling",
+                "Recognize the leveling signals that typically separate adjacent levels at most tech companies",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    A promotion is very rarely decided in the room where you present your case — by the time a manager or promotion committee formally reviews it, the outcome mostly depends on evidence collected *throughout* the year, not assembled the week before the cycle. The single highest-leverage habit is keeping a running **impact log** (sometimes called a "brag document"): a few sentences, added continuously, every time you ship something, unblock someone, or make a decision that mattered.
+
+                    At most tech companies, the difference between adjacent levels isn't "worked more hours" or "closed more tickets" — it's a shift along three axes:
+
+                    - **Scope** — the size and boundary of what you own (a function vs. a service vs. a whole system)
+                    - **Ambiguity** — how well-defined the problem was when it landed on your desk
+                    - **Influence** — how far your impact reached beyond your own immediate task (your team, other teams, the org)
+
+                    A strong promotion packet is a narrative built from real entries mapped onto these three axes, not a list of everything you did.
+                    """, 1),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    Building a promotion case is like building a legal case, not writing a memoir: a lawyer collects evidence continuously as events happen, because reconstructing it all from memory months later is unreliable and misses things — while a memoir just recalls whatever feels most vivid in hindsight, which is exactly the recency bias that makes a pre-cycle scramble unreliable.
+                    """, 2),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **A good impact log entry (write it the week it happens)**
+
+                    - What the situation/problem was, briefly
+                    - What you specifically did (not "we")
+                    - The measurable or observable outcome
+                    - Which axis it demonstrates: scope, ambiguity, or influence
+
+                    **Leveling signals that typically separate adjacent levels**
+
+                    - Scope: owns a component -> owns a service -> owns a system/roadmap area
+                    - Ambiguity: given a spec -> given a rough goal -> defines the goal itself
+                    - Influence: affects own PRs -> affects the team -> affects other teams/org
+                    """, 3),
+                Block(BlockType.CodeSnippet, "Impact Log Entry: Weak vs. Strong", BodyFormat.PlainText, """
+                    // Weak: describes activity, not impact — hard to map to any
+                    // leveling signal, and easy to forget the specifics by promo time.
+                    "Worked on the checkout service this quarter. Fixed several bugs
+                    and helped onboard a new hire."
+
+                    // Strong: specific, attributes the action to you, states the
+                    // outcome, and implicitly demonstrates scope + influence.
+                    "Redesigned the checkout retry logic after diagnosing a
+                    production incident that was costing ~2% of failed orders;
+                    partnered with the payments team on the fix; the change reduced
+                    failed-order rate by 90% and was later adopted by a second
+                    service with a similar pattern."
+                    """, 4),
+                Block(BlockType.Diagram, "Building a Promotion Case", BodyFormat.StructuredSteps, """
+                    [{"label":"Log impact continuously","note":"weekly, not the week before the cycle"},{"label":"Map each entry to scope, ambiguity, influence"},{"label":"Get early calibration from your manager","note":"months before the formal cycle"},{"label":"Identify and proactively close gaps","note":"e.g. no cross-team influence entries"},{"label":"Draft the packet as a narrative","note":"not a bullet dump of everything"},{"label":"Self-advocate in the conversation","note":"calibrated, evidence-based, not inflated"}]
+                    """, 5),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Add to your impact log the same week something happens, in two or three sentences — waiting until the cycle guarantees you'll forget your best early-year work and over-weight whatever is most recent.
+
+                    Ask your manager for informal calibration well before the formal cycle opens ("does this feel like next-level scope to you?") — a surprise "not yet" during the actual review is almost always a sign this conversation should have happened months earlier.
+                    """, 6),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    The habit of documenting specific, outcome-focused impact throughout the year pays off twice: it builds your internal promotion packet, and the same entries are usually ready-made material for STAR-style behavioral interview stories when you eventually interview elsewhere — a well-kept impact log is a stockpile of concrete stories, not just a promotion artifact.
+                    """, 7),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Waiting until the week before the cycle to reconstruct your impact from memory — recency bias means your best work from ten months ago quietly disappears, and what's left overweights whatever shipped most recently regardless of actual significance.
+
+                    Equally common in both directions: over-selling with inflated claims that don't survive a follow-up question ("I redesigned the whole architecture" when you changed one component), and under-selling out of modesty by describing real, scope-expanding work in passive, activity-only language ("helped out with the migration") instead of naming your specific contribution and its outcome.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "Why keep a running impact log throughout the year instead of reconstructing your accomplishments right before a promotion cycle?",
+                    "Reconstructing from memory suffers from recency bias — early-year work gets forgotten and recent work gets overweighted regardless of its actual significance. A continuous log also lets you notice and close scope gaps while there's still time.",
+                    [
+                        new QuizOptionSeed("It's required paperwork at most companies", false),
+                        new QuizOptionSeed("It avoids recency bias and lets you notice scope gaps early enough to still close them", true),
+                        new QuizOptionSeed("It replaces the need for a manager conversation entirely", false),
+                        new QuizOptionSeed("It only matters for engineers who are bad at self-promotion", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "Which factors typically distinguish one engineering level from the next, more than raw hours worked or tickets closed?",
+                    "Scope (the size and boundary of what you own) and ambiguity (how well-defined the problem was when it reached you), along with influence beyond your own immediate task, are the signals leveling committees actually look for — not activity volume.",
+                    [
+                        new QuizOptionSeed("Years of tenure and number of programming languages known", false),
+                        new QuizOptionSeed("Scope of ownership and how much ambiguity you resolved", true),
+                        new QuizOptionSeed("Number of meetings attended and lines of code written", false),
+                        new QuizOptionSeed("How many hours you work per week", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("levels.fyi: Compare Engineering Levels Across Companies", "https://www.levels.fyi/", LinkType.FurtherReading),
+                new ReferenceLinkSeed("HBR: Managing Oneself", "https://hbr.org/2005/01/managing-oneself", LinkType.FurtherReading),
+            ],
+            prerequisites: [lesson1]);
+
+        var lesson2Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson2.Slug,
+        [
+            "Start (or backfill) an impact log with 3 real entries from the last few months, each mapped to scope, ambiguity, or influence",
+            "Draft one paragraph of a promotion-case narrative using a real or plausible impact log entry",
+            "Identify one gap in your current scope (e.g., no cross-team influence entries) and plan a concrete way to close it this quarter",
+        ]);
+
+        var module = BuildModule(topicId, "leadership-and-career-growth", "Leadership & Career Growth",
+            "Leading through influence instead of authority, mentoring engineers effectively, and building an evidence-based case for promotion and self-advocacy.",
+            75, [lesson1, lesson2], sortOrder: 2);
+
+        return (module, [lesson1Checklist, lesson2Checklist]);
+    }
+
     // ============================== Shared builders ==============================
 
     private static Module BuildModule(
         int topicId, string slug, string title, string description, int estimatedMinutes,
-        List<Lesson> lessons, CapstoneProject? capstone = null)
+        List<Lesson> lessons, CapstoneProject? capstone = null, int sortOrder = 1)
     {
         var now = DateTime.UtcNow;
         return new Module
@@ -4949,7 +7996,7 @@ public static class CurriculumContentSeedData
             Slug = slug,
             Title = title,
             Description = description,
-            SortOrder = 1,
+            SortOrder = sortOrder,
             EstimatedMinutes = estimatedMinutes,
             CreatedUtc = now,
             UpdatedUtc = now,
