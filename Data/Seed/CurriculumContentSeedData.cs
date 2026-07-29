@@ -21,24 +21,34 @@ public static class CurriculumContentSeedData
         {
             BuildCSharpModule(topicIdBySlug["csharp"]),
             BuildCSharpAsyncAndTestingModule(topicIdBySlug["csharp"]),
+            BuildCSharpOopDeepDiveModule(topicIdBySlug["csharp"]),
             BuildDotNetModule(topicIdBySlug["dotnet"]),
             BuildDotNetProductionReadinessModule(topicIdBySlug["dotnet"]),
+            BuildDotNetScalingAndResilienceModule(topicIdBySlug["dotnet"]),
             BuildDsaModule(topicIdBySlug["dsa"]),
             BuildDsaGraphsModule(topicIdBySlug["dsa"]),
+            BuildDsaLinkedListsAndHeapsModule(topicIdBySlug["dsa"]),
             BuildSystemDesignModule(topicIdBySlug["system-design"]),
             BuildApiGatewayAndCdnModule(topicIdBySlug["system-design"]),
+            BuildConsistentHashingAndCaseStudiesModule(topicIdBySlug["system-design"]),
             BuildSqlModule(topicIdBySlug["sql"]),
             BuildSqlAdvancedModule(topicIdBySlug["sql"]),
+            BuildSqlViewsAndOptimizationModule(topicIdBySlug["sql"]),
             BuildCloudModule(topicIdBySlug["cloud"]),
             BuildCloudObservabilityModule(topicIdBySlug["cloud"]),
+            BuildCloudScalingModule(topicIdBySlug["cloud"]),
             BuildGitModule(topicIdBySlug["git"]),
             BuildGitInternalsModule(topicIdBySlug["git"]),
+            BuildGitReleasesModule(topicIdBySlug["git"]),
             BuildDevOpsModule(topicIdBySlug["devops"]),
             BuildDevOpsReliabilityModule(topicIdBySlug["devops"]),
+            BuildDevOpsConfigurationAndCapacityModule(topicIdBySlug["devops"]),
             BuildArchitectureModule(topicIdBySlug["architecture"]),
             BuildEventDrivenArchitectureModule(topicIdBySlug["architecture"]),
+            BuildDesignPatternsAndAntiPatternsModule(topicIdBySlug["architecture"]),
             BuildSoftSkillsModule(topicIdBySlug["soft-skills"]),
             BuildLeadershipAndCareerGrowthModule(topicIdBySlug["soft-skills"]),
+            BuildEstimationAndCollaborationModule(topicIdBySlug["soft-skills"]),
         };
 
         return (
@@ -832,6 +842,386 @@ public static class CurriculumContentSeedData
         var module = BuildModule(topicId, "csharp-async-and-testing", "Async Programming & Unit Testing",
             "Task-based asynchronous programming and the testing discipline needed to write and verify reliable, concurrent C# code.",
             75, [lesson1, lesson2], sortOrder: 2);
+
+        return (module, [lesson1Checklist, lesson2Checklist]);
+    }
+
+    private static (Module, List<ChecklistSeed>) BuildCSharpOopDeepDiveModule(int topicId)
+    {
+        var lesson1 = BuildLesson(
+            slug: "oop-inheritance-polymorphism-constructors",
+            title: "OOP Deep Dive: Inheritance, Polymorphism & Constructors",
+            summary: "Overloading vs. overriding, virtual/override/new/sealed, constructor chaining, and the exact order objects get built.",
+            estimatedMinutes: 40,
+            objectives:
+            [
+                "Distinguish method overloading (compile-time) from overriding (runtime), and explain what `virtual`, `override`, `new`, and `sealed` each actually do to dispatch",
+                "Chain constructors with `this(...)`/`base(...)` and state the exact order base fields, base constructor, derived fields, and derived constructor run",
+                "Explain how `abstract` differs from a `virtual` method with a default body, and why calling a virtual method from a constructor is dangerous",
+                "Predict the output of a polymorphic call chain that mixes `override` and `new`",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    **Overloading vs. overriding** are opposite mechanisms that are easy to conflate:
+
+                    - **Overloading** is resolved at compile time: multiple methods share a name but have *different parameter lists* in the same class. The compiler picks which one to call based on the argument types at the call site.
+                    - **Overriding** is resolved at runtime: a derived class supplies a new implementation for a method the base class marked `virtual` (or `abstract`), keeping the *same signature*. Which implementation actually runs depends on the object's real runtime type, not the type of the variable holding it.
+
+                    **The dispatch keywords:**
+
+                    - `virtual` — marks a member as overridable; calls to it go through virtual dispatch (conceptually, a lookup in the object's own "vtable," keyed on its actual runtime type) instead of being nailed down at compile time.
+                    - `override` — supplies a new implementation for a `virtual` or `abstract` member, and remains itself virtual for anything further down the hierarchy.
+                    - `new` — *hides* a base member with the same name instead of overriding it. It does not participate in virtual dispatch at all: which version runs depends on the *compile-time (declared) type* of the reference used to call it, not the object's runtime type. This is a classic interview trap.
+                    - `sealed` — on an `override`, stops any class further down the hierarchy from overriding that member again; on a class declaration, prevents the class from being inherited from at all.
+
+                    **Constructor chaining**: `: this(...)` delegates to another constructor in the *same* class first; `: base(...)` delegates to a constructor in the *base* class first. If neither is written explicitly, the base class's parameterless constructor runs implicitly before the derived constructor's body.
+
+                    **Construction order**, top to bottom, for `new Derived(...)`: base class field initializers run, then the base class constructor body runs, then derived class field initializers run, then the derived class constructor body runs. A derived object is always built "outside-in" — the base is fully constructed before the derived layer adds anything. This is exactly why calling a `virtual` method from inside a base constructor is dangerous: dispatch will correctly jump to the derived class's override, but that override may read derived fields that haven't been initialized yet, since derived field initializers run *after* the base constructor.
+
+                    **Static vs. instance members**: `static` members belong to the type itself — a single copy shared across every instance (and existing even with zero instances) — while instance members belong to a specific object, each with its own copy of instance fields. Static members cannot use `this` and can never be `virtual`, because there's no per-instance runtime type to dispatch on.
+
+                    **`abstract`** goes further than `virtual`: an `abstract` class cannot be instantiated directly, and an `abstract` method has no body at all — it *forces* every concrete derived class to supply one via `override`. A `virtual` method with a default body, by contrast, is something derived classes are free to leave untouched.
+
+                    **Destructors/finalizers** (`~ClassName()`) run non-deterministically, sometime after the garbage collector decides an object is unreachable — never call one directly and never rely on its timing. They exist as a last-resort safety net for unmanaged resources; `IDisposable` plus `using` is the deterministic tool to reach for instead.
+                    """, 1),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    `virtual`/`override` is like a franchise's operating manual that says "each location customizes this specific procedure" — head office (the base class) writes a generic version, every branch (a derived class) runs its own override, and a delivery driver who only knows "this is some franchise location" doesn't need to know which branch's version will run — it just works.
+
+                    `new` is the opposite: it's like someone printing a new sign over the entrance of one specific branch, while the delivery company's routing system — which only reads the *original* sign type recorded in its database — keeps sending drivers to follow the old instructions, because it never looks at the physical sign at all.
+
+                    Constructor chaining is like building a house: you cannot run the electrical wiring (a derived constructor's work) before the foundation exists (the base constructor) — the foundation is always poured first, no matter how the rooms above it are laid out afterward.
+                    """, 2),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Overload vs. override**
+
+                    - Overload — same name, different parameters, resolved at compile time
+                    - Override — same signature, resolved at runtime via virtual dispatch, requires `virtual`/`abstract` on the base member
+
+                    **Dispatch keywords**
+
+                    - `virtual` — base member is overridable
+                    - `override` — replaces a virtual/abstract member; stays overridable further down
+                    - `new` — hides (not overrides); dispatch follows the reference's *declared* type
+                    - `sealed override` — stops further overriding of this one member
+                    - `sealed class` — stops any inheritance from this class at all
+
+                    **Construction order (always base first)**
+
+                    1. Base field initializers
+                    2. Base constructor body
+                    3. Derived field initializers
+                    4. Derived constructor body
+
+                    **Static vs. instance**
+
+                    - `static` — one copy per type, no `this`, never `virtual`
+                    - instance — one copy per object, can be `virtual`
+                    """, 3),
+                Block(BlockType.CodeSnippet, "Overloading, Overriding, `new`, and Constructor Chaining Together", BodyFormat.PlainText, """
+                    public class Shape
+                    {
+                        public string Name { get; }
+
+                        public Shape(string name)
+                        {
+                            Name = name; // base field/state set BEFORE any derived constructor runs
+                        }
+
+                        // virtual: overridable via runtime dispatch
+                        public virtual string Describe() => $"A shape named {Name}";
+
+                        // Overloading: same name "Area", different parameter lists (compile-time resolution)
+                        public virtual double Area() => 0;
+                        public double Area(double scaleFactor) => Area() * scaleFactor;
+                    }
+
+                    public class Circle : Shape
+                    {
+                        public double Radius { get; }
+
+                        // base(...): Shape's constructor runs FIRST, before this body executes
+                        public Circle(double radius) : base($"circle-r{radius}")
+                        {
+                            Radius = radius;
+                        }
+
+                        // override: replaces Shape.Describe via virtual dispatch
+                        public override string Describe() => $"{base.Describe()}, radius {Radius}";
+
+                        // sealed override: no class derived from Circle may override Area again
+                        public sealed override double Area() => Math.PI * Radius * Radius;
+                    }
+
+                    public class Square : Shape
+                    {
+                        public double Side { get; }
+
+                        public Square(double side) : base($"square-s{side}") => Side = side;
+
+                        // new: HIDES Shape.Describe instead of overriding it — no virtual dispatch
+                        public new string Describe() => $"A square with side {Side}";
+
+                        public override double Area() => Side * Side;
+                    }
+
+                    // Polymorphism through a base-typed reference:
+                    Shape[] shapes = { new Circle(2), new Square(3) };
+                    foreach (var s in shapes)
+                    {
+                        Console.WriteLine(s.Describe()); // Circle's override runs via virtual dispatch
+                    }
+
+                    Square sq = new Square(3);
+                    Shape asShape = sq;
+                    Console.WriteLine(sq.Describe());      // "A square with side 3" — declared type is Square
+                    Console.WriteLine(asShape.Describe()); // "A shape named square-s3" — declared type is Shape; `new` never dispatches
+                    """, 4, language: "csharp"),
+                Block(BlockType.Diagram, "Construction Order for `new Circle(2)`", BodyFormat.StructuredSteps, """
+                    [{"label":"Shape field initializers run","note":"Name field not yet assigned by a constructor"},{"label":"Shape(string name) constructor body runs","note":"Name is set here, before Circle exists at all"},{"label":"Circle field initializers run","note":"Radius still at its default (0) until the next step"},{"label":"Circle(double radius) constructor body runs","note":"Radius assigned; object now fully initialized"},{"label":"Object fully constructed","note":"Only now is it safe for virtual calls to see complete derived state"}]
+                    """, 5),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Prefer `virtual`/`override` over `new` almost always — `new` silently breaks polymorphism and is a frequent source of "why did the wrong method run?" bugs whenever code holds a base-typed reference or interface. Reach for `new` only in the rare, deliberate case of intentionally hiding an unrelated base member that happens to share a name.
+
+                    Never call a `virtual` method from inside a constructor. Because derived field initializers haven't run yet at that point, an override reading a derived field will see its default value (`0`/`null`/`false`) instead of what you'd expect — a bug that's notoriously hard to spot because the calling code looks completely correct.
+
+                    Mark a class or an override `sealed` once you know it should never be extended further — it documents intent for the next reader and lets the JIT devirtualize the call for a small performance win.
+                    """, 6),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    A classic C# interview question shows a `Shape`/`Square` pair exactly like the snippet above and asks, "what does `asShape.Describe()` print, and why?" The correct answer hinges on one sentence: virtual dispatch (`override`) looks at the object's *runtime* type, while method hiding (`new`) looks at the reference's *declared, compile-time* type. Say that sentence explicitly — it signals you understand vtables conceptually, not just the keyword syntax.
+
+                    Also be ready to trace constructor execution order out loud for a two- or three-level hierarchy — interviewers use it to confirm you understand a derived object is built "outside-in" (base first, all the way down), which is the opposite of how `IDisposable.Dispose()` cleanup typically cascades ("inside-out," derived first).
+                    """, 7),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Using `new` to "override" a method because the compiler didn't complain, without realizing it silently disables polymorphism for that member — any code that holds the object through a base-class reference or interface keeps calling the base version forever, which is rarely the intent.
+
+                    Also common: calling a `virtual` method from a base constructor, expecting the derived override's logic to run against fully-initialized derived state. It does run — that's exactly what virtual dispatch guarantees — but the derived class's own fields are still at their default values at that point, producing a subtle, hard-to-diagnose bug that only shows up as "wrong" output, never a crash.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "`Shape` declares `public virtual string Describe()`. `Square : Shape` declares `public new string Describe()`. Given `Shape s = new Square(3); s.Describe();`, what runs?",
+                    "`new` hides the base member instead of overriding it, so it never participates in virtual dispatch. Which method runs is decided by the declared (compile-time) type of the reference — here, `Shape` — not the object's actual runtime type, so Shape's Describe() runs.",
+                    [
+                        new QuizOptionSeed("Square's Describe(), because the object's runtime type is Square", false),
+                        new QuizOptionSeed("Shape's Describe(), because `new` hides rather than overrides, and `s` is declared as Shape", true),
+                        new QuizOptionSeed("A compiler error, because Square redefines a method that already exists in Shape", false),
+                        new QuizOptionSeed("It depends on whether Square is marked sealed", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "For `new Circle(2)` where `Circle : Shape`, in what order do these run: (A) Circle's constructor body, (B) Shape's constructor body, (C) Shape's field initializers, (D) Circle's field initializers?",
+                    "Construction always proceeds outside-in: the base class's field initializers run, then its constructor body, then the derived class's field initializers, then the derived constructor body — so the order is C, B, D, A.",
+                    [
+                        new QuizOptionSeed("C, B, D, A", true),
+                        new QuizOptionSeed("D, A, C, B", false),
+                        new QuizOptionSeed("C, D, B, A", false),
+                        new QuizOptionSeed("A, B, C, D", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Polymorphism (C# Programming Guide)", "https://learn.microsoft.com/en-us/dotnet/csharp/fundamentals/object-oriented/polymorphism", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("Constructors (C# Programming Guide)", "https://learn.microsoft.com/en-us/dotnet/csharp/programming-guide/classes-and-structs/constructors", LinkType.OfficialDocs),
+            ]);
+
+        var lesson1Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson1.Slug,
+        [
+            "Write a 3-class hierarchy (base + two derived) using virtual/override, then rewrite one override as `new` and observe the difference through a base-typed reference",
+            "Trace out loud, for your own hierarchy, the exact order base and derived field initializers and constructor bodies run",
+            "Find (or intentionally write) a virtual method call inside a constructor and explain why it's risky",
+        ]);
+
+        var lesson2 = BuildLesson(
+            slug: "enums-and-exception-handling",
+            title: "Enums, Exception Handling & Custom Exceptions",
+            summary: "Flags enums and bitwise combination, try/catch/finally with exception filters, the exception hierarchy, and writing correct custom exceptions.",
+            estimatedMinutes: 35,
+            objectives:
+            [
+                "Define an enum with an explicit underlying type, and explain why casting an out-of-range int to it doesn't throw",
+                "Combine `[Flags]` enum values with bitwise operators and check membership correctly with `HasFlag()`",
+                "Order multiple catch blocks correctly, and use an exception filter (`when`) to add a runtime condition to a catch clause",
+                "Write a well-formed custom exception, and rethrow correctly with `throw;` instead of `throw ex;`",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    **Enums** are named constants backed by an integral type (`int` by default, but you can choose `byte`, `long`, or another integral type explicitly with `enum OrderStatus : byte`). Under the hood, an enum value is just that integer — the names exist purely for readability and compile-time type safety. Unless you assign explicit values, members auto-increment starting at 0. Casting an out-of-range int to an enum is *legal* in C# and does not throw — the variable ends up holding a value with no matching name, a common source of bugs when the value comes from outside the program (user input, a database, deserialized JSON) and is never validated.
+
+                    **`[Flags]` enums** represent a *combination* of options stored as bits in a single variable, with each member's value chosen as a distinct power of two (1, 2, 4, 8, ...) so the bits never collide. Combine values with `|` (bitwise OR — "give me Read and Write together"), test membership with `&` (bitwise AND) or the more readable `HasFlag()`, and remove a flag with `value &= ~FlagToRemove`. Without the `[Flags]` attribute, calling `ToString()` on a combined value just prints the raw number; with it, C# renders the combination as a readable, comma-separated list of the matching names.
+
+                    **Exception handling** (`try`/`catch`/`finally`) lets code recover from, or clean up after, an error. `finally` always runs — whether the `try` block succeeded, threw, or even hit a `return` — which makes it the right place for cleanup that absolutely must happen (though `using`/`IDisposable` is the more idiomatic tool for that specific case). Multiple `catch` blocks are checked top-to-bottom, and the *first matching type wins*, so they must be ordered from **most specific to least specific**. C# actually enforces this at compile time (error CS0160) when one caught type is a direct supertype of another with no filter attached — but the moment either `catch` clause has a `when` filter, the compiler can no longer prove one subsumes the other, so ordering mistakes stop being caught for you.
+
+                    An **exception filter** (`catch (HttpRequestException ex) when (ex.StatusCode == 503)`) adds a runtime condition to a catch clause — if the filter evaluates to false, the exception keeps propagating past that block exactly as if it had never matched, without needing to be caught and manually rethrown.
+
+                    **Exception hierarchy**: everything derives from `System.Exception`. `SystemException` is the base for most CLR/BCL exceptions (`NullReferenceException`, `ArgumentException`, `InvalidOperationException`, and similar). `ApplicationException` was originally intended as the base for user-defined exceptions, but current Microsoft guidance is to derive custom exceptions directly from `Exception` instead.
+
+                    **Custom exceptions** are worth creating when a caller genuinely needs to catch and handle *that specific failure* differently from other errors, or when the failure needs to carry extra structured data (an order ID, a list of validation failures) that a generic `Exception` message string can't hold. A well-formed custom exception implements the three conventional constructors — parameterless, message-only, and message-plus-inner-exception — forwarding each to the matching base constructor.
+
+                    **`throw;` vs. `throw ex;`**: a bare `throw;` inside a `catch` block rethrows the *original* exception object with its original stack trace intact. `throw ex;` throws that same exception object as a *new* throw point, overwriting the stack trace so it now appears to have originated at the rethrow site — destroying the information about where the failure actually happened. Always prefer bare `throw;` when rethrowing an exception unchanged.
+
+                    Exceptions exist for **exceptional, unexpected conditions** — not for routine control flow. Throwing and catching is comparatively expensive (unwinding the stack, capturing a stack trace), and more importantly, using exceptions for outcomes that happen regularly (like "the user typed an invalid number") makes ordinary code paths harder to follow. Prefer return-based signaling — `int.TryParse(...)`, a nullable return, or a `Result`-style type — for outcomes that are a normal, expected part of the flow, and reserve `throw` for situations the caller genuinely can't be expected to plan around.
+                    """, 1),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    A plain `enum` is like a car's gear selector — Park, Reverse, Neutral, Drive — exactly one position is engaged at a time, and the numbers stamped next to the letters on the dashboard are just an internal detail nobody needs to think about.
+
+                    A `[Flags]` enum is like a pizza order's topping checklist — you can tick Pepperoni *and* Mushroom *and* ExtraCheese on the very same order, because each topping is an independent bit, not one exclusive choice.
+
+                    `try`/`catch`/`finally` is like a fire drill: the `try` block is the normal work being done, each `catch` is the specific evacuation plan for the type of emergency that actually occurred, and `finally` is "turn off the stove regardless" — that step happens whether or not there was a fire, and even if someone already left the building through an unplanned exit (a `return` inside the `try` block).
+                    """, 2),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Enum basics**
+
+                    - `enum Status { A, B, C }` — backed by `int`, auto-numbered from 0
+                    - `enum Status : byte { ... }` — explicit, smaller underlying type
+                    - `Enum.TryParse<Status>("B", out var s)` — safe string-to-enum conversion
+                    - Casting an out-of-range int to an enum does NOT throw — validate untrusted sources yourself
+
+                    **`[Flags]` enums**
+
+                    - Mark with `[Flags]`; give each member a distinct power of two
+                    - Combine: `perms = Read | Write;`
+                    - Check one flag: `perms.HasFlag(Read)` or `(perms & Read) == Read`
+                    - Remove a flag: `perms &= ~Write;`
+
+                    **Exception handling**
+
+                    - Order catch blocks most-specific to least-specific (compiler enforces this without a filter)
+                    - `catch (Ex ex) when (condition)` — filter; falls through if false, as though uncaught
+                    - `throw;` — rethrow, preserves the original stack trace
+                    - `throw ex;` — rethrow, resets the stack trace to here (avoid)
+                    - `finally` — always runs, even after a `return` inside `try`/`catch`
+
+                    **Custom exceptions**
+
+                    - Derive from `Exception` (not `ApplicationException`)
+                    - Implement the 3 standard constructors: `()`, `(string message)`, `(string message, Exception inner)`
+                    """, 3),
+                Block(BlockType.CodeSnippet, "Flags Enum, a Custom Exception, and Ordered Catch Blocks with a Filter", BodyFormat.PlainText, """
+                    [Flags]
+                    public enum FilePermissions
+                    {
+                        None = 0,
+                        Read = 1 << 0,
+                        Write = 1 << 1,
+                        Execute = 1 << 2,
+                        ReadWrite = Read | Write,
+                    }
+
+                    // Custom exception: the 3 conventional constructors, plus a data-carrying one.
+                    public class InsufficientPermissionException : Exception
+                    {
+                        public FilePermissions Required { get; }
+                        public FilePermissions Actual { get; }
+
+                        public InsufficientPermissionException() { }
+                        public InsufficientPermissionException(string message) : base(message) { }
+                        public InsufficientPermissionException(string message, Exception inner) : base(message, inner) { }
+
+                        public InsufficientPermissionException(FilePermissions required, FilePermissions actual)
+                            : base($"Required {required}, but only had {actual}.")
+                        {
+                            Required = required;
+                            Actual = actual;
+                        }
+                    }
+
+                    public void WriteToFile(string path, FilePermissions grantedPermissions)
+                    {
+                        if (!grantedPermissions.HasFlag(FilePermissions.Write))
+                        {
+                            throw new InsufficientPermissionException(FilePermissions.Write, grantedPermissions);
+                        }
+
+                        try
+                        {
+                            File.WriteAllText(path, "data");
+                        }
+                        catch (UnauthorizedAccessException)
+                        {
+                            // Most specific first: an OS-level permission problem.
+                            throw; // rethrows the ORIGINAL exception, stack trace intact
+                        }
+                        catch (IOException ex) when (ex.Message.Contains("disk", StringComparison.OrdinalIgnoreCase))
+                        {
+                            // Exception filter: only matches disk-related IO failures.
+                            Console.WriteLine("Disk full — alerting ops.");
+                            throw; // still the safe rethrow, even inside a filtered catch
+                        }
+                        catch (IOException)
+                        {
+                            // Falls through here for any other, less specific IOException.
+                            Console.WriteLine("Generic IO failure while writing file.");
+                            throw;
+                        }
+                        finally
+                        {
+                            Console.WriteLine("WriteToFile attempt finished."); // always runs, success or failure
+                        }
+                    }
+                    """, 4, language: "csharp"),
+                Block(BlockType.Diagram, "How a Thrown Exception Finds Its Catch Block", BodyFormat.StructuredSteps, """
+                    [{"label":"Exception thrown inside try","note":"e.g. an UnauthorizedAccessException"},{"label":"Runtime checks catch blocks top-to-bottom","note":"first matching TYPE wins"},{"label":"Any exception filter (when) evaluated","note":"false filter = keep searching, as if it never matched"},{"label":"Matching catch block runs","note":"or the exception propagates to the caller if none match"},{"label":"finally block runs","note":"always, regardless of whether a catch matched or a throw/rethrow happened"}]
+                    """, 5),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Order `catch` blocks from most specific to least specific, and let genuinely unexpected exceptions propagate rather than catching `Exception` broadly "just in case" — a broad catch that swallows everything hides bugs instead of fixing them.
+
+                    Use `throw;` (never `throw ex;`) whenever you need to log or react to an exception and then let it continue up the stack — `throw ex;` destroys the original stack trace, turning a five-minute debugging session into a much longer one.
+
+                    Create a custom exception only when a caller needs to catch *that* specific failure differently, or needs extra structured data attached to it — otherwise a clear message on a built-in exception type (`ArgumentException`, `InvalidOperationException`) is simpler and just as effective. Reserve exceptions for truly exceptional conditions; use `TryParse`-style return values for outcomes that happen routinely.
+                    """, 6),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    "What's the difference between `throw;` and `throw ex;`?" is one of the most common C# interview questions, precisely because it's easy to get wrong in real code and hard to notice in a code review. Answer with the mechanism, not just the rule: `throw;` preserves the original `StackTrace` because it never creates a new throw point, while `throw ex;` resets it to the current line, making the exception look like it originated somewhere it didn't.
+
+                    Be ready to explain exception filters (`when`) as a way to be selective *without* the cost of catch-and-rethrow: contrast `catch (Ex ex) when (condition) { ... }` with the older pattern of `catch (Ex ex) { if (!condition) throw; ... }` — the filter version leaves the original throw point completely untouched if the condition is false, since the CLR never even considers the exception "caught" in that case.
+                    """, 7),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Writing `catch (Exception ex) { throw ex; }` (or worse, swallowing the exception entirely with an empty catch block) — both destroy diagnostic information or hide failures outright, and both make production incidents dramatically harder to root-cause.
+
+                    Also common: assuming the compiler always protects you from bad catch-block ordering. It does reject `catch (IOException)` placed before `catch (FileNotFoundException)` at compile time (error CS0160) when there's a direct base/derived relationship and no filter — but the moment either catch clause has a `when` filter, the compiler can no longer prove one subsumes the other, so a broad `catch (Exception ex) when (...)` can sit above a specific handler and silently intercept exceptions that were meant to reach it.
+
+                    And with `[Flags]` enums specifically: forgetting to give each member a distinct power of two (e.g., writing `Execute = 3` instead of `Execute = 4`), which makes combined values ambiguous and breaks `HasFlag()` checks.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "Inside a catch block, what's the actual difference between `throw;` and `throw ex;`?",
+                    "`throw;` rethrows the same exception object without creating a new throw point, so its original StackTrace is preserved. `throw ex;` throws that object as a new throw point, overwriting the stack trace with the current location and destroying the record of where the failure actually originated.",
+                    [
+                        new QuizOptionSeed("throw; rethrows the original exception with its original stack trace; throw ex; resets the stack trace to the rethrow location", true),
+                        new QuizOptionSeed("They are functionally identical; it's purely a style preference", false),
+                        new QuizOptionSeed("throw; is only legal when the caught exception has no named variable", false),
+                        new QuizOptionSeed("throw ex; is the only form that preserves the inner exception", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "You write `catch (IOException) { ... }` followed immediately by `catch (FileNotFoundException) { ... }` (which derives from IOException), with no `when` filter on either. What happens?",
+                    "With no exception filter, the compiler can prove the second catch block can never be reached, since IOException already matches every FileNotFoundException — this is a compile-time error (CS0160), not a silent runtime bug.",
+                    [
+                        new QuizOptionSeed("This fails to compile, because the compiler detects the more general catch block already matches every FileNotFoundException", true),
+                        new QuizOptionSeed("Both blocks compile fine; only the IOException block ever runs at runtime", false),
+                        new QuizOptionSeed("The compiler automatically reorders the catch blocks for you", false),
+                        new QuizOptionSeed("Only the FileNotFoundException block runs, since it's more specific", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Enumeration types (C# reference)", "https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/builtin-types/enum", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("Exceptions and exception handling (.NET)", "https://learn.microsoft.com/en-us/dotnet/standard/exceptions/", LinkType.OfficialDocs),
+            ],
+            prerequisites: [lesson1]);
+
+        var lesson2Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson2.Slug,
+        [
+            "Define a [Flags] enum from scratch and write code that combines values with `|` and checks one with HasFlag()",
+            "Write a custom exception with all 3 conventional constructors, throw it, and catch it with an exception filter (`when`)",
+            "Find one `throw ex;` in your own code (or intentionally write one) and change it to a bare `throw;`",
+        ]);
+
+        var module = BuildModule(topicId, "csharp-oop-deep-dive", "OOP Deep Dive & Exception Handling",
+            "Real inheritance mechanics beyond SOLID basics — virtual dispatch, constructor order, enums, and the exception-handling discipline every C# interview probes.",
+            75, [lesson1, lesson2], sortOrder: 3);
 
         return (module, [lesson1Checklist, lesson2Checklist]);
     }
@@ -1668,6 +2058,383 @@ public static class CurriculumContentSeedData
         var module = BuildModule(topicId, "aspnet-core-production-readiness", "Production Readiness: Security & Testing",
             "Securing APIs with JWT bearer authentication and role/policy-based authorization, then verifying behavior with fast unit tests and real-pipeline integration tests via WebApplicationFactory.",
             90, [lesson1, lesson2], sortOrder: 2);
+
+        return (module, [lesson1Checklist, lesson2Checklist]);
+    }
+
+    private static (Module, List<ChecklistSeed>) BuildDotNetScalingAndResilienceModule(int topicId)
+    {
+        var lesson1 = BuildLesson(
+            slug: "ef-core-relationships-and-performance",
+            title: "EF Core Relationships & Performance Deep Dive",
+            summary: "Configuring one-to-many and many-to-many relationships with the Fluent API, then going past the basics of the N+1 problem into split queries, identity resolution, compiled queries, change-tracking internals, and bulk operations.",
+            estimatedMinutes: 45,
+            objectives:
+            [
+                "Configure one-to-many and many-to-many relationships explicitly with EF Core's Fluent API, including a many-to-many relationship with a payload column on the join entity",
+                "Explain how EF Core's change tracker uses an original-value snapshot and DetectChanges to build minimal UPDATE statements, and what identity resolution guarantees within a single DbContext",
+                "Choose between a single query (JOIN) and AsSplitQuery() for multi-collection Includes, and explain the cartesian explosion and data-duplication problems each option trades off",
+                "Use compiled queries, AsNoTrackingWithIdentityResolution, and ExecuteUpdate/ExecuteDelete to cut change-tracking and query-compilation overhead on hot paths and bulk operations",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    EF Core's **Fluent API** (overriding `OnModelCreating`) is how you configure relationships explicitly instead of relying on convention. A one-to-many is `HasOne(x => x.Author).WithMany(a => a.Books).HasForeignKey(x => x.AuthorId)`. A **many-to-many** can use an *implicit skip navigation* (`HasMany(b => b.Tags).WithMany(t => t.Books)`, EF Core 5+, which auto-generates a hidden join table) — but the moment the join needs its own data (e.g., an `AssignedUtc` timestamp on which tag was applied when), you need an **explicit join entity** configured with two one-to-many relationships instead, since a skip navigation's join table can't carry extra columns.
+
+                    The **change tracker** is what makes `SaveChangesAsync()` smart about writing only what changed. When a query returns a tracked entity, EF Core stores an **original-value snapshot** of every property at that moment inside an `EntityEntry`. Calling `SaveChangesAsync()` triggers `ChangeTracker.DetectChanges()`, which walks every tracked entity and diffs its *current* property values against that snapshot — only the columns that actually differ end up in the generated `UPDATE` statement. Every tracked entity also has an `EntityState` (`Added`, `Modified`, `Deleted`, `Unchanged`, `Detached`) that governs what SQL, if any, gets generated for it.
+
+                    **Identity resolution** is the guarantee that a single `DbContext` instance only ever tracks *one* CLR object per entity-type-plus-primary-key combination — query the same row twice through the same tracked context and you get back the same object reference, not two copies. `.AsNoTracking()` intentionally drops this guarantee for speed, which is usually fine — except when the same row can legitimately appear more than once in one result graph (e.g., a co-authored book reached through two different authors), in which case a plain no-tracking query materializes it as *duplicate* objects. `.AsNoTrackingWithIdentityResolution()` keeps the no-tracking performance profile but re-adds just enough bookkeeping to deduplicate repeated instances in the materialized graph.
+
+                    Beyond the "forgot `.Include()`" version of N+1 covered in the basics lesson, a second, subtler performance bug hides behind `.Include()` itself: including two or more **sibling collection navigations** in one query (e.g., a Blog's `Posts` and `Contributors`) makes EF Core generate a single SQL query with a `JOIN` per collection — and relational databases return the *cross product* of sibling collections, not their sum. `.AsSplitQuery()` avoids this by issuing one SQL query per included collection instead of one giant join, at the cost of extra round trips and losing the single-query's consistency guarantee. Finally, for truly hot, high-frequency parameterized queries, `EF.CompileQuery`/`EF.CompileAsyncQuery` pre-compiles the LINQ-to-SQL translation once so it isn't repeated on every call; and `ExecuteUpdateAsync`/`ExecuteDeleteAsync` generate a single `UPDATE`/`DELETE` statement straight from a LINQ `Where` clause, skipping entity materialization and the change tracker entirely for genuinely bulk operations.
+                    """, 1),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    Cartesian explosion from sibling `.Include()`s is like ordering a combo platter where the kitchen plates every possible pairing of your 10 side-dish choices with your 10 sauce choices instead of just bringing you 10 sides and 10 sauces separately — you asked for 20 items and the kitchen sends out 100 plates. `.AsSplitQuery()` is the kitchen instead bringing the sides on one tray and the sauces on another: two trips to your table, but no needless multiplying.
+
+                    Change tracking's snapshot is like a hotel taking a photo of your room's minibar the moment you check in, then comparing it against a photo taken at checkout — you're billed only for what's actually missing, not for a fresh inventory of the entire room. Identity resolution is the hotel's front desk insisting there's only ever one master file per room number during your stay, no matter how many times different staff members pull it up — the moment you allow two different files for "room 204" to exist at once, nobody can say which one is the truth.
+                    """, 2),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Relationship configuration (Fluent API)**
+
+                    - One-to-many: `modelBuilder.Entity<Book>().HasOne(b => b.Author).WithMany(a => a.Books).HasForeignKey(b => b.AuthorId);`
+                    - Many-to-many, no payload: `modelBuilder.Entity<Book>().HasMany(b => b.Tags).WithMany(t => t.Books);` (implicit join table)
+                    - Many-to-many, with payload: explicit join entity + two `HasMany().WithOne().HasForeignKey()` configurations
+
+                    **Query performance**
+
+                    - `.Include(a).Include(b)` — sibling collections, single query risks cartesian explosion
+                    - `.AsSplitQuery()` — one SQL query per included collection instead of one big join
+                    - `.AsNoTrackingWithIdentityResolution()` — no-tracking speed, but dedupes repeated instances
+                    - `EF.CompileAsyncQuery((Ctx db, TParam p) => ...)` — pre-compile a hot, repeated query shape
+
+                    **Bulk operations (bypass the change tracker entirely)**
+
+                    - `await db.Set.Where(...).ExecuteUpdateAsync(s => s.SetProperty(x => x.Prop, value));`
+                    - `await db.Set.Where(...).ExecuteDeleteAsync();`
+                    """, 3),
+                Block(BlockType.CodeSnippet, "Relationships, Split Queries, Compiled Queries & Bulk Operations", BodyFormat.PlainText, """
+                    // Fluent API: one-to-many (Author -> Books)
+                    protected override void OnModelCreating(ModelBuilder modelBuilder)
+                    {
+                        modelBuilder.Entity<Book>()
+                            .HasOne(b => b.Author)
+                            .WithMany(a => a.Books)
+                            .HasForeignKey(b => b.AuthorId)
+                            .OnDelete(DeleteBehavior.Restrict);
+
+                        // Many-to-many WITH a payload column (AssignedUtc) on the join row --
+                        // this needs an explicit join entity. An implicit skip-navigation join
+                        // table (HasMany(b => b.Tags).WithMany(t => t.Books)) only works when
+                        // the join table carries no extra data of its own.
+                        modelBuilder.Entity<BookTag>().HasKey(bt => new { bt.BookId, bt.TagId });
+
+                        modelBuilder.Entity<BookTag>()
+                            .HasOne(bt => bt.Book).WithMany(b => b.BookTags).HasForeignKey(bt => bt.BookId);
+                        modelBuilder.Entity<BookTag>()
+                            .HasOne(bt => bt.Tag).WithMany(t => t.BookTags).HasForeignKey(bt => bt.TagId);
+                    }
+
+                    public class BookTag
+                    {
+                        public int BookId { get; set; }
+                        public Book Book { get; set; } = null!;
+                        public int TagId { get; set; }
+                        public Tag Tag { get; set; } = null!;
+                        public DateTime AssignedUtc { get; set; } // the payload
+                    }
+
+                    // Split query: Books and Awards are SIBLING collections of Author --
+                    // a single query here would cross-join Books x Awards per author.
+                    var authors = await db.Authors
+                        .Include(a => a.Books)
+                        .Include(a => a.Awards)
+                        .AsSplitQuery()
+                        .ToListAsync();
+
+                    // Compiled query: only worth it for a query shape executed extremely
+                    // often (thousands of times/sec), varying only the parameter.
+                    private static readonly Func<AppDbContext, int, Task<Book?>> GetBookById =
+                        EF.CompileAsyncQuery((AppDbContext db, int id) =>
+                            db.Books.FirstOrDefault(b => b.Id == id));
+
+                    var book = await GetBookById(db, bookId);
+
+                    // AsNoTrackingWithIdentityResolution: read-only, but the same Author can
+                    // legitimately appear more than once in the result graph (co-authored
+                    // books) -- plain AsNoTracking() would materialize a DUPLICATE Author
+                    // instance per occurrence instead of one shared instance.
+                    var booksWithAuthors = await db.Books
+                        .Include(b => b.Author)
+                        .AsNoTrackingWithIdentityResolution()
+                        .ToListAsync();
+
+                    // Bulk operations: no entities loaded, no change tracker involved --
+                    // each becomes a single UPDATE/DELETE statement.
+                    await db.Books
+                        .Where(b => b.LastSoldUtc < cutoff)
+                        .ExecuteUpdateAsync(setters => setters.SetProperty(b => b.IsArchived, true));
+
+                    await db.Books
+                        .Where(b => b.IsArchived && b.StockCount == 0)
+                        .ExecuteDeleteAsync();
+                    """, 4, language: "csharp"),
+                Block(BlockType.Diagram, "Cartesian Explosion: Row Count Math", BodyFormat.AsciiArt, """
+                    A Blog has 10 Posts and 10 Contributors -- both are SIBLING collections of Blog.
+
+                    Include(b => b.Posts).Include(b => b.Contributors)            [single query, one JOIN]
+                      Rows returned = 10 Posts x 10 Contributors = 100 rows for ONE blog
+                      (every Post row repeats once per Contributor, and vice versa)
+
+                    Include(b => b.Posts).Include(b => b.Contributors).AsSplitQuery()
+                      Query 1: SELECT * FROM Blogs                    -> 1 row
+                      Query 2: SELECT * FROM Posts WHERE BlogId = ..  -> 10 rows
+                      Query 3: SELECT * FROM Contributors WHERE ..    -> 10 rows
+                      Total rows transferred = 21, not 100
+
+                    Include(b => b.Posts).ThenInclude(p => p.Comments)            [no explosion]
+                      Comments is nested UNDER Posts, not a sibling of it --
+                      the join stays one-to-many at each level, no cross product.
+                    """, 5),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Reach for `.AsSplitQuery()` whenever a query includes two or more sibling collection navigations — the extra round trips are almost always cheaper than a cross-product join once collections aren't tiny. Reach for `.AsNoTrackingWithIdentityResolution()` specifically when a read-only query's result graph can contain the same entity through more than one path; for a simple, non-cyclic shape, plain `.AsNoTracking()` is still faster and simpler.
+
+                    Only introduce a compiled query after profiling shows a specific query shape running often enough (think: thousands of executions per second) that EF Core's normal query-caching isn't enough — it adds a static field and a layer of indirection that isn't worth it for ordinary CRUD endpoints. Prefer `ExecuteUpdateAsync`/`ExecuteDeleteAsync` over a load-then-loop-then-`SaveChangesAsync` pattern for any operation that touches more than a handful of rows.
+                    """, 6),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    When an interviewer says "tell me about the N+1 problem," go one level past the basic definition: there are really *two* distinct EF Core performance bugs that get lumped under that name. The classic one is a missing `.Include()` causing a lazy-loaded round trip per row in a loop. The second, easy to miss, is the opposite failure mode — *too many* sibling `.Include()`s in one query, which doesn't add round trips but instead multiplies the row count via a cross-product join (cartesian explosion). Naming both, and giving the correct fix for each (`.Include()` for the first, `.AsSplitQuery()` for the second), signals real depth rather than a memorized definition.
+
+                    If asked about `ExecuteUpdate`/`ExecuteDelete`, mention the one thing that trips people up: because these bypass the change tracker entirely, they don't refresh any already-tracked in-memory entity, and don't participate in optimistic concurrency tokens the way `SaveChangesAsync()` does — you get back a row count instead, which is your only signal of how many rows were actually affected.
+                    """, 7),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Defaulting to `.AsSplitQuery()` on every query "just in case" — it adds a real network round trip per included collection and drops the single query's atomic consistency guarantee (a concurrent write between the split queries can produce data that never existed as a single consistent snapshot), so it should be a deliberate choice for genuinely multi-collection queries, not a blanket default.
+
+                    Also common: calling `ExecuteUpdateAsync()` to bulk-modify rows that an already-tracked entity in the same `DbContext` also represents, then later calling `SaveChangesAsync()` — because the tracked entity's in-memory snapshot was never refreshed by the bulk update, `SaveChangesAsync()` can silently overwrite the bulk change with the tracked entity's stale value.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "What causes 'cartesian explosion' when a query uses .Include() for two sibling collection navigations (e.g., a Blog's Posts and Contributors) in a single query?",
+                    "Because Posts and Contributors are both collection navigations at the same level of Blog, the single-query JOIN returns their cross product -- a Blog with 10 Posts and 10 Contributors returns 100 rows instead of 20, duplicating data across the wire.",
+                    [
+                        new QuizOptionSeed("Including two or more sibling collection navigations in one query causes a SQL JOIN cross product, multiplying the row count", true),
+                        new QuizOptionSeed("Calling .AsSplitQuery() on a query with a single .Include()", false),
+                        new QuizOptionSeed("Calling .AsNoTracking() on a query that has any .Include()", false),
+                        new QuizOptionSeed("Using EF.CompileAsyncQuery on a query with a WHERE clause", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "Why can calling ExecuteUpdateAsync() silently conflict with an already-tracked entity in the same DbContext?",
+                    "ExecuteUpdateAsync writes directly to the database and never touches the change tracker, so a tracked entity's in-memory (snapshotted) values are never refreshed -- if SaveChangesAsync() is called afterward on that stale tracked entity, it can overwrite the bulk update with the old value.",
+                    [
+                        new QuizOptionSeed("ExecuteUpdateAsync writes straight to the database and bypasses the change tracker, so a stale tracked entity can overwrite the bulk update on a later SaveChangesAsync", true),
+                        new QuizOptionSeed("ExecuteUpdateAsync automatically refreshes every tracked entity's in-memory values", false),
+                        new QuizOptionSeed("ExecuteUpdateAsync requires the affected rows to already be tracked before it can run", false),
+                        new QuizOptionSeed("ExecuteUpdateAsync always runs inside the same transaction as the next SaveChangesAsync call", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Single vs. Split Queries - EF Core", "https://learn.microsoft.com/en-us/ef/core/querying/single-split-queries", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("ExecuteUpdate and ExecuteDelete - EF Core", "https://learn.microsoft.com/en-us/ef/core/saving/execute-insert-update-delete", LinkType.OfficialDocs),
+            ]);
+
+        var lesson1Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson1.Slug,
+        [
+            "Configure a many-to-many relationship with a payload (e.g., a join entity with an AssignedUtc column) using an explicit join entity, instead of relying on an implicit skip-navigation join table",
+            "Take a query with two sibling collection .Include()s, add .AsSplitQuery(), and compare the generated SQL and row counts against the single-query version",
+            "Rewrite one load-modify-SaveChanges bulk-update loop in your own code as a single ExecuteUpdateAsync call and explain out loud what you gave up (concurrency tokens, change-tracker awareness)",
+        ]);
+
+        var lesson2 = BuildLesson(
+            slug: "background-services-caching-and-health-checks",
+            title: "Background Services, Caching & Health Checks",
+            summary: "Running long-lived work with BackgroundService, speeding up reads with the cache-aside pattern via IMemoryCache/IDistributedCache, and exposing health checks and graceful shutdown for production orchestration.",
+            estimatedMinutes: 45,
+            objectives:
+            [
+                "Implement a long-running background task with BackgroundService, correctly resolving Scoped dependencies like DbContext from a fresh DI scope instead of the constructor",
+                "Choose between IMemoryCache and IDistributedCache (Redis) for a given caching need, and implement the cache-aside pattern including an explicit expiration",
+                "Wire up ASP.NET Core health checks and separate readiness from liveness probes for container orchestration",
+                "Explain what happens during ASP.NET Core's graceful shutdown sequence and use IHostApplicationLifetime to hook cleanup logic into it",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    `IHostedService` is the interface the generic host uses to start and stop anything alongside the app itself (`StartAsync`/`StopAsync`). Almost nobody implements it directly — `BackgroundService` is the abstract base class everyone actually uses: override `ExecuteAsync(CancellationToken stoppingToken)`, which runs on the thread pool for as long as the app is alive. It must return promptly once `stoppingToken` is signaled, or shutdown stops being "graceful" and gets forced at the configured shutdown timeout. Because a `BackgroundService` is built once and lives for the app's whole lifetime, it behaves like a singleton — exactly like the conventional middleware classes from the DI lesson — so a Scoped dependency such as `AppDbContext` can't be constructor-injected into it; instead, inject `IServiceScopeFactory` and call `CreateScope()` to get a fresh scope (and a fresh `DbContext`) for each unit of work.
+
+                    `IMemoryCache` stores data in the current process's memory: no network hop, but strictly per-instance — behind a load balancer, every replica has its own copy, so scaling out multiplies cache misses and there's no shared invalidation. `IDistributedCache` is an abstraction over an external cache store (most commonly Redis, via `AddStackExchangeRedisCache`) — one shared cache across every instance, at the cost of a network round trip and serialization. The **cache-aside pattern** both share: check the cache first; on a miss, load from the real source of truth; populate the cache with an explicit expiration; return the data. Writes to the underlying data typically need to explicitly invalidate or update the matching cache key rather than just waiting for a TTL to expire, or callers can read stale data for the rest of that TTL window.
+
+                    ASP.NET Core's **health check** middleware (`AddHealthChecks()` / `MapHealthChecks("/health")`) runs a set of registered `IHealthCheck` implementations and reports an overall `Healthy`/`Degraded`/`Unhealthy` status. Container orchestrators like Kubernetes draw a hard line between **liveness** (has the process itself hung or crashed, and does it need to be killed and restarted) and **readiness** (is the process currently able to serve traffic right now). Tagging checks and exposing them behind separate predicates/endpoints matters: a temporarily slow downstream dependency should pull a pod out of the load-balancer rotation (readiness), not get the whole process killed and restarted (liveness) — restarting doesn't fix a downstream outage and just adds churn.
+
+                    On shutdown (`SIGTERM` or `Ctrl+C`), the generic host raises `IHostApplicationLifetime.ApplicationStopping`, stops accepting new connections while letting in-flight requests finish (up to `HostOptions.ShutdownTimeout`, 30 seconds by default), calls `StopAsync()` on every registered hosted service, then raises `ApplicationStopped` right before the process exits. `IHostApplicationLifetime` exposes these three moments as cancellation tokens (plus a `StopApplication()` method to *trigger* a shutdown programmatically) so cleanup logic — flushing a queue, closing a connection — runs during the real shutdown sequence instead of racing the process teardown.
+                    """, 1),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    A `BackgroundService` is like a night-shift employee hired once when the building opens (constructed at app startup) who then works continuously in the background — but they don't get handed one visitor badge for the entire shift; for each nightly task that needs a badge (a Scoped dependency), they check one out fresh from the front desk (`IServiceScopeFactory.CreateScope()`) and hand it back when that task is done.
+
+                    Cache-aside is like a barista checking a "prepped drinks" shelf before firing up the espresso machine: check the shelf first (cache), only make a fresh drink from scratch on a miss (hit the database), then restock the shelf with an expiration sticker so the next order takes the fast path. `IMemoryCache` is a shelf behind each individual store counter; `IDistributedCache`/Redis is a shared commissary every store location pulls from.
+
+                    Readiness versus liveness is the difference between a restaurant host saying "the kitchen is on fire, evacuate and call the fire department" (liveness failure — kill and restart) versus "the kitchen is temporarily backed up, please don't seat anyone new right now" (readiness failure — stop routing traffic, no restart needed, it'll clear on its own).
+                    """, 2),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **BackgroundService**
+
+                    - `public class Worker(IServiceScopeFactory scopeFactory) : BackgroundService { protected override async Task ExecuteAsync(CancellationToken ct) { ... } }`
+                    - `using var scope = scopeFactory.CreateScope(); var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();`
+                    - Register: `builder.Services.AddHostedService<Worker>();`
+
+                    **Caching**
+
+                    - `builder.Services.AddMemoryCache();` — `cache.TryGetValue(key, out var v);` / `cache.Set(key, value, TimeSpan.FromMinutes(5));`
+                    - `builder.Services.AddStackExchangeRedisCache(o => o.Configuration = "...");`
+                    - `await cache.GetStringAsync(key);` / `await cache.SetStringAsync(key, json, new DistributedCacheEntryOptions { AbsoluteExpirationRelativeToNow = ... });`
+
+                    **Health checks**
+
+                    - `builder.Services.AddHealthChecks().AddDbContextCheck<AppDbContext>("db", tags: ["ready"]);`
+                    - `app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = c => c.Tags.Contains("ready") });`
+                    - `app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false });`
+
+                    **Graceful shutdown**
+
+                    - Inject `IHostApplicationLifetime`; register callbacks on `.ApplicationStopping` / `.ApplicationStopped`
+                    - `builder.Services.Configure<HostOptions>(o => o.ShutdownTimeout = TimeSpan.FromSeconds(30));`
+                    """, 3),
+                Block(BlockType.CodeSnippet, "BackgroundService + Cache-Aside + Health Checks + Graceful Shutdown", BodyFormat.PlainText, """
+                    // BackgroundService: constructor deps must be Singleton-safe -- AppDbContext
+                    // is Scoped, so it can't be a constructor parameter here (same rule as
+                    // conventional middleware classes). A new scope is created per unit of work.
+                    public class ArchiveStaleBooksService(
+                        IServiceScopeFactory scopeFactory,
+                        ILogger<ArchiveStaleBooksService> logger) : BackgroundService
+                    {
+                        protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+                        {
+                            using var timer = new PeriodicTimer(TimeSpan.FromHours(1));
+
+                            while (await timer.WaitForNextTickAsync(stoppingToken))
+                            {
+                                using var scope = scopeFactory.CreateScope();
+                                var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+                                var archived = await db.Books
+                                    .Where(b => b.LastSoldUtc < DateTime.UtcNow.AddYears(-2))
+                                    .ExecuteUpdateAsync(
+                                        setters => setters.SetProperty(b => b.IsArchived, true),
+                                        stoppingToken);
+
+                                logger.LogInformation("Archived {Count} stale books", archived);
+                            }
+                        }
+                    }
+
+                    // Program.cs
+                    builder.Services.AddHostedService<ArchiveStaleBooksService>();
+
+                    // Cache-aside pattern with IDistributedCache (Redis)
+                    public class BookCatalogService(AppDbContext db, IDistributedCache cache)
+                    {
+                        public async Task<BookDto?> GetBookAsync(int id)
+                        {
+                            var cacheKey = $"book:{id}";
+
+                            var cached = await cache.GetStringAsync(cacheKey);
+                            if (cached is not null)
+                                return JsonSerializer.Deserialize<BookDto>(cached);
+
+                            var book = await db.Books.AsNoTracking()
+                                .Where(b => b.Id == id)
+                                .Select(b => new BookDto(b.Id, b.Title))
+                                .FirstOrDefaultAsync();
+
+                            if (book is null)
+                                return null; // see BestPractice re: caching negative results
+
+                            await cache.SetStringAsync(cacheKey, JsonSerializer.Serialize(book),
+                                new DistributedCacheEntryOptions
+                                {
+                                    AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(10),
+                                });
+
+                            return book;
+                        }
+                    }
+
+                    // Program.cs
+                    builder.Services.AddStackExchangeRedisCache(options =>
+                        options.Configuration = builder.Configuration["Redis:ConnectionString"]);
+
+                    // AddDbContextCheck ships in Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore;
+                    // AddRedis is from the popular third-party AspNetCore.HealthChecks.Redis package.
+                    builder.Services.AddHealthChecks()
+                        .AddDbContextCheck<AppDbContext>("database", tags: ["ready"])
+                        .AddRedis(builder.Configuration["Redis:ConnectionString"]!, "redis", tags: ["ready"]);
+
+                    var app = builder.Build();
+
+                    app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = c => c.Tags.Contains("ready") });
+                    app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false });
+
+                    // Graceful shutdown hook
+                    var lifetime = app.Services.GetRequiredService<IHostApplicationLifetime>();
+                    lifetime.ApplicationStopping.Register(() =>
+                        app.Logger.LogInformation("Graceful shutdown started -- draining in-flight requests"));
+                    """, 4, language: "csharp"),
+                Block(BlockType.Diagram, "The Graceful Shutdown Sequence", BodyFormat.StructuredSteps, """
+                    [{"label":"SIGTERM / Ctrl+C received by the host"},{"label":"IHostApplicationLifetime.ApplicationStopping fires","note":"hook cleanup callbacks here"},{"label":"Server stops accepting new connections"},{"label":"In-flight requests given until ShutdownTimeout to finish","note":"default 30s, configurable via HostOptions"},{"label":"Each registered IHostedService.StopAsync() is called","note":"BackgroundService should exit ExecuteAsync promptly on cancellation"},{"label":"IHostApplicationLifetime.ApplicationStopped fires"},{"label":"Process exits"}]
+                    """, 5),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Never let `ExecuteAsync` throw an unhandled exception — by default that crashes the entire host, not just the one background task, so wrap the loop body in a try/catch that logs and continues (or deliberately lets a truly fatal error bring the host down). Create a new DI scope per unit of work inside the loop, not once outside it, so a long-lived `BackgroundService` doesn't end up holding one `DbContext` (and its change tracker) for its entire lifetime.
+
+                    Always set an explicit expiration on cache entries — an unbounded `IMemoryCache` with high-cardinality keys (e.g., one entry per user) is a slow memory leak. Consider a short TTL for cached "not found" results too, so a cache-aside miss on a hot, nonexistent key doesn't hammer the database on every request. Keep liveness checks free of external dependencies (no DB, no Redis, no outbound HTTP) — reserve those for readiness, since a flaky downstream shouldn't get a perfectly healthy process killed and restarted.
+                    """, 6),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    If asked to inject a database context into a background worker, say the quiet part out loud: "`BackgroundService` is effectively a singleton — built once at startup — so `AppDbContext` being Scoped means I need `IServiceScopeFactory.CreateScope()` inside the loop, not a constructor parameter." It's the identical captive-dependency reasoning as custom middleware, and reusing it across contexts is exactly the kind of connective thinking interviewers reward.
+
+                    For health checks, the core signal an interviewer wants is you distinguishing "should this pod be restarted" (liveness) from "should traffic be routed here right now" (readiness) — and being able to say which category a given dependency (database, Redis, disk space, an in-process warm-up flag) belongs in. For caching, be ready to name the failure mode of cache-aside without invalidation: writes to the source of truth that don't also update or evict the matching cache key leave every reader looking at stale data until the TTL expires.
+                    """, 7),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Constructor-injecting a Scoped `AppDbContext` directly into a `BackgroundService` — this either throws at startup ("Cannot consume scoped service from singleton") or, if it happens to succeed some other way, captures one `DbContext` instance for the app's entire lifetime, the exact captive-dependency bug from the DI lesson in a new location.
+
+                    Wiring both liveness and readiness probes to the same `/health` endpoint that checks everything (database, Redis, disk) — a single flaky external dependency then gets an otherwise-healthy process killed and restarted by the orchestrator, when pulling it out of load-balancer rotation (readiness) was the correct response. Also common: forgetting an absolute expiration on cache entries, letting memory grow unbounded over the process lifetime.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "A BackgroundService needs to query the database inside ExecuteAsync using AppDbContext (registered Scoped). What's the correct way to obtain an instance of it?",
+                    "BackgroundService instances are built once and live for the app's lifetime, behaving like a singleton. A Scoped dependency can't safely be constructor-injected into it -- instead, inject IServiceScopeFactory, call CreateScope() inside the loop, and resolve AppDbContext from that scope's ServiceProvider so a fresh instance is used per unit of work.",
+                    [
+                        new QuizOptionSeed("Inject IServiceScopeFactory in the constructor, then call CreateScope() inside ExecuteAsync and resolve AppDbContext from that scope", true),
+                        new QuizOptionSeed("Inject AppDbContext directly into the BackgroundService's constructor", false),
+                        new QuizOptionSeed("Re-register AppDbContext as a Singleton so it can be constructor-injected safely", false),
+                        new QuizOptionSeed("Call new AppDbContext() directly inside ExecuteAsync, bypassing DI entirely", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "Why should a liveness probe avoid checking external dependencies like a database or Redis?",
+                    "A failing external dependency doesn't mean the process itself is broken -- it means traffic shouldn't be routed there right now (a readiness concern). If that same check drives liveness, the orchestrator kills and restarts an otherwise-healthy process, which does nothing to fix the downstream outage and just adds unnecessary churn.",
+                    [
+                        new QuizOptionSeed("A failing external dependency would make the orchestrator kill and restart an otherwise-healthy process, when stopping traffic routing (readiness) is the correct response", true),
+                        new QuizOptionSeed("Liveness checks are technically not allowed to make any HTTP or database calls", false),
+                        new QuizOptionSeed("External dependencies are always healthy in production, so the check is redundant", false),
+                        new QuizOptionSeed("Only readiness endpoints are permitted to return a non-200 HTTP status code", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Background tasks with hosted services in ASP.NET Core", "https://learn.microsoft.com/en-us/aspnet/core/fundamentals/host/hosted-services", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("Health checks in ASP.NET Core", "https://learn.microsoft.com/en-us/aspnet/core/host-and-deploy/health-checks", LinkType.OfficialDocs),
+            ],
+            prerequisites: [lesson1]);
+
+        var lesson2Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson2.Slug,
+        [
+            "Write a BackgroundService that resolves AppDbContext from a fresh IServiceScopeFactory scope each loop iteration, instead of constructor-injecting it directly",
+            "Implement the cache-aside pattern for one real read path using IMemoryCache or IDistributedCache, including an explicit expiration",
+            "Add separate /health/live and /health/ready endpoints with different tags/predicates, and explain out loud which dependencies belong in each",
+        ]);
+
+        var module = BuildModule(topicId, "aspnet-core-scaling-and-resilience", "Scaling & Resilience in ASP.NET Core",
+            "Going deeper on EF Core relationship modeling and query performance, then hardening services for production with background workers, caching, health checks, and graceful shutdown.",
+            90, [lesson1, lesson2], sortOrder: 3);
 
         return (module, [lesson1Checklist, lesson2Checklist]);
     }
@@ -2629,6 +3396,518 @@ public static class CurriculumContentSeedData
         return (module, [lesson1Checklist, lesson2Checklist]);
     }
 
+    private static (Module, List<ChecklistSeed>) BuildDsaLinkedListsAndHeapsModule(int topicId)
+    {
+        var lesson1 = BuildLesson(
+            slug: "linked-lists-stacks-and-queues",
+            title: "Linked Lists, Stacks & Queues",
+            summary: "Pointer-manipulation drills for linked lists, plus the LIFO/FIFO patterns that stacks, queues, and monotonic stacks unlock.",
+            estimatedMinutes: 50,
+            objectives:
+            [
+                "Reverse a singly linked list iteratively using the prev/curr/next three-pointer technique",
+                "Detect a cycle with Floyd's tortoise-and-hare algorithm and explain why the two pointers are guaranteed to meet",
+                "Find the middle node of a linked list in a single pass using fast/slow pointers",
+                "Implement Valid Parentheses and the monotonic-stack pattern, and know when array-backed vs. linked-list-backed structures matter for complexity",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    A **singly linked list** node holds a value and a reference to the next node; a **doubly linked list** node also holds a reference to the previous node, trading extra memory per node for O(1) backward traversal and O(1) removal given only a node reference (no need to walk from the head to find its predecessor).
+
+                    Three pointer-chasing techniques solve most linked-list interview problems:
+
+                    - **Reverse a linked list** — walk the list once, and at each node redirect its `Next` pointer to point backward instead of forward, using three tracking pointers (`prev`, `curr`, `next`) so you never lose the rest of the list.
+                    - **Floyd's cycle detection ("tortoise and hare")** — a slow pointer advances one node per step, a fast pointer advances two; if there is a cycle, the fast pointer is guaranteed to catch up to the slow pointer from behind, closing the gap by exactly one node every step.
+                    - **Fast/slow middle-finding** — advance slow by one and fast by two; when fast runs off the end, slow is sitting on the middle node, found in a single pass with no need to first count the list's length.
+
+                    A **stack** is a LIFO (last-in, first-out) structure with O(1) `Push`/`Pop`/`Peek` — it's the natural fit whenever "the most recently seen thing needs to be handled first" (matching brackets, undo history, DFS via an explicit stack, or the call stack backtracking uses implicitly). A **queue** is FIFO (first-in, first-out) with O(1) `Enqueue`/`Dequeue` — the natural fit for "process things in the order they arrived" (BFS, task scheduling, request buffering).
+
+                    A **monotonic stack** is a stack that maintains its elements in strictly increasing or strictly decreasing order at all times, popping elements that violate the order before pushing the new one — it turns "for each element, find the next/previous greater/smaller element" from an apparent O(n²) problem into O(n).
+                    """, 1),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    A linked list is like a treasure hunt where each clue tells you the location of the next clue — you can't jump straight to clue #7, you have to follow the chain from the start, but inserting a brand-new clue between two existing ones just means rewriting two "next location" notes, no need to renumber or shuffle anything else. An array, by contrast, is like a row of numbered lockers — you can jump straight to locker #7, but wedging a new item into the middle means physically sliding every locker after it down by one.
+
+                    A stack is like a stack of plates in a cafeteria spring-loader — you can only take the top plate off or add a new one on top, never grab one from the middle without first removing everything above it. A queue is like a line at a coffee shop — first person in line is the first one served, no cutting.
+                    """, 2),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Linked list vs. array complexity**
+
+                    - Prepend / append with a tail pointer: linked list `O(1)`, array append (amortized) `O(1)`, array prepend `O(n)` (everything shifts)
+                    - Insert/delete at a *known* node reference: linked list `O(1)`, array `O(n)` (shifting required)
+                    - Random access by index: linked list `O(n)` (must walk from the head), array `O(1)`
+                    - Search by value: both `O(n)`
+
+                    **Stack / queue operations** (array-backed or linked-list-backed)
+
+                    - `Push`/`Pop`/`Peek` (stack): `O(1)`
+                    - `Enqueue`/`Dequeue` (queue): `O(1)` — .NET's `Queue<T>` is a circular buffer, not a naive array, which is what keeps `Dequeue` `O(1)` instead of `O(n)`
+                    - Valid Parentheses / monotonic stack passes: `O(n)` time, `O(n)` space
+                    """, 3),
+                Block(BlockType.CodeSnippet, "Linked List Pointer Techniques, Valid Parentheses, and a Monotonic Stack", BodyFormat.PlainText, """
+                    public class ListNode
+                    {
+                        public int Val;
+                        public ListNode? Next;
+                        public ListNode(int val, ListNode? next = null) { Val = val; Next = next; }
+                    }
+
+                    // Reverse a singly linked list iteratively: O(n) time, O(1) space.
+                    public ListNode? ReverseList(ListNode? head)
+                    {
+                        ListNode? prev = null;
+                        ListNode? curr = head;
+
+                        while (curr is not null)
+                        {
+                            var next = curr.Next;   // save before we overwrite curr.Next
+                            curr.Next = prev;       // reverse the pointer
+                            prev = curr;            // advance prev
+                            curr = next;            // advance curr using the saved reference
+                        }
+
+                        return prev; // prev is the new head once curr runs off the end
+                    }
+
+                    // Floyd's cycle detection ("tortoise and hare"): O(n) time, O(1) space.
+                    public bool HasCycle(ListNode? head)
+                    {
+                        var slow = head;
+                        var fast = head;
+
+                        while (fast is not null && fast.Next is not null)
+                        {
+                            slow = slow!.Next;
+                            fast = fast.Next.Next;
+
+                            if (slow == fast) return true; // pointers met inside the cycle
+                        }
+
+                        return false; // fast hit the end -> no cycle
+                    }
+
+                    // Find the middle node in one pass: when fast reaches the end, slow is at the middle.
+                    public ListNode? FindMiddle(ListNode? head)
+                    {
+                        var slow = head;
+                        var fast = head;
+
+                        while (fast?.Next is not null)
+                        {
+                            slow = slow!.Next;
+                            fast = fast.Next.Next;
+                        }
+
+                        return slow; // for even length, this is the SECOND of the two middle nodes
+                    }
+
+                    // Valid Parentheses: O(n) time, O(n) space, using a stack.
+                    public bool IsValid(string s)
+                    {
+                        var stack = new Stack<char>();
+                        var pairs = new Dictionary<char, char> { [')'] = '(', [']'] = '[', ['}'] = '{' };
+
+                        foreach (var c in s)
+                        {
+                            if (!pairs.ContainsKey(c))
+                            {
+                                stack.Push(c); // opening bracket
+                                continue;
+                            }
+
+                            if (stack.Count == 0 || stack.Pop() != pairs[c])
+                            {
+                                return false; // mismatched, or nothing left to match against
+                            }
+                        }
+
+                        return stack.Count == 0; // every opener must have been closed
+                    }
+
+                    // Monotonic stack: Next Greater Element. O(n) time even though it looks nested,
+                    // because each index is pushed once and popped at most once overall.
+                    public int[] NextGreaterElement(int[] nums)
+                    {
+                        var result = new int[nums.Length];
+                        Array.Fill(result, -1);
+                        var decreasingStack = new Stack<int>(); // holds indices whose values decrease bottom-to-top
+
+                        for (var i = 0; i < nums.Length; i++)
+                        {
+                            while (decreasingStack.Count > 0 && nums[decreasingStack.Peek()] < nums[i])
+                            {
+                                result[decreasingStack.Pop()] = nums[i];
+                            }
+
+                            decreasingStack.Push(i);
+                        }
+
+                        return result;
+                    }
+                    """, 4, language: "csharp"),
+                Block(BlockType.Diagram, "Reversal Pointers and Floyd's Cycle Detection", BodyFormat.AsciiArt, """
+                    Reversing 1 -> 2 -> 3 -> null
+
+                    step 0:  prev=null              curr=[1]->[2]->[3]->null
+                    step 1:  null<-[1]               prev=1   curr=[2]->[3]->null
+                    step 2:  null<-[1]<-[2]                   prev=2   curr=[3]->null
+                    step 3:  null<-[1]<-[2]<-[3]              prev=3   curr=null  (loop ends)
+
+                    return prev -> new head is [3]->[2]->[1]->null
+
+
+                    Floyd's cycle detection on a list with a cycle:
+
+                    [1] -> [2] -> [3] -> [4]
+                                   ^       |
+                                   |       v
+                                  [6] <- [5]
+
+                    slow moves 1 node/step, fast moves 2 nodes/step.
+                    Once both are inside the loop (3-4-5-6-3-...), fast closes the
+                    gap on slow by exactly 1 node every step, so they are guaranteed
+                    to land on the same node within one full trip around the cycle --
+                    they cannot "jump past" each other.
+                    """, 5),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    When reversing or otherwise mutating a linked list in an interview, sketch three or four boxes-and-arrows on the whiteboard first and label `prev`/`curr`/`next` explicitly — most linked-list bugs come from overwriting a pointer before you've saved the value you still need, and drawing it catches that before you type a line of code.
+
+                    Reach for a linked-list-backed structure only when you need O(1) insert/delete at a known position without shifting elements (e.g., an LRU cache's internal list) or the size is highly unpredictable; otherwise prefer an array-backed structure for better cache locality and O(1) indexed access. .NET's `Queue<T>` is implemented as a circular buffer, so both `Enqueue` and `Dequeue` are O(1) amortized despite being array-backed — you rarely need to hand-roll a linked-list queue in production C#.
+                    """, 6),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    Before writing a line of code for a linked-list problem, ask out loud whether the list can be empty, have exactly one node, or — for reversal/middle-finding — have an even vs. odd number of nodes; naming these edge cases up front is what separates a candidate who "got the happy path" from one who is trusted with production code. For monotonic-stack problems, state the invariant you're maintaining ("this stack holds indices with strictly decreasing values") before coding it, since that's the line that proves you're reasoning about the pattern rather than reciting memorized code.
+                    """, 7),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    The single most common reversal bug: writing `curr.Next = prev` before saving `curr.Next` into a temporary variable, which permanently severs the link to the rest of the list and silently truncates it — always capture `next` first. A close second: guarding the fast/slow loop with `fast != null` alone instead of `fast != null && fast.Next != null`, which throws a `NullReferenceException` the moment fast lands on the last node of an odd-length list.
+
+                    For stacks: popping without first checking `stack.Count == 0` throws on malformed input instead of correctly returning `false` from `IsValid`.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "Floyd's cycle detection moves a slow pointer 1 node per step and a fast pointer 2 nodes per step. If the list contains a cycle, why is it guaranteed that slow and fast eventually land on the exact same node, rather than fast just perpetually lapping slow without ever coinciding?",
+                    "Once both pointers are inside the cycle, fast gains exactly one node on slow every step (it moves 2, slow moves 1, net gap change = -1). Since the gap is a non-negative integer bounded by the cycle's length and shrinks by exactly 1 each step, it must hit 0 -- meaning the pointers land on the same node -- within at most one full trip around the cycle.",
+                    [
+                        new QuizOptionSeed("The gap between them shrinks by exactly one node per step once both are inside the cycle, so it must reach zero within one lap", true),
+                        new QuizOptionSeed("The fast pointer visits every node in the list twice, which guarantees an intersection", false),
+                        new QuizOptionSeed("The .NET runtime automatically detects reference cycles and throws before this can happen", false),
+                        new QuizOptionSeed("It isn't actually guaranteed -- Floyd's algorithm only works probabilistically", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "In the Next Greater Element pattern, a for loop pushes indices onto a stack while an inner while loop pops them. This looks like it could be O(n^2). Why is the actual time complexity O(n)?",
+                    "Amortized analysis: across the entire run of the algorithm, each index is pushed onto the stack exactly once and popped at most once, so the total number of push and pop operations combined is bounded by 2n -- O(n) -- regardless of how unevenly that work is distributed across individual iterations of the outer loop.",
+                    [
+                        new QuizOptionSeed("Each index is pushed once and popped at most once across the whole run, bounding total work to O(n) even though it's distributed unevenly", true),
+                        new QuizOptionSeed("The inner while loop never actually executes more than a constant number of times per outer iteration", false),
+                        new QuizOptionSeed("The stack silently caps its size at O(sqrt(n)), which bounds the inner loop", false),
+                        new QuizOptionSeed("It is actually O(n^2); the O(n) claim only holds for already-sorted input", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Reverse a Linked List (GeeksforGeeks)", "https://www.geeksforgeeks.org/reverse-a-linked-list/", LinkType.FurtherReading),
+                new ReferenceLinkSeed("LeetCode Explore: Queue & Stack", "https://leetcode.com/explore/learn/card/queue-stack/", LinkType.FurtherReading),
+            ]);
+
+        var lesson1Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson1.Slug,
+        [
+            "Reverse a singly linked list iteratively from scratch, narrating the prev/curr/next pointer moves out loud",
+            "Implement Floyd's cycle detection and explain why the slow/fast pointers are guaranteed to meet inside a cycle",
+            "Solve Valid Parentheses with a stack, then implement Next Greater Element using a monotonic stack",
+        ]);
+
+        var lesson2 = BuildLesson(
+            slug: "heaps-priority-queues-and-backtracking",
+            title: "Heaps, Priority Queues & Backtracking",
+            summary: "Binary heap mechanics and the priority-queue patterns they power, plus the choose/explore/un-choose template behind backtracking.",
+            estimatedMinutes: 50,
+            objectives:
+            [
+                "Implement binary heap sift-up/sift-down operations from scratch and state their O(log n) complexity",
+                "Use a size-bounded min-heap to solve 'kth largest' style problems in O(n log k)",
+                "Implement the two-heap pattern for maintaining a running median in O(log n) per insertion",
+                "Apply the backtracking 'choose, explore, un-choose' template to a classic problem like Subsets",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    A **binary heap** is a complete binary tree stored implicitly in an array: for a node at index `i`, its children live at `2i + 1` and `2i + 2`, and its parent lives at `(i - 1) / 2`. A **min-heap** keeps the smallest element at index 0 (the root); a **max-heap** keeps the largest there. Every level is full except possibly the last, which is why the array packing works with no wasted space and no explicit child/parent pointers.
+
+                    Two operations keep the heap valid:
+
+                    - **Sift up (heapify up)** — after appending a new element at the end of the array, repeatedly swap it with its parent while it violates the heap property, until it settles into place. `O(log n)`, bounded by the tree's height.
+                    - **Sift down (heapify down)** — after removing the root (swap it with the last element, then shrink the array by one), repeatedly swap the new root with its smaller (or larger, for a max-heap) child until it settles. `O(log n)`.
+
+                    A **priority queue** is the ADT built on top of a heap: `Insert`, `Peek`, `ExtractMin`/`ExtractMax`. .NET ships `PriorityQueue<TElement, TPriority>`, so production code rarely hand-rolls one — but you should still be able to implement sift up/down from scratch in an interview.
+
+                    **Kth largest**: maintain a min-heap of size `k`. Push every element; whenever the heap exceeds size `k`, pop the minimum. What remains is the `k` largest elements seen, and the root is the `k`th largest overall — `O(n log k)` instead of `O(n log n)` for a full sort.
+
+                    **Running median (two-heap pattern)**: maintain a max-heap of the smaller half of the numbers and a min-heap of the larger half, kept balanced in size (differing by at most 1, with every element in the max-heap <= every element in the min-heap). The median is either the max-heap's root (odd total count) or the average of both roots (even count) — `O(log n)` per insertion, `O(1)` per median query.
+
+                    **Backtracking** explores a decision tree via recursion using the **choose, explore, un-choose** template: pick a candidate, recurse on the reduced problem, then undo the exact choice you made before trying the next candidate — so every branch of the tree starts from the same state. It's how subsets, permutations, and combinations get enumerated without hand-writing nested loops per input size.
+                    """, 1),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    A binary heap is like a hospital ER triage board: the most urgent patient is always the one you see next at a glance (the root), but the rest of the waiting room isn't fully sorted — patients are only loosely ordered relative to their own "parent" case, which is exactly enough structure to always answer "who's next?" in O(log n) without maintaining a fully sorted list.
+
+                    The two-heap running-median pattern is like a tug-of-war rope with a knot in the middle: one team (the max-heap) holds everyone below the median, the other (the min-heap) holds everyone above it, and you keep the two teams within one person of each other — so the knot (the median) always sits right between them.
+
+                    Backtracking is like exploring a corn maze with chalk: try a path (choose), walk it and see where it leads (explore), and if it's a dead end, walk back to the fork and erase your chalk mark (un-choose) so the maze looks exactly as it did before you tried that path — ready for the next attempt.
+                    """, 2),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Binary heap operations** (array-backed, n = heap size)
+
+                    - `Peek` (root): `O(1)`
+                    - `Insert` (push + sift up): `O(log n)`
+                    - `ExtractMin`/`ExtractMax` (swap root with last, pop, sift down): `O(log n)`
+                    - Build a heap from an unsorted array (heapify every non-leaf node bottom-up): `O(n)`, not `O(n log n)`
+
+                    **Kth largest element**
+
+                    - Min-heap of size `k`: `O(n log k)` time, `O(k)` space
+                    - Full sort then index: `O(n log n)` time, `O(n)` space (correct, but strictly worse once `k << n`)
+
+                    **Running median (two heaps)**
+
+                    - `Insert`: `O(log n)` (push into the correct heap, rebalance sizes if needed)
+                    - `GetMedian`: `O(1)` (read the root(s))
+                    - Invariant: `|maxHeap.Count - minHeap.Count| <= 1`
+
+                    **Backtracking baseline complexity** (before any pruning)
+
+                    - Subsets of `n` elements: `2^n` possibilities
+                    - Permutations of `n` elements: `n!` possibilities
+                    - Combinations choosing `k` of `n`: `C(n, k)`
+                    - Pruning (bounds checks, early termination) doesn't change the worst case, but usually collapses the average case dramatically
+                    """, 3),
+                Block(BlockType.CodeSnippet, "Manual Min-Heap, Kth Largest, Subsets Backtracking, and Two-Heap Median", BodyFormat.PlainText, """
+                    // Minimal binary min-heap, array-backed, implemented from scratch.
+                    public class MinHeap
+                    {
+                        private readonly List<int> _items = [];
+
+                        public int Count => _items.Count;
+                        public int Peek() => _items[0];
+
+                        public void Push(int value)
+                        {
+                            _items.Add(value);
+                            SiftUp(_items.Count - 1);
+                        }
+
+                        public int Pop()
+                        {
+                            var root = _items[0];
+                            var last = _items[^1];
+                            _items.RemoveAt(_items.Count - 1);
+
+                            if (_items.Count > 0)
+                            {
+                                _items[0] = last;
+                                SiftDown(0);
+                            }
+
+                            return root;
+                        }
+
+                        private void SiftUp(int i)
+                        {
+                            while (i > 0)
+                            {
+                                var parent = (i - 1) / 2;
+                                if (_items[parent] <= _items[i]) break; // heap property already holds
+
+                                (_items[parent], _items[i]) = (_items[i], _items[parent]);
+                                i = parent;
+                            }
+                        }
+
+                        private void SiftDown(int i)
+                        {
+                            while (true)
+                            {
+                                var left = 2 * i + 1;
+                                var right = 2 * i + 2;
+                                var smallest = i;
+
+                                if (left < _items.Count && _items[left] < _items[smallest]) smallest = left;
+                                if (right < _items.Count && _items[right] < _items[smallest]) smallest = right;
+                                if (smallest == i) break; // settled
+
+                                (_items[i], _items[smallest]) = (_items[smallest], _items[i]);
+                                i = smallest;
+                            }
+                        }
+                    }
+
+                    // Kth largest via a min-heap of size k: O(n log k) time, O(k) space.
+                    public int FindKthLargest(int[] nums, int k)
+                    {
+                        var minHeap = new PriorityQueue<int, int>();
+
+                        foreach (var num in nums)
+                        {
+                            minHeap.Enqueue(num, num);
+                            if (minHeap.Count > k)
+                            {
+                                minHeap.Dequeue(); // discard the smallest -- it can't be the kth largest
+                            }
+                        }
+
+                        return minHeap.Peek(); // root of a size-k min-heap is the kth largest overall
+                    }
+
+                    // Subsets: the "choose, explore, un-choose" backtracking template. 2^n subsets.
+                    public List<List<int>> Subsets(int[] nums)
+                    {
+                        var result = new List<List<int>>();
+                        var current = new List<int>();
+
+                        void Backtrack(int start)
+                        {
+                            result.Add(new List<int>(current)); // snapshot -- current keeps mutating after this
+
+                            for (var i = start; i < nums.Length; i++)
+                            {
+                                current.Add(nums[i]);                // choose
+                                Backtrack(i + 1);                    // explore
+                                current.RemoveAt(current.Count - 1); // un-choose
+                            }
+                        }
+
+                        Backtrack(0);
+                        return result;
+                    }
+
+                    // Two-heap running median: O(log n) insert, O(1) median.
+                    public class RunningMedian
+                    {
+                        // Max-heap of the smaller half: element = value, priority = -value (so the
+                        // PriorityQueue's min-priority behavior surfaces this half's largest value as its root).
+                        private readonly PriorityQueue<int, int> _lowerHalfMaxHeap = new();
+                        // Min-heap of the larger half: element = value, priority = value.
+                        private readonly PriorityQueue<int, int> _upperHalfMinHeap = new();
+
+                        public void Insert(int num)
+                        {
+                            if (_lowerHalfMaxHeap.Count == 0 || num <= _lowerHalfMaxHeap.Peek())
+                            {
+                                _lowerHalfMaxHeap.Enqueue(num, -num);
+                            }
+                            else
+                            {
+                                _upperHalfMinHeap.Enqueue(num, num);
+                            }
+
+                            Rebalance();
+                        }
+
+                        private void Rebalance()
+                        {
+                            if (_lowerHalfMaxHeap.Count > _upperHalfMinHeap.Count + 1)
+                            {
+                                var moved = _lowerHalfMaxHeap.Dequeue();
+                                _upperHalfMinHeap.Enqueue(moved, moved);
+                            }
+                            else if (_upperHalfMinHeap.Count > _lowerHalfMaxHeap.Count + 1)
+                            {
+                                var moved = _upperHalfMinHeap.Dequeue();
+                                _lowerHalfMaxHeap.Enqueue(moved, -moved);
+                            }
+                        }
+
+                        public double GetMedian()
+                        {
+                            if (_lowerHalfMaxHeap.Count == _upperHalfMinHeap.Count)
+                            {
+                                return (_lowerHalfMaxHeap.Peek() + _upperHalfMinHeap.Peek()) / 2.0;
+                            }
+
+                            return _lowerHalfMaxHeap.Count > _upperHalfMinHeap.Count
+                                ? _lowerHalfMaxHeap.Peek()
+                                : _upperHalfMinHeap.Peek();
+                        }
+                    }
+                    """, 4, language: "csharp"),
+                Block(BlockType.Diagram, "Heap Array/Tree Layout and a Sift-Up Insertion", BodyFormat.AsciiArt, """
+                    Min-heap stored as array: [2, 5, 3, 8, 9, 7]
+
+                    Index:      0    1    2    3    4    5
+                    Value:      2    5    3    8    9    7
+
+                    Tree view (parent i -> children 2i+1, 2i+2):
+
+                                     2(0)
+                                    /    \\
+                                 5(1)     3(2)
+                                /   \\      /
+                             8(3)  9(4)  7(5)
+
+                    Insert 1: append to the end, then sift UP while smaller than parent.
+
+                      [2, 5, 3, 8, 9, 7, 1]           ...append at index 6
+                           parent of 6 is (6-1)/2 = 2, value 3.  1 < 3 -> swap
+                      [2, 5, 1, 8, 9, 7, 3]
+                           parent of 2 is (2-1)/2 = 0, value 2.  1 < 2 -> swap
+                      [1, 5, 2, 8, 9, 7, 3]
+                           parent of 0 -> no parent, 1 has settled at the root.
+                    """, 5),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Reach for .NET's built-in `PriorityQueue<TElement, TPriority>` in real code instead of hand-rolling sift up/down — but implement a heap from scratch at least once so you can explain *why* insert and extract are `O(log n)` (tree height) rather than reciting it. For "kth largest/smallest" problems, default to a bounded-size heap (`O(n log k)`) over a full sort (`O(n log n)`) whenever `k` is meaningfully smaller than `n`; when `k` is close to `n`, a full sort can be simpler and just as fast in practice.
+
+                    For backtracking, always store a *copy* of your working state at each valid answer (`new List<int>(current)`), never the live reference — and make sure every "choose" has a matching "un-choose" that undoes precisely what was mutated, so sibling branches start from an identical, clean state.
+                    """, 6),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    When a problem says "kth largest" or "top k", say the heap-size trade-off out loud immediately: "I'll keep a min-heap of size k so each insert is O(log k), giving O(n log k) total, rather than sorting everything for O(n log n)." For the running-median two-heap pattern, state the balance invariant explicitly ("sizes never differ by more than one, and every element in the max-heap is <= every element in the min-heap") — that sentence is what proves you understand why the median falls straight out of the two roots. For backtracking, narrate the decision tree's branching factor and depth before coding ("this is n choices at each of n levels, so n! leaves") — interviewers use this to gauge whether you understand the search space you're about to prune.
+                    """, 7),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Mixing up which half gets the max-heap and which gets the min-heap in the running-median pattern (or skipping the rebalancing step) silently produces a plausible-looking but wrong median once the two halves drift apart in size. In `FindKthLargest`, reaching for a max-heap of the *entire* array instead of a min-heap capped at size `k` still works but throws away the `O(log k)` win the pattern exists for.
+
+                    In backtracking, appending the live mutable list to the results (`result.Add(current)`) instead of a snapshot (`result.Add(new List<int>(current))`) is the single most common bug — every stored "answer" ends up reflecting whatever `current` looks like at the *end* of the whole recursion (often empty), not what it looked like at the moment it was added.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "You need the kth largest element in a stream of n numbers, and k is much smaller than n. Why does maintaining a min-heap of size k (popping whenever it exceeds size k) beat sorting the entire array?",
+                    "A min-heap of size k does O(log k) work per insertion and only ever holds k elements, giving O(n log k) total -- versus O(n log n) to fully sort every element, most of which you'd immediately discard since you only care about the top k.",
+                    [
+                        new QuizOptionSeed("It only ever needs to track the k largest values seen so far, so each operation costs O(log k) instead of O(log n)", true),
+                        new QuizOptionSeed("Heaps are always faster than sorting, regardless of k", false),
+                        new QuizOptionSeed("A min-heap can find the kth largest in O(1) because it caches the answer", false),
+                        new QuizOptionSeed("Sorting is actually asymptotically faster; the heap is only used for readability", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "A backtracking Subsets implementation appends `current` (a shared mutable List<int>) directly to the results list at each recursive call, instead of `new List<int>(current)`. What symptom does this cause, and why?",
+                    "Because result.Add(current) stores a reference, not a snapshot, every entry in result points at the same list object. As backtracking continues to mutate current on later branches (adding and removing elements), all previously stored 'answers' silently change too -- by the time recursion finishes, every entry reflects current's final state (often empty), not the distinct subset it was supposed to represent.",
+                    [
+                        new QuizOptionSeed("All stored subsets end up identical (usually empty), because every entry references the same mutating list rather than an independent copy", true),
+                        new QuizOptionSeed("The program throws an IndexOutOfRangeException as soon as un-choose runs", false),
+                        new QuizOptionSeed("Nothing changes -- List<int> has value semantics in C#, so each Add captures the current values", false),
+                        new QuizOptionSeed("Only the first and last subsets are affected; the rest are correct", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Binary Heap (GeeksforGeeks)", "https://www.geeksforgeeks.org/binary-heap/", LinkType.FurtherReading),
+                new ReferenceLinkSeed("LeetCode Explore: Heap", "https://leetcode.com/explore/learn/card/heap/", LinkType.FurtherReading),
+            ],
+            prerequisites: [lesson1]);
+
+        var lesson2Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson2.Slug,
+        [
+            "Implement a min-heap from scratch with Push (sift up) and Pop (sift down), and state why each is O(log n)",
+            "Solve Kth Largest Element using a size-k min-heap, then implement the two-heap running median pattern",
+            "Solve Subsets (or Permutations) using the choose/explore/un-choose backtracking template, storing snapshots not references",
+        ]);
+
+        var module = BuildModule(topicId, "linked-lists-stacks-and-heaps", "Linked Lists, Stacks & Heaps",
+            "Pointer-based linked list operations, stack/queue applications including the monotonic stack pattern, binary heaps and priority-queue patterns, and backtracking fundamentals.",
+            100, [lesson1, lesson2], sortOrder: 3);
+
+        return (module, [lesson1Checklist, lesson2Checklist]);
+    }
+
     // ============================== System Design ==============================
 
     private static (Module, List<ChecklistSeed>) BuildSystemDesignModule(int topicId)
@@ -3400,6 +4679,323 @@ public static class CurriculumContentSeedData
         return (module, [lesson1Checklist, lesson2Checklist]);
     }
 
+    private static (Module, List<ChecklistSeed>) BuildConsistentHashingAndCaseStudiesModule(int topicId)
+    {
+        var lesson1 = BuildLesson(
+            slug: "consistent-hashing-and-sharding-strategies",
+            title: "Consistent Hashing & Sharding Strategies",
+            summary: "Why naive modulo hashing forces a full remap on every node change, how consistent hashing and virtual nodes fix it, and how to pick a sharding key.",
+            estimatedMinutes: 45,
+            objectives:
+            [
+                "Explain why naive modulo hashing (key mod N) forces nearly all keys to remap when the node count changes",
+                "Describe how consistent hashing bounds the fraction of keys that move when a node is added or removed",
+                "Explain why virtual nodes are necessary for even load distribution and how they work",
+                "Compare range-based, hash-based, and geo-based sharding key strategies and their trade-offs",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    The **rebalancing problem**: a naive sharding scheme picks a node with `hash(key) mod N`, where `N` is the number of nodes. This works fine until `N` changes — adding or removing a single node changes the modulus for *every* key, so almost every key's remainder changes and lands on a different node. Growing a 4-node cluster to 5 nodes can force nearly 100% of your data to move, even though only one node's worth of capacity was added.
+
+                    **Consistent hashing** solves this by hashing both nodes and keys onto the same fixed, circular space (a "ring," typically `0` to `2^32 - 1`, wrapping back to `0`). A key belongs to the first node encountered walking clockwise from the key's hash position. When a node is added or removed, only the keys in that node's arc of the ring move — everyone else's assignment is untouched. Removing/adding one of `N` nodes now remaps roughly `1/N` of the keys instead of nearly all of them.
+
+                    **Virtual nodes**: placing each physical node at a single random point on the ring still produces uneven arcs by chance, especially with few nodes — one node might own 60% of the ring's keys while another owns 5%. The fix is to give each physical node many points on the ring (e.g., 100–300 "virtual nodes"), scattered independently. Averaged across that many points, each physical node's total share converges much closer to its fair `1/N`, and a node with more capacity can simply be assigned more virtual points to take a proportionally larger share.
+
+                    **Sharding key strategies** (distinct from *how* a key maps to a node — this is *what* the key is):
+                    - **Range-based** — partition by contiguous ranges of the key (e.g., user IDs 1–1M on shard 1, 1M–2M on shard 2). Cheap, efficient range queries (`WHERE id BETWEEN ...` hits one shard), but sequential or time-ordered keys (auto-increment IDs, timestamps) concentrate all new writes on whichever shard currently holds the highest values — a "hot" shard.
+                    - **Hash-based** — hash the key to pick a shard. Spreads writes evenly regardless of key ordering, but a range query ("all orders from March") now has to fan out to every shard and merge results, since adjacent keys are scattered arbitrarily.
+                    - **Geo-based** — shard by region/location (e.g., EU users on EU shards). Gives low latency and can satisfy data-residency/compliance requirements (e.g., GDPR keeping EU user data in the EU), but shard sizes track population distribution, not engineering convenience — a shard for a smaller region can sit mostly idle while another is overloaded, and cross-region queries are expensive.
+                    """, 1),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    Picture a large circular table with numbered seats, where each server occupies one seat around the circle. A new guest (a key) always sits in the nearest empty seat going clockwise from where they'd naturally stand. If one server's seat is removed from the table, only the guests who were closest to that seat need to shuffle to the next occupied one — everyone else at the table stays exactly where they are.
+
+                    Virtual nodes are like giving a large party multiple reserved seats scattered around the table instead of just one — since their seats are spread around instead of clustered in one spot, they end up hosting a fair, proportional share of nearby guests no matter how the table happens to be arranged.
+                    """, 2),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Modulo hashing vs. consistent hashing**
+                    - Naive `hash(key) mod N` — simple, but changing `N` reassigns nearly every key to a different node
+                    - Consistent hashing — nodes and keys hashed onto the same ring; a key belongs to the first node clockwise. Adding/removing one node remaps only its arc — roughly `K/N` keys, not all of them
+
+                    **Virtual nodes**
+                    - Give each physical node many points on the ring (commonly 100–300) instead of one
+                    - Averages out the ring's random gaps so load tracks real capacity instead of hash-placement luck
+                    - Let a beefier node take a proportionally larger share by assigning it more virtual points
+
+                    **Sharding key strategies**
+                    - Range-based — cheap range queries; risk of a hot shard from sequential/time-ordered keys
+                    - Hash-based — even write distribution; range queries must fan out to every shard
+                    - Geo-based — locality and compliance; shard sizes track population, not engineering choice
+                    """, 3),
+                Block(BlockType.CodeSnippet, "Consistent Hash Ring with Virtual Nodes", BodyFormat.PlainText, """
+                    public class ConsistentHashRing
+                    {
+                        // Maps a point on the ring (a hash value) to the physical node that owns it.
+                        private readonly SortedDictionary<uint, string> ring = new();
+                        private readonly int virtualNodesPerNode;
+
+                        public ConsistentHashRing(int virtualNodesPerNode = 150)
+                        {
+                            this.virtualNodesPerNode = virtualNodesPerNode;
+                        }
+
+                        // Placing many virtual points per physical node -- not just one -- is
+                        // what actually evens out the load distribution (see Notes above).
+                        public void AddNode(string nodeId)
+                        {
+                            for (var i = 0; i < virtualNodesPerNode; i++)
+                            {
+                                ring[Hash($"{nodeId}#{i}")] = nodeId;
+                            }
+                        }
+
+                        public void RemoveNode(string nodeId)
+                        {
+                            for (var i = 0; i < virtualNodesPerNode; i++)
+                            {
+                                ring.Remove(Hash($"{nodeId}#{i}"));
+                            }
+                        }
+
+                        // Owner of `key` is the first node whose ring position is >= the key's
+                        // hash, walking clockwise -- wrapping back to the smallest position if
+                        // the key hashes past the last node on the ring.
+                        public string GetOwner(string key)
+                        {
+                            var keyHash = Hash(key);
+                            foreach (var (position, nodeId) in ring)
+                            {
+                                if (position >= keyHash) return nodeId;
+                            }
+                            return ring.First().Value; // wrap around
+                        }
+
+                        // In production, use a well-distributed hash (e.g. MurmurHash3), not SHA-1.
+                        private static uint Hash(string input) =>
+                            BitConverter.ToUInt32(System.Security.Cryptography.SHA1.HashData(
+                                System.Text.Encoding.UTF8.GetBytes(input)), 0);
+                    }
+
+                    // 3 physical nodes, 150 virtual points each -> 450 points on the ring
+                    var ring = new ConsistentHashRing(virtualNodesPerNode: 150);
+                    ring.AddNode("cache-node-A");
+                    ring.AddNode("cache-node-B");
+                    ring.AddNode("cache-node-C");
+
+                    var owner = ring.GetOwner("user:98213"); // deterministic until the ring changes
+                    """, 4, language: "csharp"),
+                Block(BlockType.Diagram, "The Hash Ring: Local Remapping on Node Change", BodyFormat.AsciiArt, """
+                    Hash ring (conceptually circular; shown unrolled as a line that wraps back to 0):
+
+                      0 ────●A──────●B────────●C─────────●D──────── 2^32-1 (wraps to 0)
+
+                      key "post:9182" hashes to a point just after ●B
+                      -> assigned to the FIRST node clockwise: node C
+
+                      Node B leaves the ring:
+
+                      0 ────●A─────────────────●C─────────●D──────── (wraps)
+
+                      Only keys that were owned by B (the arc between A and B)
+                      move to C -- every other node's keys are untouched.
+                    """, 5),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Use enough virtual nodes per physical node (100–300 is a common range) that the ring's load-distribution variance drops to a few percent instead of being dominated by hash-placement luck.
+
+                    Choose a sharding key by modeling your actual query patterns first: if you need range scans, weigh that against hash-based's simpler rebalancing; if you need locality or regulatory data residency, geo-based may be non-negotiable regardless of how evenly it balances load.
+
+                    Track real per-node load, not just theoretical ring share, and re-tune virtual node counts if physical nodes have unequal capacity.
+                    """, 6),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    Bring up consistent hashing whenever a design needs to add or remove nodes without a full data reshuffle — distributed caches, sharded databases, sharded load balancers, DHTs — and quantify the win ("only ~1/N keys move") instead of a vague "it rebalances better." Mention virtual nodes proactively: an interviewer asking "what if the ring ends up uneven, or node capacities differ?" is testing for exactly this.
+                    """, 7),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Describing consistent hashing but forgetting virtual nodes, then being surprised that a small ring (e.g., 3 nodes, one point each) turns out wildly imbalanced — with too few points on the ring, one node's arc can easily be several times another's purely by chance.
+
+                    Also common: picking a sharding key for convenience (an auto-incrementing order ID, or a raw timestamp) under a range-based scheme — all new writes land in the same "current" range, creating a hot shard even though the data is technically "sharded."
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "With naive `hash(key) mod N` sharding, why does adding a single new node (N -> N+1) typically remap nearly every key to a different node?",
+                    "The mod value is recomputed against the new N for every key, and there's no reason a key's old remainder (mod N) and its new remainder (mod N+1) would coincide -- so essentially the whole dataset has to move just to add one node's worth of capacity.",
+                    [
+                        new QuizOptionSeed("It doesn't -- only the new node's share of keys move", false),
+                        new QuizOptionSeed("The mod value is recomputed against the new N for every key, and old/new remainders rarely coincide, so nearly all keys land on a different node", true),
+                        new QuizOptionSeed("Because SQL databases require a full re-index whenever a shard is added", false),
+                        new QuizOptionSeed("It doesn't remap anything -- modulo hashing is immune to node count changes", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "What specific problem do virtual nodes solve that plain consistent hashing (one point per physical node) does not?",
+                    "Randomly placed physical nodes create an uneven ring -- one node's arc can be several times larger than another's purely by chance, especially with a small number of nodes. Giving each physical node many virtual points averages this out into a much more proportional load distribution.",
+                    [
+                        new QuizOptionSeed("They reduce the total amount of data stored across the cluster", false),
+                        new QuizOptionSeed("They even out load distribution -- without them, a small number of randomly-placed nodes can end up with wildly uneven arc sizes on the ring", true),
+                        new QuizOptionSeed("They eliminate the need for a hash function entirely", false),
+                        new QuizOptionSeed("They allow the ring to support more than 2^32 keys", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("System Design Primer: Consistent hashing", "https://github.com/donnemartin/system-design-primer", LinkType.FurtherReading),
+                new ReferenceLinkSeed("Amazon Dynamo Paper (consistent hashing for partitioning)", "https://www.allthingsdistributed.com/files/amazon-dynamo-sosp2007.pdf", LinkType.FurtherReading),
+            ]);
+
+        var lesson1Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson1.Slug,
+        [
+            "Explain why naive modulo hashing forces nearly all keys to remap when a node is added or removed",
+            "Implement a basic consistent hash ring with virtual nodes and explain what problem virtual nodes solve",
+            "Choose an appropriate sharding key strategy (range/hash/geo) for a given scenario and justify the trade-off",
+        ]);
+
+        var lesson2 = BuildLesson(
+            slug: "case-study-social-media-news-feed",
+            title: "Case Study: Designing a Social Media News Feed",
+            summary: "A full walkthrough combining caching, queues, and sharding: fan-out-on-write vs. fan-out-on-read, and the hybrid approach that handles celebrity accounts.",
+            estimatedMinutes: 50,
+            objectives:
+            [
+                "Enumerate the functional requirements of a news feed and the read:write ratio that shapes the design",
+                "Compare fan-out-on-write vs. fan-out-on-read for feed generation and the trade-off each makes",
+                "Design a hybrid approach that handles celebrity/high-follower-count accounts without a thundering-herd write",
+                "Sketch an end-to-end architecture for a news feed combining caching, queues, and sharding from prior lessons",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    **Functional requirements**: users can create a post; users can follow/unfollow other users; users can view a feed composed of posts from the people they follow, most recent (or ranked) first.
+
+                    **The key non-functional characteristic**: feed reads vastly outnumber writes -- ratios like 100:1 or higher are typical. This single fact drives the central design decision: which side, write or read, should absorb the expensive work of assembling a feed?
+
+                    **Fan-out-on-write (push model)**: the moment a user posts, immediately push that post's id into every follower's precomputed feed store (e.g., a Redis list per user). Reading a feed becomes a single cheap lookup -- O(1). The cost moves to write time: publishing one post costs O(followers) writes, which is fine for a typical user but catastrophic for an account with tens of millions of followers.
+
+                    **Fan-out-on-read (pull model)**: store each post once, keyed by its author. A feed read queries recent posts from every followee and merges them by recency/rank at request time. Writes stay O(1) -- posting is always cheap. Reads become O(followees), which gets slower the more accounts a user follows, and this system is read-heavy by nature, so pushing cost onto every read is usually the wrong trade.
+
+                    **The celebrity problem and the hybrid fix**: pure fan-out-on-write breaks down for high-follower-count ("celebrity") accounts -- one post would mean tens of millions of feed-cache writes. The standard fix is a hybrid: fan-out-on-write for ordinary accounts (below some follower-count threshold), and fan-out-on-read for accounts above it. A feed read then merges the follower's precomputed feed with a small, separate lookup of recent posts from any celebrities they follow.
+                    """, 1),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    Fan-out-on-write is like a newsletter publisher immediately mailing a printed copy to every subscriber's mailbox the instant an issue is finished -- a subscriber's mailbox is always ready to read (fast reads), but the publisher does an enormous amount of work up front, and if one author has 50 million subscribers, that's 50 million letters to stuff for a single issue.
+
+                    Fan-out-on-read is like a subscriber going to a library and asking a librarian to gather the latest articles from every author they follow on the spot -- writing an article is nearly free, but the subscriber waits while a lot of work happens at read time, and that wait grows with how many authors they follow.
+
+                    The hybrid is the librarian keeping a pre-sorted folder ready for ordinary authors, but fetching the handful of bestseller authors' latest work fresh each time, since pre-mailing a bestseller's release to everyone would flood the mailroom.
+                    """, 2),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Fan-out-on-write (push)**
+                    - Write cost: O(followers) per post
+                    - Read cost: O(1) -- read the precomputed feed
+                    - Breaks down for celebrity accounts (write cost explodes)
+
+                    **Fan-out-on-read (pull)**
+                    - Write cost: O(1) -- just store the post
+                    - Read cost: O(followees) -- merge at request time
+                    - Degrades as users follow more accounts; doesn't fit a read-heavy system well on its own
+
+                    **Hybrid (what most large feed systems actually use)**
+                    - Below a follower-count threshold (e.g., 10k) -> fan-out-on-write
+                    - Above the threshold ("celebrity") -> excluded from write-time fan-out, pulled and merged at read time
+                    - Keeps one viral post from becoming tens of millions of synchronous feed-cache writes
+                    """, 3),
+                Block(BlockType.CodeSnippet, "Hybrid Fan-Out: Publish and Feed Read", BodyFormat.PlainText, """
+                    public async Task PublishPostAsync(Post post)
+                    {
+                        await postStore.SaveAsync(post);
+
+                        var followerCount = await socialGraph.GetFollowerCountAsync(post.AuthorId);
+
+                        if (followerCount < CelebrityThreshold) // e.g. 10_000
+                        {
+                            // Fan-out-on-write: enqueue the push instead of doing it inline, so
+                            // the author's request returns immediately.
+                            await fanOutQueue.EnqueueAsync(new FanOutJob(post.Id, post.AuthorId));
+                        }
+                        // Celebrity posts are NOT fanned out here -- they're pulled in at read
+                        // time by GetFeedAsync below, avoiding a write that touches millions
+                        // of individual feeds.
+                    }
+
+                    // Background worker consuming fanOutQueue:
+                    async Task ProcessFanOutJobAsync(FanOutJob job)
+                    {
+                        var followerIds = await socialGraph.GetFollowerIdsAsync(job.AuthorId);
+                        foreach (var followerId in followerIds)
+                        {
+                            await feedCache.PushToFeedAsync(followerId, job.PostId); // e.g. Redis LPUSH
+                        }
+                    }
+
+                    public async Task<List<Post>> GetFeedAsync(string userId)
+                    {
+                        var precomputedFeed = await feedCache.GetFeedAsync(userId, count: 50);
+
+                        var celebrityFollowees = await socialGraph.GetCelebrityFolloweesAsync(userId);
+                        var celebrityPosts = await postStore.GetRecentPostsAsync(celebrityFollowees, count: 50);
+
+                        return MergeByTimestamp(precomputedFeed, celebrityPosts).Take(50).ToList();
+                    }
+                    """, 4, language: "csharp"),
+                Block(BlockType.Diagram, "News Feed Write & Read Paths", BodyFormat.StructuredSteps, """
+                    [{"label":"Client posts"},{"label":"Post Service","note":"writes post, returns immediately"},{"label":"Message Queue","note":"fan-out job enqueued asynchronously"},{"label":"Fan-out Workers","note":"push post id to each follower's feed cache; skipped for celebrity authors"},{"label":"Feed Cache","note":"precomputed per-user feed, sharded via consistent hashing"},{"label":"Feed Service (on read)","note":"merges precomputed feed + celebrity followees' recent posts"},{"label":"Client feed request"}]
+                    """, 5),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Decouple post creation from fan-out with a message queue -- the author's post request should return as soon as the post is durably saved, with fan-out happening asynchronously in the background.
+
+                    Shard the feed cache using consistent hashing (from the previous lesson) so growing the cache cluster doesn't invalidate everyone's precomputed feed at once.
+
+                    Accept eventual consistency in the feed -- a post appearing a few seconds late for some followers is a fine trade for the throughput and simplicity it buys. Don't over-engineer for strict read-your-writes consistency across the entire feed.
+                    """, 6),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    This question is explicitly testing whether you can compose earlier building blocks (caching, message queues, sharding, CAP trade-offs) into one coherent design instead of reciting each in isolation. State the functional requirements and the read:write ratio first, propose fan-out-on-write as the default, and then proactively raise the celebrity problem yourself -- volunteering the hybrid fix before being asked is what separates a rehearsed answer from real understanding.
+                    """, 7),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Defaulting to pure fan-out-on-write and missing that a single celebrity post turns into tens of millions of feed-cache writes, which can back up the fan-out queue for every other user's posts too.
+
+                    Defaulting to pure fan-out-on-read and missing that it makes every feed load pay the cost of merging across every followee -- fine at small follow counts, but a serious latency problem once users follow thousands of accounts.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "Why does pure fan-out-on-write break down for a celebrity account with 50 million followers?",
+                    "One post write balloons into tens of millions of individual feed-cache writes (one per follower), overwhelming the fan-out workers or queue -- the cost that fan-out-on-write moves to write time scales with follower count, and that count is the problem here.",
+                    [
+                        new QuizOptionSeed("It doesn't -- fan-out-on-write scales to any follower count without issue", false),
+                        new QuizOptionSeed("One post write balloons into tens of millions of individual feed-cache writes, overwhelming fan-out workers/queues", true),
+                        new QuizOptionSeed("Fan-out-on-write cannot be used with a shared cache", false),
+                        new QuizOptionSeed("Followers would be unable to see the post at all under this model", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "In the hybrid approach, how are a celebrity account's posts typically delivered to followers' feeds?",
+                    "They're excluded from the write-time fan-out entirely and instead pulled and merged into the feed at read time, combined with the follower's normal precomputed feed -- avoiding the write-side blowup while still surfacing the celebrity's posts.",
+                    [
+                        new QuizOptionSeed("They are fanned out synchronously with higher priority than normal posts", false),
+                        new QuizOptionSeed("They are excluded from write-time fan-out and merged into the feed at read time instead", true),
+                        new QuizOptionSeed("Celebrity accounts' posts are dropped and never shown in follower feeds", false),
+                        new QuizOptionSeed("Celebrity accounts are simply moved to a geo-based shard to spread the load", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("System Design Primer: Designing a news feed", "https://github.com/donnemartin/system-design-primer", LinkType.FurtherReading),
+                new ReferenceLinkSeed("Twitter Engineering: Timelines at Scale (fan-out-on-write vs. fan-out-on-read)", "https://www.infoq.com/presentations/Twitter-Timeline-Scalability/", LinkType.FurtherReading),
+            ],
+            prerequisites: [lesson1]);
+
+        var lesson2Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson2.Slug,
+        [
+            "Explain fan-out-on-write vs. fan-out-on-read and the read/write ratio that decides between them",
+            "Design a hybrid fan-out strategy that handles a celebrity account without a thundering-herd write",
+            "Sketch the end-to-end read and write paths of a news feed system, including caching, queues, and sharding",
+        ]);
+
+        var module = BuildModule(topicId, "consistent-hashing-and-case-studies", "Consistent Hashing & System Design Case Studies",
+            "How distributed systems rebalance data without a full remap, using consistent hashing and virtual nodes, plus a full case study combining load balancing, caching, databases, and message queues from earlier modules into one design: a social media news feed.",
+            95, [lesson1, lesson2], sortOrder: 3);
+
+        return (module, [lesson1Checklist, lesson2Checklist]);
+    }
+
     // ============================== SQL ==============================
 
     private static (Module, List<ChecklistSeed>) BuildSqlModule(int topicId)
@@ -4157,6 +5753,331 @@ public static class CurriculumContentSeedData
         var module = BuildModule(topicId, "schema-design-and-advanced-queries", "Schema Design & Advanced Queries",
             "Normalization and referential integrity for solid schema design, plus common table expressions for readable and recursive queries.",
             80, [lesson1, lesson2], sortOrder: 2);
+
+        return (module, [lesson1Checklist, lesson2Checklist]);
+    }
+
+    private static (Module, List<ChecklistSeed>) BuildSqlViewsAndOptimizationModule(int topicId)
+    {
+        var lesson1 = BuildLesson(
+            slug: "views-procedures-and-triggers",
+            title: "Views, Stored Procedures & Triggers",
+            summary: "Encapsulating and securing queries with views, the materialized-view freshness trade-off, parameterized stored procedures, and the real risks of hidden trigger logic.",
+            estimatedMinutes: 40,
+            objectives:
+            [
+                "Explain how a view encapsulates a complex query and can restrict column or row access without granting access to the underlying tables",
+                "Distinguish a plain (virtual) view from a materialized view and explain the staleness trade-off",
+                "Write a parameterized stored procedure and reason about when procedures help vs. hurt maintainability",
+                "Explain BEFORE vs. AFTER trigger timing and articulate the real risks of hidden trigger logic",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    A **view** is a named, saved `SELECT` query that you can query as if it were a table. A plain view is **virtual** — it stores no data of its own; every time you query it, the database re-runs the underlying query against the current data. Views exist for two main reasons: **encapsulation** (hiding a complicated multi-table join behind a simple name so callers don't have to repeat it) and **access control** (granting `SELECT` on a view that exposes only certain columns or rows, without granting any access to the base tables at all — e.g., an `employee_directory` view that exposes name and department but omits the `salary` column entirely).
+
+                    A **materialized view** looks the same to query, but it physically **persists** its result set to disk at creation time, like a cached snapshot. Because it doesn't re-run the query on every read, it's fast for expensive aggregates — but it goes **stale** the moment the underlying data changes, and stays stale until something explicitly runs `REFRESH MATERIALIZED VIEW`. Choosing between them is a freshness-vs-cost trade-off, not a strictly-better-option choice.
+
+                    A **stored procedure** is a named, parameterized block of SQL (often with real procedural logic — variables, loops, conditionals) saved inside the database itself and invoked with `CALL`. Procedures can reduce network round-trips (one `CALL` instead of several statements sent one at a time) and centralize logic that many different callers need. The cost: that logic now lives outside your application's codebase, often in a database-specific procedural dialect (PL/pgSQL, T-SQL, PL/SQL) that's harder to unit test, code-review in the same diff as the feature, and keep in sync with application-level version control and CI.
+
+                    A **trigger** is a function that fires automatically around an `INSERT`, `UPDATE`, or `DELETE` on a table — the calling code never explicitly invokes it. **BEFORE** triggers fire before the write takes effect; a row-level `BEFORE` trigger can inspect and even modify the incoming row (via the special `NEW` record) or raise an error to cancel the operation entirely. **AFTER** triggers fire once the write has already happened; modifying `NEW` there has no effect on the stored row, so `AFTER` triggers are used for side effects — the textbook case is **audit logging**, writing an `audit_log` row that captures the old and new values of whatever just changed.
+
+                    The real risk of triggers isn't the concept — it's that they're **invisible from the call site**. A plain `UPDATE orders SET status = 'shipped'` in application code can silently cascade into audit-log writes, denormalized-column updates, or even further writes to other tables, with nothing at the call site hinting that any of it happened.
+                    """, 1),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    A view is like handing a stakeholder a curated report pulled live from the master ledger — they see exactly the numbers they're allowed to see, computed fresh every time, but they never touch the ledger itself. A materialized view is the same report, printed and filed away: accurate as of the moment it was printed, but someone has to remember to reprint it, or the copy on file quietly drifts out of date.
+
+                    A trigger is like a silent alarm wired into a door — genuinely useful when it's a documented, well-understood device (an audit trail, a fire alarm). But if a building has a dozen silent devices wired into a dozen doors, all undocumented, someone eventually opens a door for a completely ordinary reason and is baffled when three alarms they didn't know existed all go off at once.
+                    """, 2),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **View vs. materialized view**
+
+                    | | Plain view | Materialized view |
+                    |---|---|---|
+                    | Stores data? | No — re-runs the query each time | Yes — persists the result to disk |
+                    | Always current? | Yes | No — stale until `REFRESH` |
+                    | Read cost | Same as the underlying query | Cheap — just reading stored rows |
+                    | Best for | Encapsulation, access control | Expensive aggregates read far more often than the source data changes |
+
+                    **Stored procedures — help vs. hurt**
+
+                    - Help: centralizing logic every caller needs, cutting round-trips for multi-statement operations, enforcing invariants right next to the data
+                    - Hurt: business logic outside application source control, harder to unit test, database-specific dialect, deployment/versioning becomes a second release pipeline
+
+                    **Trigger timing**
+
+                    - `BEFORE` — can inspect and modify the incoming row (`NEW`), or raise an error to abort the operation
+                    - `AFTER` — row is already written; used for side effects (audit logging, cascading updates) — modifying `NEW` here does nothing
+                    - Both can be row-level (`FOR EACH ROW`) or statement-level (once per statement, regardless of row count)
+                    """, 3),
+                Block(BlockType.CodeSnippet, "Views, a Materialized View, a Procedure, and a Trigger", BodyFormat.PlainText, """
+                    -- A plain view: encapsulates a join, and can be granted SELECT on
+                    -- without granting any access to the underlying orders/customers tables.
+                    CREATE VIEW active_customer_orders AS
+                    SELECT o.order_id, o.customer_id, o.order_date, o.status
+                    FROM orders o
+                    JOIN customers c ON c.customer_id = o.customer_id
+                    WHERE c.is_active = TRUE;
+
+                    SELECT * FROM active_customer_orders WHERE status = 'shipped';
+
+                    -- A materialized view: persists the aggregate physically. It will
+                    -- NOT reflect new orders until explicitly refreshed.
+                    CREATE MATERIALIZED VIEW customer_order_totals AS
+                    SELECT customer_id, COUNT(*) AS order_count, SUM(total_amount) AS lifetime_value
+                    FROM orders
+                    GROUP BY customer_id;
+
+                    REFRESH MATERIALIZED VIEW customer_order_totals;
+
+                    -- A stored procedure (PostgreSQL PL/pgSQL shown; SQL Server/T-SQL and
+                    -- Oracle/PL-SQL use different procedural dialects for the body).
+                    CREATE PROCEDURE place_order(IN p_customer_id INTEGER, IN p_total NUMERIC)
+                    LANGUAGE plpgsql
+                    AS $$
+                    BEGIN
+                        INSERT INTO orders (customer_id, total_amount, status, order_date)
+                        VALUES (p_customer_id, p_total, 'pending', CURRENT_DATE);
+                    END;
+                    $$;
+
+                    CALL place_order(42, 199.99);
+
+                    -- A trigger: fires automatically on UPDATE, with no call site in
+                    -- application code hinting that it ran.
+                    CREATE FUNCTION log_order_status_change() RETURNS TRIGGER AS $$
+                    BEGIN
+                        IF NEW.status IS DISTINCT FROM OLD.status THEN
+                            INSERT INTO order_status_audit (order_id, old_status, new_status, changed_at)
+                            VALUES (OLD.order_id, OLD.status, NEW.status, NOW());
+                        END IF;
+                        RETURN NEW;
+                    END;
+                    $$ LANGUAGE plpgsql;
+
+                    CREATE TRIGGER trg_order_status_audit
+                        AFTER UPDATE ON orders
+                        FOR EACH ROW
+                        EXECUTE FUNCTION log_order_status_change();
+                    """, 4, language: "sql"),
+                Block(BlockType.Diagram, "What Happens When One UPDATE Statement Runs", BodyFormat.StructuredSteps, """
+                    [{"label":"Application executes UPDATE orders SET status = 'shipped' WHERE order_id = 501","note":"one visible statement at the call site"},{"label":"BEFORE UPDATE trigger fires (if any)","note":"can inspect/modify NEW, or raise an exception to cancel the whole update"},{"label":"The row is written","note":"with whatever values NEW ended up holding"},{"label":"AFTER UPDATE trigger fires (if any)","note":"row is already committed to the statement; typically inserts an audit_log row using OLD and NEW"},{"label":"Statement returns to the caller","note":"the caller only ever issued the UPDATE — every trigger side effect happened invisibly"}]
+                    """, 5),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Use views for encapsulation and access control, but don't stack views five deep — a view built on a view built on a view becomes unreadable and can quietly defeat the query planner. Use a materialized view when a query is genuinely expensive and read far more often than the underlying data changes, and pick a deliberate refresh cadence (a scheduled job, or `REFRESH` after the write path that changes the source data) rather than leaving staleness undocumented.
+
+                    Keep triggers minimal, and document every one of them (in a schema comment, a README, or both) precisely because they're invisible from the calling code — for anything business-critical, prefer explicit application-level logic that shows up in a code review over a trigger that only reveals itself when someone goes looking at the schema.
+                    """, 6),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    If asked "why use a view instead of just writing the query," lead with encapsulation and access control, not just "it's shorter" — and be ready for the immediate follow-up, "how is that different from a materialized view," where the freshness/refresh trade-off is exactly what they're listening for. If triggers come up (often via "how would you implement audit logging"), give the textbook answer — an `AFTER` trigger writing to an audit table — but also volunteer the downside: triggers are easy to overuse, and flagging that trade-off unprompted signals more seniority than the trigger syntax itself.
+                    """, 7),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Assuming a view secures data by itself — a view only restricts access if the *base tables'* grants are actually locked down; if a role still has direct `SELECT` on the underlying table, the view provides no protection at all, it's just a second way to read the same data.
+
+                    Also common: putting critical business logic only in a trigger, then being blindsided when a bulk import uses a path that disables triggers (many engines support `DISABLE TRIGGER` or a bulk-load mode that skips them), silently letting thousands of rows in without the audit trail or validation everyone assumed was guaranteed.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "What is the key practical difference between a plain (virtual) view and a materialized view?",
+                    "A materialized view persists its result set to disk and must be explicitly refreshed, so it can serve stale data between refreshes. A plain view re-runs its defining query every time it's referenced, so it's always current but pays the query's full cost on every read.",
+                    [
+                        new QuizOptionSeed("A materialized view is only faster because it uses a different join algorithm", false),
+                        new QuizOptionSeed("A materialized view persists its results and must be refreshed, so it can go stale; a plain view always re-runs its query and is always current", true),
+                        new QuizOptionSeed("A plain view can be indexed directly but a materialized view cannot", false),
+                        new QuizOptionSeed("There is no practical difference — they are two names for the same feature", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "You want a trigger that automatically lowercases an incoming email address before the row is written to the table. Should this be a BEFORE or AFTER trigger, and why?",
+                    "Only a BEFORE row-level trigger can modify NEW's column values before the write takes effect, so the lowercased value is what actually gets stored. An AFTER trigger fires once the row is already written; modifying NEW inside it has no effect on the stored row.",
+                    [
+                        new QuizOptionSeed("AFTER, because the row must exist before it can be validated", false),
+                        new QuizOptionSeed("BEFORE, because only a BEFORE trigger can modify NEW's values before the row is actually written", true),
+                        new QuizOptionSeed("Either works identically for modifying incoming data", false),
+                        new QuizOptionSeed("Neither — triggers cannot modify row data, only application code can", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("PostgreSQL: CREATE VIEW", "https://www.postgresql.org/docs/current/sql-createview.html", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("PostgreSQL: Overview of Trigger Behavior", "https://www.postgresql.org/docs/current/trigger-definition.html", LinkType.OfficialDocs),
+            ]);
+
+        var lesson1Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson1.Slug,
+        [
+            "Write a view that hides a sensitive column (e.g., salary) and grant SELECT only on the view, not the base table",
+            "Create a materialized view for an expensive aggregate query, refresh it manually, and observe how stale it gets between refreshes",
+            "Write a BEFORE trigger and an AFTER trigger on the same table and explain, out loud, why one can modify the incoming row and the other cannot",
+        ]);
+
+        var lesson2 = BuildLesson(
+            slug: "set-operations-and-query-optimization",
+            title: "Set Operations & Query Optimization Techniques",
+            summary: "UNION/UNION ALL/INTERSECT/EXCEPT semantics, rewriting queries to stay sargable, and reading a full EXPLAIN ANALYZE plan for a non-trivial query.",
+            estimatedMinutes: 40,
+            objectives:
+            [
+                "Explain the semantics of UNION, UNION ALL, INTERSECT, and EXCEPT and choose the right one for a given requirement",
+                "Rewrite a query to avoid SELECT * and function-wrapped predicates that defeat an otherwise-usable index",
+                "Read a full EXPLAIN ANALYZE output for a non-trivial join query and identify its costliest step",
+                "Use the gap between estimated and actual rows in a query plan to diagnose stale statistics or a missing index",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    SQL's **set operations** combine the results of two `SELECT` statements that have the same number of columns with compatible types. `UNION` combines both result sets and **removes duplicate rows**, which means the engine has to sort or hash the combined output to find and drop duplicates. `UNION ALL` combines both result sets and **keeps every row**, duplicates included — it's cheaper because there's no de-duplication pass, so use it whenever you already know the two sides can't overlap, or you don't care if they do. `INTERSECT` returns only the rows that appear in **both** result sets. `EXCEPT` (called `MINUS` in Oracle) returns the rows that appear in the first result set but **not** in the second — order matters, unlike `INTERSECT`.
+
+                    **Query rewriting for performance** starts with `SELECT *`. Naming columns explicitly instead of `*` isn't just style: it avoids reading and transmitting columns nobody needs, it can let a **covering index** (one that contains every column the query needs) satisfy the query without touching the table at all, and it stops the query from silently changing behavior when someone adds a column to the table later.
+
+                    The other rewriting habit is staying **sargable** ("Search ARGument ABLE") — writing a predicate the engine can actually satisfy with an index seek instead of wrapping the column in a function or expression. `WHERE EXTRACT(YEAR FROM order_date) = 2024` forces the engine to compute `EXTRACT(YEAR FROM ...)` for every row, exactly like the `UPPER(email)` case from indexing — a plain index on `order_date` can't be used through that transformation. The sargable rewrite is `WHERE order_date >= '2024-01-01' AND order_date < '2025-01-01'`: a plain range predicate directly on the raw column, which a B-tree index on `order_date` can satisfy with a seek.
+
+                    `EXPLAIN ANALYZE` (PostgreSQL) actually **runs** the query and reports real numbers alongside the planner's estimates — unlike plain `EXPLAIN`, which only estimates. Each node in the plan reports `cost=startup..total` (the planner's estimate, in arbitrary cost units) and `actual time=startup..total rows=N loops=M` (what really happened, in milliseconds). The plan is a tree, and it executes, and should be **read, bottom-up / innermost-first**: the most deeply indented nodes run first, feeding their output up into the nodes above them. A `Seq Scan` means every row in the table was read; an `Index Scan` means the index was used to seek directly to matching rows. A large gap between a node's estimated `rows=` (in the `cost=` line) and its `actual ... rows=` strongly suggests the planner's statistics are stale (time to `ANALYZE` the table). A `Seq Scan` with a large `Rows Removed by Filter` means the engine read the whole table and then threw away most of it — a strong candidate for an index on the filtered column(s).
+                    """, 1),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    `UNION` is like merging two guest lists into one and crossing off anyone whose name appears twice — worth the extra effort only when you actually expect overlap. `UNION ALL` is stapling the two lists together and not bothering to check for duplicates at all, because you already know the two events had entirely different invitees. `INTERSECT` is asking "who's on both lists?" and `EXCEPT` is asking "who's on list A but didn't make list B?" — a different question with a different answer depending on which list you ask first.
+
+                    Reading an `EXPLAIN ANALYZE` plan is like reading a kitchen's prep timeline backward from the final plate: the dish at the top of the plan (the `Limit`/`Sort` at the very end) depends on everything indented below it having finished first, so you trace all the way down to the innermost step — often a `Seq Scan` chopping vegetables — to find out which single step is actually eating most of the clock, rather than assuming it's whatever's listed first.
+                    """, 2),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Set operations**
+
+                    | Operation | Returns | Removes duplicates? |
+                    |---|---|---|
+                    | `UNION` | Rows from either side | Yes |
+                    | `UNION ALL` | Rows from either side | No — cheaper |
+                    | `INTERSECT` | Rows in **both** sides | Yes |
+                    | `EXCEPT` (Oracle: `MINUS`) | Rows in the first side, not the second | Yes |
+
+                    **Sargable vs. non-sargable predicates**
+
+                    - Non-sargable: `WHERE EXTRACT(YEAR FROM order_date) = 2024`, `WHERE UPPER(email) = ?`, `WHERE price * 1.1 > ?`
+                    - Sargable: `WHERE order_date >= '2024-01-01' AND order_date < '2025-01-01'`, `WHERE email = ?` (with data stored pre-normalized)
+
+                    **Reading `EXPLAIN ANALYZE`**
+
+                    - Read the tree bottom-up / innermost node first — that's what runs first
+                    - `cost=startup..total` — planner's *estimate*; `actual time=startup..total rows=N loops=M` — what *really* happened
+                    - Big estimated-vs-actual `rows` gap -> stale table statistics
+                    - `Seq Scan` + large `Rows Removed by Filter` -> missing/unused index on the filtered column(s)
+                    - `Planning Time` + `Execution Time` at the very bottom — Execution Time is the number that matters to users
+                    """, 3),
+                Block(BlockType.CodeSnippet, "Set Operations, a Sargable Rewrite, and a Full EXPLAIN ANALYZE", BodyFormat.PlainText, """
+                    -- UNION: combined, duplicates removed.
+                    SELECT customer_id FROM current_customers
+                    UNION
+                    SELECT customer_id FROM archived_customers;
+
+                    -- UNION ALL: combined, duplicates kept -- cheaper, no dedup pass.
+                    SELECT customer_id FROM current_customers
+                    UNION ALL
+                    SELECT customer_id FROM archived_customers;
+
+                    -- INTERSECT: customer_ids present in BOTH sets.
+                    SELECT customer_id FROM email_subscribers
+                    INTERSECT
+                    SELECT customer_id FROM active_customers;
+
+                    -- EXCEPT: customer_ids in the first set but NOT the second (order matters).
+                    SELECT customer_id FROM active_customers
+                    EXCEPT
+                    SELECT customer_id FROM email_subscribers;
+
+                    -- Non-sargable: wraps order_date in a function; can't use a plain
+                    -- index on order_date.
+                    SELECT * FROM orders WHERE EXTRACT(YEAR FROM order_date) = 2024;
+
+                    -- Sargable rewrite: plain range predicate on the raw column, and
+                    -- explicit columns instead of SELECT * so a covering index can help.
+                    SELECT order_id, customer_id, status
+                    FROM orders
+                    WHERE order_date >= '2024-01-01' AND order_date < '2025-01-01';
+
+                    -- EXPLAIN ANALYZE on a non-trivial join + aggregate + sort query:
+                    --
+                    -- EXPLAIN ANALYZE
+                    -- SELECT c.customer_id, c.name, COUNT(o.order_id) AS order_count
+                    -- FROM customers c
+                    -- JOIN orders o ON o.customer_id = c.customer_id
+                    -- WHERE o.status = 'shipped' AND o.order_date >= '2024-01-01'
+                    -- GROUP BY c.customer_id, c.name
+                    -- ORDER BY order_count DESC
+                    -- LIMIT 10;
+                    --
+                    -- Limit  (cost=1450.32..1450.35 rows=10 width=48) (actual time=15.221..15.224 rows=10 loops=1)
+                    --   ->  Sort  (cost=1450.32..1452.87 rows=1020 width=48) (actual time=15.219..15.220 rows=10 loops=1)
+                    --         Sort Key: (count(o.order_id)) DESC
+                    --         ->  HashAggregate  (cost=1400.10..1410.30 rows=1020 width=48) (actual time=14.850..15.100 rows=1020 loops=1)
+                    --               Group Key: c.customer_id, c.name
+                    --               ->  Hash Join  (cost=310.00..1350.00 rows=8000 width=40) (actual time=3.120..12.400 rows=8000 loops=1)
+                    --                     Hash Cond: (o.customer_id = c.customer_id)
+                    --                     ->  Seq Scan on orders o  (cost=0.00..950.00 rows=8000 width=12) (actual time=0.020..6.500 rows=8000 loops=1)
+                    --                           Filter: (status = 'shipped' AND order_date >= '2024-01-01')
+                    --                           Rows Removed by Filter: 42000
+                    --                     ->  Hash  (cost=200.00..200.00 rows=5000 width=36) (actual time=3.050..3.050 rows=5000 loops=1)
+                    --                           ->  Seq Scan on customers c  (cost=0.00..200.00 rows=5000 width=36) (actual time=0.010..1.500 rows=5000 loops=1)
+                    -- Planning Time: 0.450 ms
+                    -- Execution Time: 15.320 ms
+                    --
+                    -- Read bottom-up: the innermost Seq Scan on orders read all 50,000
+                    -- rows and discarded 42,000 of them via Filter -- a composite index
+                    -- on (status, order_date) would let this become an Index Scan
+                    -- instead of a full-table Seq Scan + Filter.
+                    """, 4, language: "sql"),
+                Block(BlockType.Diagram, "Reading an EXPLAIN ANALYZE Plan", BodyFormat.StructuredSteps, """
+                    [{"label":"Find the innermost (most indented) nodes","note":"these execute first -- e.g. the two Seq Scan nodes on orders and customers"},{"label":"Compare estimated rows= (in cost=..) to actual ... rows=","note":"a big mismatch signals stale table statistics -- consider re-running ANALYZE"},{"label":"Look for Seq Scan + a large Rows Removed by Filter","note":"the engine read the whole table and threw most of it away -- a strong signal a missing index would help"},{"label":"Walk upward through the join/aggregate/sort nodes","note":"each parent node's actual time already includes everything below it"},{"label":"Check Planning Time and Execution Time at the bottom","note":"Execution Time is the number that actually matters to a user waiting on the query"}]
+                    """, 5),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Default to `UNION ALL` unless you specifically need duplicates removed — the de-duplication pass in plain `UNION` isn't free, and it's wasted work whenever you already know the two sides can't overlap. Name columns explicitly instead of `SELECT *`, especially in any query that might benefit from a covering index, and keep predicates sargable (compare the raw column directly; do arithmetic or date-truncation on the *literal* side of the comparison, never on the column).
+
+                    Before optimizing a slow query, run `EXPLAIN ANALYZE` on it first and read the whole plan, bottom-up, before changing anything — guessing at a fix without the plan in front of you is how you add an index that the query still won't use.
+                    """, 6),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    If asked to combine two result sets, don't reach for `UNION` by reflex — say out loud whether duplicates are actually possible and desired, and default to the cheaper `UNION ALL` when they aren't. If handed a slow query, walking the interviewer through a plan bottom-up ("this Seq Scan here is discarding almost all its rows, so I'd index this column next") demonstrates you can actually read a plan, not just recite "add an index" as a reflex answer.
+                    """, 7),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Reaching for `UNION` out of habit when `UNION ALL` would do, paying an unnecessary de-duplication cost on every run of a query that never had duplicates to begin with.
+
+                    Also common: reading only the top line of an `EXPLAIN ANALYZE` plan (the final `Limit`/`Sort`) and concluding the query is "fine" because its own numbers look small, while the actual cost is buried several levels down in a `Seq Scan` with a huge `Rows Removed by Filter` that the top-level node's timing already absorbed.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "You need customer_ids that exist in both the newsletter_subscribers table and the active_customers table. Which set operation returns exactly that?",
+                    "INTERSECT returns only the rows present in both result sets. UNION/UNION ALL would combine rows from either set (not just the overlap), and EXCEPT would return rows in the first set that are absent from the second -- the opposite kind of comparison.",
+                    [
+                        new QuizOptionSeed("UNION", false),
+                        new QuizOptionSeed("UNION ALL", false),
+                        new QuizOptionSeed("INTERSECT", true),
+                        new QuizOptionSeed("EXCEPT", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "In an EXPLAIN ANALYZE plan, a Seq Scan node on a 50,000-row table reports \"Rows Removed by Filter: 42000.\" What does this most strongly suggest?",
+                    "A sequential scan that reads every row and then discards the vast majority of them via a Filter is exactly the signature of a missing (or unused) index on the filtered column(s) -- an index seek would let the engine skip most of that discarded work instead of reading and rejecting it row by row.",
+                    [
+                        new QuizOptionSeed("The query no longer needs SELECT * removed", false),
+                        new QuizOptionSeed("The filter is discarding most scanned rows, suggesting an index on the filtered column(s) would help", true),
+                        new QuizOptionSeed("The query planner made an error and its output should be ignored", false),
+                        new QuizOptionSeed("UNION ALL should be used instead of UNION in this query", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("PostgreSQL: Combining Queries (UNION/INTERSECT/EXCEPT)", "https://www.postgresql.org/docs/current/queries-union.html", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("PostgreSQL: Using EXPLAIN", "https://www.postgresql.org/docs/current/using-explain.html", LinkType.OfficialDocs),
+            ]);
+
+        var lesson2Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson2.Slug,
+        [
+            "Rewrite one SELECT * query in your own code to name its columns explicitly, and check whether that lets a covering index satisfy it",
+            "Find (or write) a query with a function-wrapped date or string predicate and rewrite it as a sargable range/equality predicate",
+            "Run EXPLAIN ANALYZE on a join query, find the node with the largest actual time and largest Rows Removed by Filter, and explain what you'd change",
+        ]);
+
+        var module = BuildModule(topicId, "views-procedures-and-set-operations", "Views, Procedures & Set Operations",
+            "Encapsulating and securing logic with views, stored procedures, and triggers, plus set operations and reading a full query plan to optimize non-trivial queries.",
+            80, [lesson1, lesson2], sortOrder: 3);
 
         return (module, [lesson1Checklist, lesson2Checklist]);
     }
@@ -4936,6 +6857,343 @@ public static class CurriculumContentSeedData
         var module = BuildModule(topicId, "serverless-and-observability", "Serverless & Observability",
             "Building event-driven, stateless functions-as-a-service, and seeing inside a distributed system once it's running in production — metrics, logs, and distributed traces working together.",
             70, [lesson1, lesson2], sortOrder: 2);
+
+        return (module, [lesson1Checklist, lesson2Checklist]);
+    }
+
+    private static (Module, List<ChecklistSeed>) BuildCloudScalingModule(int topicId)
+    {
+        var lesson1 = BuildLesson(
+            slug: "auto-scaling-and-load-balancing-deep-dive",
+            title: "Auto-Scaling & Load Balancing Deep Dive",
+            summary: "Auto-scaling policy types, Layer 4 vs. Layer 7 load balancing, health check tuning, and the difference between scaling stateless and stateful workloads.",
+            estimatedMinutes: 45,
+            objectives:
+            [
+                "Explain the trade-offs between horizontal and vertical scaling for a given workload",
+                "Choose the right auto-scaling policy (target tracking, step scaling, or scheduled scaling) for a given traffic pattern",
+                "Explain the difference between Layer 4 and Layer 7 load balancing and when each applies",
+                "Design load balancer health checks that keep traffic away from unhealthy or still-starting instances",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    **Horizontal vs. vertical scaling**, revisited for auto-scaling specifically: vertical scaling (a bigger instance type) usually requires downtime to resize and has a hard ceiling; horizontal scaling (more instances behind a load balancer) is what auto-scaling groups actually automate, and it only works cleanly if the workload is stateless.
+
+                    **Auto-scaling policies** decide *when* and *how much* to scale:
+
+                    - **Target tracking** — pick a metric (e.g., average CPU utilization) and a target value (e.g., 60%); the scaling service continuously adds/removes instances to hold that metric near the target. The default choice for most workloads, since it self-tunes rather than requiring hand-picked thresholds.
+                    - **Step scaling** — react to an alarm with a response sized to how far the metric breached its threshold (e.g., +2 instances if 10-20% over target, +5 instances if more than 20% over). More control than target tracking, at the cost of manually tuning alarm thresholds and step sizes.
+                    - **Scheduled scaling** — pre-set capacity changes at known times (e.g., scale up before a 9am traffic ramp, scale a batch fleet up at 2am), independent of any live metric. Useful when a pattern is predictable and you want capacity in place *before* a metric-based trigger would fire, avoiding a window of degraded latency while new instances launch.
+
+                    **Load balancer layers:**
+
+                    - **Layer 4 (L4)** — operates at the transport layer (TCP/UDP); routes based on IP address and port only, without inspecting request content. Lower latency, higher throughput, protocol-agnostic.
+                    - **Layer 7 (L7)** — operates at the application layer; can inspect HTTP headers, hostnames, and URL paths to make routing decisions (e.g., route `/api/*` to one service and `/static/*` to another), terminate TLS, and apply content-based rules. More overhead than L4, but far more flexible for HTTP/microservice traffic.
+
+                    **Health checks** are how a load balancer decides whether to keep sending traffic to an instance: it polls a defined endpoint (e.g., `GET /healthz`) on an interval, with a timeout, and a threshold of consecutive failures before marking the instance unhealthy and pulling it out of rotation — plus a threshold of consecutive successes before adding a *new* instance back in, giving it time to finish starting up.
+
+                    **Scaling stateful vs. stateless workloads**: stateless app servers (nothing held only in local memory) can be added or removed freely — any instance can serve any request. Stateful workloads (databases, in-memory caches, WebSocket connection holders) need a different approach: sticky sessions as a stopgap, externalizing state to a shared store as the real fix, or identity-aware scaling (like Kubernetes StatefulSets) when the workload's identity or storage actually matters.
+                    """, 1),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    Target tracking is like a thermostat: you set a target temperature (60% CPU) and it continuously adds or removes heating/cooling (instances) to hold that line, without you specifying exact amounts. Step scaling is like a building supervisor who adds one extra guard for a medium crowd and three extra guards for a huge crowd — bigger deviations get bigger responses, but someone has to have pre-defined what counts as "medium" and "huge." Scheduled scaling is like a stadium adding staff before a game starts because the schedule is known in advance, not waiting for the parking lot to already be full.
+
+                    An L4 load balancer is like a mail sorting facility that only reads the street address (IP/port) and routes the envelope along without opening it. An L7 load balancer is like a receptionist who actually opens the envelope, reads what's inside (the URL path, headers), and personally routes it to the right department based on content, not just the outer address.
+                    """, 2),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Auto-scaling policy types**
+
+                    - Target tracking — hold a metric near a target value; self-adjusting, lowest maintenance, good default
+                    - Step scaling — tiered response sized to how far a metric breached its alarm threshold; more control, more tuning
+                    - Scheduled scaling — fixed capacity changes at known times; best for predictable patterns (business hours, batch windows, known launches)
+
+                    **L4 vs. L7 load balancing, by provider**
+
+                    - AWS: Network Load Balancer (L4) / Application Load Balancer (L7)
+                    - Azure: Azure Load Balancer (L4) / Application Gateway (L7)
+                    - GCP: Network Load Balancer (L4) / HTTP(S) Load Balancer (L7)
+
+                    **Health check tuning knobs**
+
+                    - Interval — how often to check
+                    - Timeout — how long to wait before counting the check as a failure
+                    - Unhealthy threshold — consecutive failures before removing an instance from rotation
+                    - Healthy threshold — consecutive successes before adding an instance back in
+                    - Deregistration delay / connection draining — grace period to finish in-flight requests before an instance is fully removed during scale-in
+                    """, 3),
+                Block(BlockType.CodeSnippet, "Auto-Scaling Policies: Target Tracking, Step Scaling, Scheduled (Terraform)", BodyFormat.PlainText, """
+                    resource "aws_autoscaling_policy" "target_tracking_cpu" {
+                      name                   = "target-tracking-cpu-60"
+                      autoscaling_group_name = aws_autoscaling_group.app.name
+                      policy_type            = "TargetTrackingScaling"
+
+                      target_tracking_configuration {
+                        predefined_metric_specification {
+                          predefined_metric_type = "ASGAverageCPUUtilization"
+                        }
+                        target_value     = 60.0
+                        disable_scale_in = false
+                      }
+                    }
+
+                    resource "aws_autoscaling_policy" "step_scale_out" {
+                      name                   = "step-scale-out-high-latency"
+                      autoscaling_group_name = aws_autoscaling_group.app.name
+                      policy_type            = "StepScaling"
+                      adjustment_type        = "ChangeInCapacity"
+
+                      step_adjustment {
+                        scaling_adjustment          = 2
+                        metric_interval_lower_bound = 0
+                        metric_interval_upper_bound = 20
+                      }
+                      step_adjustment {
+                        scaling_adjustment          = 5
+                        metric_interval_lower_bound = 20
+                      }
+                    }
+
+                    resource "aws_autoscaling_schedule" "scale_up_business_hours" {
+                      scheduled_action_name  = "scale-up-weekday-mornings"
+                      autoscaling_group_name = aws_autoscaling_group.app.name
+                      min_size               = 6
+                      max_size               = 20
+                      desired_capacity       = 8
+                      recurrence             = "0 8 * * MON-FRI"
+                    }
+                    """, 4, language: "hcl"),
+                Block(BlockType.Diagram, "L7 Path-Based Routing with Health Checks", BodyFormat.AsciiArt, """
+                                                 Client
+                                                   |
+                                         [ L7 Load Balancer ]        <- terminates TLS, reads Host/Path
+                                            /               \\
+                                  path: /api/*         path: /static/*
+                                       |                        |
+                            [ Target Group: API ]      [ Target Group: Assets ]
+                             Instance   Instance         Instance   Instance
+
+                    Health check loop (per instance, continuous):
+                      GET /healthz every 10s, 5s timeout
+                      2 consecutive failures  -> unhealthy, drained out of rotation
+                      2 consecutive successes -> healthy, added back into rotation
+                    """, 5),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Default to target tracking for most workloads — it self-tunes and needs the least ongoing maintenance; reach for step scaling only when you need finer-grained control over the response curve, and use scheduled scaling as a supplement for known traffic patterns, not a replacement for metric-based scaling.
+
+                    Always set a deregistration delay (connection draining) long enough for the slowest in-flight request to finish before an instance is scaled in, and set a health check grace period on scale-out so a newly-launched instance isn't marked unhealthy just because it's still warming up.
+                    """, 6),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    If asked to design auto-scaling for a service, name the metric you'd scale on and justify it against the workload's actual bottleneck — CPU for compute-bound work, request queue depth or concurrent connections for I/O-bound work — rather than defaulting to "scale on CPU" for everything. Also state minimum and maximum bounds explicitly; an auto-scaling group with no ceiling can runaway-scale on a bug (e.g., a retry storm) and rack up cost just as fast as it once prevented an outage.
+                    """, 7),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Scaling an I/O-bound service on CPU utilization alone — a service mostly waiting on downstream calls or a database can look "idle" on CPU while actually being saturated on concurrent connections or queue depth, so it never triggers a scale-out even while requests are failing.
+
+                    Also common: no deregistration delay configured, so in-flight requests get dropped mid-response the instant an instance is marked for termination during scale-in — and treating a stateful workload (e.g., a WebSocket server holding live connections, or a single-node cache) as if it can scale in and out exactly like a stateless one, silently dropping active sessions or losing uncommitted local state.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "A service sees a reliable, predictable traffic spike every weekday at 9am as employees log in. What's the most direct auto-scaling policy to handle it?",
+                    "Scheduled scaling pre-provisions capacity at a known time, so instances are already running and warmed up before the spike hits — a metric-based policy (target tracking or step scaling) would only react after the metric already crossed its threshold, leaving a window of degraded latency while new instances launch.",
+                    [
+                        new QuizOptionSeed("Scheduled scaling, since the traffic pattern is already known", true),
+                        new QuizOptionSeed("Target tracking only, since it reacts to real-time load", false),
+                        new QuizOptionSeed("Vertical scaling, by resizing the instance type at 9am", false),
+                        new QuizOptionSeed("No auto-scaling policy is needed for predictable traffic", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "A team needs to route /api/* requests to one backend service and /static/* requests to another, based on the URL path, using a single load balancer. Which load balancer layer supports this?",
+                    "Layer 7 load balancers operate at the application layer and can read HTTP-level details like the URL path or Host header to make routing decisions. A Layer 4 load balancer only sees IP address and port, so it cannot distinguish requests by path.",
+                    [
+                        new QuizOptionSeed("Layer 4, since it's faster", false),
+                        new QuizOptionSeed("Layer 7, since it can inspect the URL path to make a routing decision", true),
+                        new QuizOptionSeed("Either layer works identically for this use case", false),
+                        new QuizOptionSeed("This requires a separate DNS server, not a load balancer", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("AWS: Target Tracking Scaling Policies for Amazon EC2 Auto Scaling", "https://docs.aws.amazon.com/autoscaling/ec2/userguide/as-scaling-target-tracking.html", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("AWS: Health Checks for Your Target Groups", "https://docs.aws.amazon.com/elasticloadbalancing/latest/application/target-group-health-checks.html", LinkType.OfficialDocs),
+            ]);
+
+        var lesson1Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson1.Slug,
+        [
+            "Configure (or sketch) a target tracking auto-scaling policy for a real or hypothetical service, and justify the metric you chose",
+            "Explain the difference between an L4 and L7 load balancer using a routing decision only L7 could make",
+            "Describe how you'd scale a stateful workload (e.g., a cache or WebSocket server) differently from a stateless one",
+        ]);
+
+        var lesson2 = BuildLesson(
+            slug: "cost-optimization-and-multi-region-architecture",
+            title: "Cost Optimization & Multi-Region Architecture",
+            summary: "Cloud cost drivers and levers (reserved/spot pricing, right-sizing, storage tiering), and multi-region disaster recovery via RPO/RTO, active-active vs. active-passive, and replication trade-offs.",
+            estimatedMinutes: 45,
+            objectives:
+            [
+                "Identify the primary drivers of cloud cost and the main levers used to reduce each",
+                "Choose between on-demand, reserved, and spot pricing models for a given workload",
+                "Define RPO and RTO and use them to choose between active-active and active-passive multi-region architectures",
+                "Explain the trade-offs of synchronous vs. asynchronous data replication across regions",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    **Cloud cost drivers**, roughly in order of how often they surprise teams: idle/over-provisioned compute (paying for capacity nobody is using), data transfer/egress (moving data out of a provider's network, or across regions, often costs far more than moving it within one), storage volume and tier (keeping everything in hot storage indefinitely), and paying on-demand rates for baseline, predictable capacity that could have been committed in advance.
+
+                    **Compute purchasing levers:**
+
+                    - **On-demand** — pay per hour/second with no commitment; most expensive per unit, but zero lock-in. Right for unpredictable or short-lived workloads.
+                    - **Reserved Instances / Savings Plans** — commit to a certain amount of usage for 1-3 years for a significant discount (roughly 30-70% off on-demand). Right for steady, predictable baseline load you're confident you'll run continuously.
+                    - **Spot Instances** — bid on a provider's spare capacity at up to ~90% off on-demand, but the instance can be reclaimed with only a short warning (e.g., two minutes) whenever the provider needs that capacity back. Right only for fault-tolerant, interruptible, or checkpointed workloads — never for anything that can't tolerate an abrupt, unscheduled termination.
+
+                    **Right-sizing** means matching instance size to actual observed utilization (from real metrics, not guesses) rather than the size that "felt safe" at launch — the single most common source of wasted cloud spend is simply running instances larger than the workload needs, indefinitely.
+
+                    **Storage tiering** applies the same idea to storage: lifecycle rules automatically move objects to cheaper, higher-latency tiers as they age (e.g., hot -> infrequent-access after 30 days -> archive after 90 days) instead of leaving every object, including ones nobody has read in a year, in the most expensive tier forever.
+
+                    **Multi-region architecture for disaster recovery** is evaluated against two numbers the business must define first:
+
+                    - **RTO (Recovery Time Objective)** — how long the system is allowed to be down before service is restored.
+                    - **RPO (Recovery Point Objective)** — how much data (measured in time) the business can afford to lose, i.e., how far back the last usable replica can be.
+
+                    **Active-passive** keeps a standby region ready but not serving live traffic; on failure, it's promoted (DNS/traffic-manager cutover). Simpler and cheaper, but RTO is the time it takes to detect failure and complete the cutover — typically minutes, not seconds. **Active-active** runs multiple regions serving live traffic simultaneously; RTO approaches zero because the other region is already handling requests, at the cost of real complexity: both regions accept writes, which forces a conflict-resolution or data-partitioning strategy.
+
+                    **Data replication trade-offs:** synchronous cross-region replication waits for the remote region to confirm a write before acknowledging it — near-zero RPO, but adds real latency to every write and can block writes if the remote region is unreachable. Asynchronous replication acknowledges the write locally and ships it to the other region afterward — low latency, no blocking on a remote outage, but RPO becomes "however far replication lag was at the moment of failure," which is rarely zero.
+                    """, 1),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    Reserved Instances are like signing a 1-year gym membership for a steep discount because you know you'll go regularly; on-demand is the drop-in day pass at full price; spot instances are like a standby flight seat at a steep discount — you'll almost certainly get where you're going, but the airline can bump you with short notice if a full-fare passenger needs the seat, so you'd never put a connecting flight you can't miss on standby.
+
+                    Active-passive DR is like keeping a fully-stocked backup generator in the garage: reliable and cheap to maintain, but there's a real delay (RTO) between the power going out and the generator actually running the house. Active-active is like already having two independent power feeds into the house simultaneously — if one fails, the lights never even flicker (near-zero RTO), but now both feeds need to agree on what "on" and "off" mean at every moment (the conflict-resolution problem of active-active replication).
+                    """, 2),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Compute purchasing options**
+
+                    - On-demand — full price, zero commitment, best for unpredictable/short-lived load
+                    - Reserved / Savings Plans — ~30-70% off, 1-3 year commitment, best for steady predictable baseline
+                    - Spot — up to ~90% off, reclaimable with short notice, best for fault-tolerant/interruptible workloads only
+
+                    **Storage tiering (typical lifecycle)**
+
+                    - Hot / Standard — frequent access, highest cost per GB
+                    - Infrequent Access — accessed rarely, lower storage cost, retrieval fee applies
+                    - Archive (e.g., Glacier) — rare access, lowest cost, retrieval can take hours
+
+                    **DR architecture at a glance**
+
+                    - Active-passive: standby region, cutover on failure, RTO = detection + cutover time (minutes+)
+                    - Active-active: multiple regions live simultaneously, RTO ~ 0, requires conflict resolution across writes
+                    - Synchronous replication: near-zero RPO, adds write latency, can block on remote outage
+                    - Asynchronous replication: low write latency, RPO = replication lag at failure time
+                    """, 3),
+                Block(BlockType.CodeSnippet, "Storage Tiering and Spot/On-Demand Mix (Terraform)", BodyFormat.PlainText, """
+                    resource "aws_s3_bucket_lifecycle_configuration" "archive_old_logs" {
+                      bucket = aws_s3_bucket.logs.id
+
+                      rule {
+                        id     = "tier-down-cold-data"
+                        status = "Enabled"
+
+                        transition {
+                          days          = 30
+                          storage_class = "STANDARD_IA"
+                        }
+                        transition {
+                          days          = 90
+                          storage_class = "GLACIER"
+                        }
+                        expiration {
+                          days = 365
+                        }
+                      }
+                    }
+
+                    resource "aws_autoscaling_group" "batch_workers" {
+                      min_size = 2
+                      max_size = 50
+
+                      mixed_instances_policy {
+                        instances_distribution {
+                          on_demand_base_capacity                  = 2
+                          on_demand_percentage_above_base_capacity = 20
+                          spot_allocation_strategy                 = "capacity-optimized"
+                        }
+                        launch_template {
+                          launch_template_specification {
+                            launch_template_id = aws_launch_template.worker.id
+                          }
+                          override { instance_type = "m5.large" }
+                          override { instance_type = "m5a.large" }
+                          override { instance_type = "m6i.large" }
+                        }
+                      }
+                    }
+                    """, 4, language: "hcl"),
+                Block(BlockType.Diagram, "Active-Active Multi-Region Architecture", BodyFormat.AsciiArt, """
+                                          Global DNS / Traffic Manager
+                                           (latency- or geo-based routing)
+                                            /                        \\
+                                  Region A (us-east-1)          Region B (eu-west-1)
+                               [ LB -> App -> Primary DB ]   [ LB -> App -> Primary DB ]
+                                            \\                        /
+                                        Bi-directional async replication
+                                     (conflict resolution required on write clashes)
+
+                       RTO ~ seconds   (other region is already serving live traffic)
+                       RPO = replication lag (typically seconds, not zero)
+                    """, 5),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Right-size before you reserve — buy Reserved Instances/Savings Plans against actual observed utilization from the last few weeks of metrics, not the instance size chosen on day one; committing early to an oversized baseline just locks in the waste for 1-3 years instead of one month.
+
+                    Choose the DR pattern from the business's actual RTO/RPO requirements, not the other way around — if the business says "a few hours of downtime and 15 minutes of data loss is fine," active-passive with asynchronous replication is the right (and far cheaper) answer; don't reach for active-active multi-region by default when a simpler pattern already meets the real requirement.
+                    """, 6),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    If asked to design for disaster recovery, ask for the target RTO and RPO before proposing an architecture — those two numbers alone determine whether active-passive with asynchronous replication is sufficient or whether the much more complex and expensive active-active/synchronous approach is actually justified. Proposing "let's go active-active everywhere" without first establishing the requirement reads as over-engineering, not thoroughness.
+                    """, 7),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Putting a stateful, non-checkpointed workload on spot instances to save money, then being surprised when a two-minute reclamation notice loses in-progress work with no clean way to resume it.
+
+                    Also common: describing a multi-region setup as "disaster recovery" purely because data is replicated to a second region, without ever testing an actual failover — replication alone doesn't prove the standby region can actually take over traffic, and the first real test of a DR plan should never be a real outage.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "A workload is a large batch of independent, fault-tolerant jobs that can checkpoint progress and resume if interrupted. Which pricing model minimizes cost?",
+                    "Spot instances offer the deepest discount (up to ~90% off on-demand) precisely because the workload can tolerate an abrupt, short-notice reclamation and resume from a checkpoint — the trade-off that makes spot risky for other workloads is a non-issue here.",
+                    [
+                        new QuizOptionSeed("Reserved Instances, since batch jobs are predictable", false),
+                        new QuizOptionSeed("On-demand, to guarantee the instance is never interrupted", false),
+                        new QuizOptionSeed("Spot instances, since the workload tolerates interruption and can resume from a checkpoint", true),
+                        new QuizOptionSeed("Whichever option is default in the console", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "A business states: 'we can tolerate up to 15 minutes of data loss, and up to 2 hours of downtime, in a regional outage.' What do these two numbers define, and what DR pattern most directly satisfies them?",
+                    "The data-loss tolerance is the RPO (15 minutes) and the downtime tolerance is the RTO (2 hours). An active-passive setup with asynchronous replication (kept well under 15 minutes of lag) and a cutover completing within 2 hours satisfies this directly, without the added cost and complexity of active-active/synchronous replication that these looser targets don't require.",
+                    [
+                        new QuizOptionSeed("Only the RTO; RPO doesn't apply to data loss", false),
+                        new QuizOptionSeed("RPO = 15 minutes and RTO = 2 hours; active-passive with asynchronous replication is sufficient here", true),
+                        new QuizOptionSeed("Both numbers describe the same thing and require active-active replication", false),
+                        new QuizOptionSeed("These numbers only matter for compute cost, not for DR design", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("AWS: Spot Instances", "https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/using-spot-instances.html", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("AWS Whitepaper: Disaster Recovery Options in the Cloud", "https://docs.aws.amazon.com/whitepapers/latest/disaster-recovery-workloads-on-aws/disaster-recovery-options-in-the-cloud.html", LinkType.OfficialDocs),
+            ],
+            prerequisites: [lesson1]);
+
+        var lesson2Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson2.Slug,
+        [
+            "Pick one real or hypothetical workload and justify on-demand vs. reserved vs. spot for it",
+            "Write down an RTO and RPO target for a service you care about, then state whether active-passive or active-active satisfies it",
+            "Review a storage bucket (yours or hypothetical) and describe a lifecycle policy that would tier it by age",
+        ]);
+
+        var module = BuildModule(topicId, "scaling-and-cost-optimization", "Scaling & Cost Optimization",
+            "Auto-scaling policies and load balancer mechanics for handling real traffic, plus the cost levers and multi-region disaster-recovery patterns that keep a growing cloud footprint efficient and resilient.",
+            90, [lesson1, lesson2], sortOrder: 3);
 
         return (module, [lesson1Checklist, lesson2Checklist]);
     }
@@ -5739,6 +7997,315 @@ public static class CurriculumContentSeedData
         return (module, [lesson1Checklist, lesson2Checklist]);
     }
 
+    private static (Module, List<ChecklistSeed>) BuildGitReleasesModule(int topicId)
+    {
+        var lesson1 = BuildLesson(
+            slug: "tags-releases-and-ignoring-files-properly",
+            title: "Tags, Releases & Ignoring Files Properly",
+            summary: "Lightweight vs. annotated tags, cutting a semver release, and getting .gitignore/.gitattributes right instead of fighting them.",
+            estimatedMinutes: 30,
+            objectives:
+            [
+                "Distinguish a lightweight tag from an annotated tag, and explain why releases should use annotated tags",
+                "Apply semantic versioning conventions when tagging a release",
+                "Create a GitHub/GitLab release from a tag, including notes and attached artifacts",
+                "Write correct .gitignore patterns (including precedence and negation) and use .gitattributes to normalize line endings and mark binary files",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    A **lightweight tag** is nothing more than a named pointer to a commit — like a branch that never moves. It lives as a small file under `.git/refs/tags/` containing a commit hash, and no new object is created in Git's object database.
+
+                    An **annotated tag**, by contrast, creates a full **tag object** in the object database: it stores the tagger's name and email, a timestamp, a message, and optionally a GPG signature, and that tag object then points at the target commit. `refs/tags/<name>` points at the tag object, not directly at the commit. This is why `git show <tag>` on an annotated tag shows tagger/date/message before the commit itself — there's genuinely more there.
+
+                    **Semantic versioning** (semver) names releases `MAJOR.MINOR.PATCH` (conventionally tagged as `v2.4.1`): bump **MAJOR** for breaking/incompatible changes, **MINOR** for backward-compatible new functionality, and **PATCH** for backward-compatible bug fixes. Consumers can then pin dependency ranges (`^2.4.0`) with a real contract about what won't break them.
+
+                    A **GitHub/GitLab release** is built on top of an existing tag — it's not a separate mechanism. Creating a release attaches human-readable release notes (often auto-generated from merged PRs) and optionally binary artifacts (installers, compiled bundles) to that one specific tag, and can be marked as a draft or a pre-release before it's publicly announced.
+
+                    **`.gitignore`** tells Git which *untracked* files to stop reporting as untracked — it does not affect files Git is already tracking. Patterns are matched relative to the directory containing the `.gitignore` file (or the repo root for a top-level one); when multiple `.gitignore` files or multiple patterns could apply, **the last matching pattern wins**, and a more deeply-nested `.gitignore` can override a broader rule from one higher up the tree. A leading `!` negates a pattern (re-includes something previously excluded) — but Git can't un-ignore a file *inside* a directory that was itself ignored, because it never descends into an ignored directory to look.
+
+                    **`.gitattributes`** controls per-path behavior Git applies during checkout/commit/diff. `* text=auto` normalizes line endings (CRLF on Windows checkouts, LF stored in the repository) so cross-platform teams don't generate noisy whole-file diffs from line-ending churn alone. `*.png binary` (or `-text`) marks a path as binary, skipping line-ending conversion and text diffing entirely. GitHub-specific overrides like `*.min.js linguist-generated=true` or `vendor/* linguist-vendored` tell GitHub's language-detection and diff UI to stop counting/diffing generated or vendored code as if it were hand-written source.
+                    """, 1),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    A lightweight tag is a sticky note with a page number on it. An annotated tag is a notarized certificate stapled to that same page — signed, dated, and stating exactly why this page matters — which is why you'd want the notarized version for anything you're calling an official release.
+
+                    `.gitignore` is like handing a photographer a "do not photograph" list *before* the event starts — it works great for guests who haven't been photographed yet. If a guest was already photographed on day one and you add them to the list on day two, the existing photos don't un-develop themselves; you have to go delete them separately (`git rm --cached`).
+
+                    `.gitattributes` line-ending normalization is like agreeing everyone will write letters in one shared paper size before mailing them, even though each person's own desk (Windows vs. Mac) uses a slightly different default — so the version that gets filed centrally never differs based on whose desk it was written at.
+                    """, 2),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Tags**
+
+                    - `git tag <name>` — lightweight tag on the current commit
+                    - `git tag -a <name> -m "message"` — annotated tag (use this for releases)
+                    - `git tag -a <name> -m "message" <commit-hash>` — annotated tag on a past commit
+                    - `git push origin <tag>` — push one tag (tags are NOT pushed by default)
+                    - `git push origin --tags` — push all tags
+                    - `git tag -d <name>` / `git push origin --delete tag <name>` — delete locally / remotely
+
+                    **.gitignore**
+
+                    - `*.log` — ignore by extension, anywhere in the tree
+                    - `build/` — ignore a directory (trailing slash = directory only)
+                    - `/config.local.json` — leading slash anchors the pattern to this directory only
+                    - `!important.log` — negation: re-include a file an earlier broader pattern excluded
+                    - `git rm --cached <file>` — stop tracking a file that's already committed, so .gitignore can finally take effect on it
+
+                    **.gitattributes**
+
+                    - `* text=auto` — normalize line endings for all text files
+                    - `*.sh text eol=lf` — force LF specifically (shell scripts break with CRLF)
+                    - `*.png binary` — treat as binary: no line-ending conversion, no text diff
+                    - `*.min.js linguist-generated=true` — GitHub: exclude from language stats/diffs
+                    """, 3),
+                Block(BlockType.CodeSnippet, "Tagging, Pushing, and Cutting a Release", BodyFormat.PlainText, """
+                    # Cut an annotated, semver-compliant release tag
+                    git tag -a v2.4.0 -m "Add bulk export endpoint, deprecate v1 auth"
+                    git push origin v2.4.0
+
+                    # Inspect the difference: annotated tags carry a real object
+                    git cat-file -t v2.4.0
+                    # tag  (a lightweight tag here would print "commit" instead)
+                    git cat-file -p v2.4.0
+                    # object 9fceb02...
+                    # type commit
+                    # tag v2.4.0
+                    # tagger Jane Doe <jane@example.com> 1706558400 -0800
+                    #
+                    # Add bulk export endpoint, deprecate v1 auth
+
+                    # Create a GitHub release from that tag, with notes and an artifact
+                    gh release create v2.4.0 ./dist/app-2.4.0.zip \
+                      --title "v2.4.0" \
+                      --generate-notes
+
+                    # ---- .gitignore ----
+                    # node_modules/
+                    # bin/
+                    # obj/
+                    # *.user
+                    # .env
+                    # !.env.example
+
+                    # A file already tracked before it was added to .gitignore keeps showing up:
+                    git rm --cached appsettings.Local.json
+                    git commit -m "Stop tracking local settings file"
+
+                    # ---- .gitattributes ----
+                    # * text=auto
+                    # *.sh text eol=lf
+                    # *.png binary
+                    # *.jpg binary
+                    # dist/* linguist-generated=true
+                    """, 4, language: "bash"),
+                Block(BlockType.Diagram, "Lightweight Tag vs. Annotated Tag Object Graph", BodyFormat.AsciiArt, """
+                    Lightweight tag (just a ref -- no new object):
+
+                    refs/tags/v1.0.0 ------------------> [commit a1b2c3d]
+
+                    Annotated tag (a real tag object sits in between):
+
+                    refs/tags/v2.4.0 --> [tag object]  --> [commit 9fceb02]
+                                          tagger: Jane Doe
+                                          date:   2026-01-29
+                                          message: "Add bulk export..."
+                                          (optional GPG signature)
+
+                    git cat-file -t v1.0.0  ->  commit    (points straight at a commit)
+                    git cat-file -t v2.4.0  ->  tag       (points at a tag object first)
+                    """, 5),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Always use **annotated** tags for anything you'd call a release — the tagger identity, date, message, and optional signature are exactly the audit trail a release needs, and most Git hosting UIs (and `git describe`) are built assuming annotated tags for this.
+
+                    Add `.gitignore` (and, for cross-platform teams, `.gitattributes` with `* text=auto`) at the very start of a repository's life, before the first commit — it's far easier to keep noise out from the beginning than to `git rm --cached` a build directory that's already 40 commits deep into history.
+                    """, 6),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    If asked "what's the difference between a lightweight and an annotated tag," don't just say "one has a message" — say that an annotated tag creates an actual object in Git's object database (tagger, date, message, optional signature) that the ref points at, while a lightweight tag is only a ref pointing straight at a commit, same as a branch that never advances. That's the concrete, verifiable answer (`git cat-file -t <tag>` proves it), not just a vibe.
+                    """, 7),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Adding a file to `.gitignore` and expecting `git status` to immediately stop showing it as changed — if the file is already tracked, `.gitignore` has no effect on it at all until you explicitly `git rm --cached` it. This is one of the most common Git confusions in practice.
+
+                    Also common: running `git tag v1.2.3` (lightweight) and later realizing there's no record of who cut the release or why — and forgetting that `git push` does **not** push tags by default, so a tag created and even referenced in release notes can be completely absent from the remote until someone runs `git push --tags`.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "What is the key structural difference between a lightweight tag and an annotated tag?",
+                    "An annotated tag creates a full tag object in Git's object database (tagger, date, message, optional GPG signature), and the ref points at that tag object, which then points at the commit. A lightweight tag is only a ref pointing directly at a commit, with no extra object created — verify with `git cat-file -t <tag>`, which prints `tag` vs. `commit`.",
+                    [
+                        new QuizOptionSeed("Lightweight tags can only be created on the latest commit; annotated tags can target any commit", false),
+                        new QuizOptionSeed("Annotated tags create a real tag object with tagger/date/message/signature; lightweight tags are just a ref pointing straight at a commit", true),
+                        new QuizOptionSeed("Annotated tags are pushed automatically with `git push`; lightweight tags are never pushed", false),
+                        new QuizOptionSeed("There is no functional difference, only a naming convention", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "You add `build/output.log` to .gitignore, but it's already tracked in the repository and still shows up in `git status` as modified. Why?",
+                    ".gitignore only stops Git from reporting *untracked* files as untracked — it has no effect on files that are already tracked. To actually stop tracking it, you need `git rm --cached build/output.log` (which removes it from tracking but leaves it on disk), then commit that removal.",
+                    [
+                        new QuizOptionSeed(".gitignore patterns only take effect after a `git gc`", false),
+                        new QuizOptionSeed(".gitignore has no effect on files already tracked; run `git rm --cached` to stop tracking it first", true),
+                        new QuizOptionSeed("The pattern is wrong and needs a leading `!`", false),
+                        new QuizOptionSeed(".gitignore only works for files smaller than 1MB", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Git Basics — Tagging", "https://git-scm.com/book/en/v2/Git-Basics-Tagging", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("gitignore — official documentation", "https://git-scm.com/docs/gitignore", LinkType.OfficialDocs),
+            ]);
+
+        var lesson1Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson1.Slug,
+        [
+            "Create both a lightweight and an annotated tag on a scratch repo, then inspect the difference with git cat-file -t",
+            "Tag a commit using semantic versioning (vMAJOR.MINOR.PATCH), push it, and create a GitHub or GitLab release from that tag",
+            "Write a .gitignore with a negation pattern and a .gitattributes line normalizing line endings, then verify it with git check-attr",
+        ]);
+
+        var lesson2 = BuildLesson(
+            slug: "submodules-and-monorepo-strategies",
+            title: "Submodules & Monorepo Strategies",
+            summary: "Embedding one repo inside another with submodules or subtree, and the real trade-offs between a monorepo and many small repos.",
+            estimatedMinutes: 35,
+            objectives:
+            [
+                "Add a git submodule and correctly clone a repository that contains submodules",
+                "Explain the detached-HEAD-per-submodule gotcha and how to commit a submodule update without losing work",
+                "Compare git subtree to git submodules as ways to embed one repository inside another",
+                "State a concrete monorepo vs. multi-repo trade-off covering tooling, atomic cross-project commits, and CI scaling",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    A **git submodule** lets one repository (the "superproject") reference a specific commit of another repository at a given path. The superproject does not store that other repo's files — it stores a `.gitmodules` file (mapping path to URL) and a special **gitlink** tree entry that records exactly one commit hash. The submodule's actual `.git` metadata is a separate, independent repository nested at that path.
+
+                    Because a plain `git clone` does **not** fetch submodule content by default, you either clone with `git clone --recurse-submodules <url>`, or run `git submodule update --init --recursive` afterward — skip this and the submodule's directory exists but is empty.
+
+                    The classic **detached-HEAD-per-submodule gotcha**: when Git checks out a submodule at its recorded commit, it does so in **detached HEAD** state, not on a branch — because a commit hash, not a branch name, is what's recorded. If you `cd` into the submodule and commit new work directly there while detached, and later switch the parent repo (or the submodule) away from that commit without first pushing it on a real branch, that commit becomes unreachable and can be garbage-collected. The safe pattern: `cd` into the submodule, `git checkout` (or create) a branch, commit and push there, *then* go back to the superproject and `git add <path>` to record the new pointer commit.
+
+                    **`git subtree`** is a different approach entirely: instead of a pointer to another repo, it merges that repo's entire history directly into a subdirectory of your repo as ordinary commits. There's no `.gitmodules`, no separate clone step, and no detached-HEAD trap — anyone who clones the superproject gets everything, with no awareness it was ever composed of a separate repo. The trade-off is a larger, less separable history, and pulling upstream updates (`git subtree pull`) or pushing changes back (`git subtree push`) is a heavier, less common operation than a submodule update.
+
+                    **Monorepo vs. multi-repo** is a related but distinct decision about how many *projects* (not just one embedded dependency) share a single repository. A **monorepo** puts everything in one repo: cross-project refactors become a single atomic commit, dependency versions can't silently drift between projects, and code sharing needs no publish step — but it requires investment in tooling (Bazel, Nx, Turborepo, sparse-checkout/partial clone) so CI doesn't naively rebuild and retest the entire company on every commit. A **multi-repo** layout gives each project a clean ownership boundary and independent release cadence, at the cost of coordinated, multi-PR changes whenever something cuts across project boundaries, and the ever-present risk of version drift between them.
+                    """, 1),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    A submodule is like a library catalog card that says "see edition printed in 2019, shelf B" — it references a specific, exact edition of someone else's book without photocopying a single page of it into your own binder. `git subtree` is the opposite: you photocopy that entire book, chapter by chapter, directly into your own binder as your own pages, so anyone who borrows your binder never needs to go find the original book at all.
+
+                    A monorepo is one shared office building where every team can walk down the same hallway and renovate a shared load-bearing wall together in one afternoon — powerful, but the building needs a serious facilities crew (build tooling) to keep every floor's power and water running smoothly as the building grows. Multi-repo is each team in its own separate building across town — full autonomy over their own space, but changing shared plumbing between buildings means scheduling a coordinated visit to each one.
+                    """, 2),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Submodules**
+
+                    - `git submodule add <url> <path>` — add a submodule at a path
+                    - `git clone --recurse-submodules <url>` — clone and fetch submodule content in one step
+                    - `git submodule update --init --recursive` — fetch submodule content after a plain clone
+                    - `git submodule update --remote` — pull the latest commit on the submodule's tracked branch
+                    - Inside a submodule: `git checkout <branch>` **before** committing — avoids stranding commits in detached HEAD
+                    - Back in the superproject: `git add <path>` then commit — records the new pointer commit
+
+                    **Subtree**
+
+                    - `git subtree add --prefix=<path> <url> <branch> --squash` — embed another repo's history into a subdirectory
+                    - `git subtree pull --prefix=<path> <url> <branch> --squash` — pull upstream updates into that subdirectory
+                    - `git subtree push --prefix=<path> <url> <branch>` — push local changes back upstream
+
+                    **Monorepo scaling tools**
+
+                    - Bazel, Nx, Turborepo — build only what actually changed ("affected" project detection), cache build/test results
+                    - `git sparse-checkout` / partial clone — check out only the subset of a huge monorepo a developer actually needs
+                    """, 3),
+                Block(BlockType.CodeSnippet, "Submodules and Subtree, End to End", BodyFormat.PlainText, """
+                    # Add a submodule and commit the pointer + .gitmodules
+                    git submodule add https://github.com/acme/shared-ui.git libs/shared-ui
+                    git commit -m "Add shared-ui as a submodule"
+
+                    # Someone else clones the superproject correctly
+                    git clone --recurse-submodules https://github.com/acme/app.git
+                    # ...or, after a plain clone that left libs/shared-ui empty:
+                    git submodule update --init --recursive
+
+                    # WRONG: committing directly inside a submodule in detached HEAD
+                    cd libs/shared-ui
+                    git status
+                    # HEAD detached at 9fceb02
+                    echo "fix" >> button.css
+                    git commit -am "quick fix"        # this commit exists... but is stranded
+                    cd ../..
+                    git checkout main                  # switch away with nothing pointing at that commit
+                    # -> the fix above is now unreachable and eligible for garbage collection
+
+                    # RIGHT: check out a real branch inside the submodule first
+                    cd libs/shared-ui
+                    git checkout -b fix/button-padding
+                    echo "fix" >> button.css
+                    git commit -am "Fix button padding"
+                    git push -u origin fix/button-padding
+                    cd ../..
+                    git add libs/shared-ui             # record the new commit as the superproject's pointer
+                    git commit -m "Bump shared-ui to fix/button-padding"
+
+                    # Alternative: embed the same repo with subtree instead (no separate clone step for consumers)
+                    git subtree add --prefix=libs/shared-ui https://github.com/acme/shared-ui.git main --squash
+                    git subtree pull --prefix=libs/shared-ui https://github.com/acme/shared-ui.git main --squash
+                    """, 4, language: "bash"),
+                Block(BlockType.Diagram, "Updating a Submodule Without Losing the Commit", BodyFormat.StructuredSteps, """
+                    [{"label":"cd into the submodule directory","note":"it's checked out in detached HEAD at the pinned commit"},{"label":"git checkout -b <branch> (or an existing branch)","note":"attach HEAD to a real branch before changing anything"},{"label":"make the change and commit inside the submodule"},{"label":"git push the submodule's branch","note":"so the new commit is reachable outside your machine too"},{"label":"cd back to the superproject"},{"label":"git add <submodule-path>","note":"records the submodule's new commit hash as the updated gitlink"},{"label":"commit in the superproject","note":"e.g. 'Bump shared-ui to fix/button-padding' — the pointer bump is itself a normal commit"}]
+                    """, 5),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Never commit directly inside a submodule while it's in detached HEAD — always check out (or create) a branch first, exactly like committing in the superproject itself, so the commit has something durable pointing at it besides your local checkout.
+
+                    Before defaulting to a monorepo for "simplicity," confirm the team is willing to invest in the tooling a monorepo needs at scale (affected-project build/test detection, caching, possibly sparse checkouts) — a monorepo without that tooling degrades into "CI runs the entire company's test suite on every commit," which is a worse outcome than the multi-repo coordination overhead it was meant to avoid.
+                    """, 6),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    If asked "monorepo or multi-repo, which do you prefer," don't just pick a side — name the actual trade-off: monorepos buy atomic cross-project commits and eliminate dependency version drift, at the cost of needing serious build tooling (Bazel/Nx/Turborepo-style affected-project detection) to keep CI fast as the repo grows; multi-repos buy clean ownership and independent release cadence, at the cost of coordinated multi-PR changes for anything cross-cutting. Naming specific tooling by name is a strong signal you've actually operated at that scale, not just read the debate.
+                    """, 7),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Cloning a repo that has submodules with a plain `git clone` and never running `--recurse-submodules` or `git submodule update --init --recursive` — the submodule directories exist but are empty, which looks like a broken checkout rather than a missing initialization step.
+
+                    Also common: assuming the superproject will automatically pick up a submodule's latest upstream commits — it won't. A submodule reference is pinned to whatever exact commit hash was last recorded; someone has to explicitly run `git submodule update --remote` and then commit that pointer bump for the superproject to move forward at all.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "What does a git submodule actually store in the superproject's repository?",
+                    "The superproject stores a .gitmodules file mapping the submodule's path to its URL, plus a gitlink tree entry recording one specific commit hash of the submodule repo. It does not store the submodule's file contents directly — those live in the submodule's own separate .git history.",
+                    [
+                        new QuizOptionSeed("A full copy of every file in the submodule repository at commit time", false),
+                        new QuizOptionSeed("A gitlink entry recording one specific commit hash of the submodule repo, plus a URL mapping in .gitmodules", true),
+                        new QuizOptionSeed("Only the submodule's most recent commit message, not its content", false),
+                        new QuizOptionSeed("A symbolic link to the submodule's remote URL, resolved at build time", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "After cloning a repo with submodules, you cd into a submodule and find it checked out with no branch attached. What state is this, and what happens if you commit there and then switch the parent away without pushing first?",
+                    "This is detached HEAD — normal for a freshly checked-out submodule, since it's pinned to a specific commit hash, not a branch. A commit made while detached has nothing else pointing at it; if you move away without first creating/pushing a branch, that commit becomes unreachable and is eventually garbage-collected.",
+                    [
+                        new QuizOptionSeed("This is a corrupted repository state and the submodule must be re-added", false),
+                        new QuizOptionSeed("Detached HEAD — a commit made here can become unreachable and be garbage-collected if you switch away without pushing it on a branch first", true),
+                        new QuizOptionSeed("This only happens with git subtree, never with actual submodules", false),
+                        new QuizOptionSeed("It's harmless in every case because submodule commits are always retained permanently", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("git-submodule — official documentation", "https://git-scm.com/docs/git-submodule", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("Git Tools: Submodules", "https://git-scm.com/book/en/v2/Git-Tools-Submodules", LinkType.OfficialDocs),
+            ],
+            prerequisites: [lesson1]);
+
+        var lesson2Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson2.Slug,
+        [
+            "Add a submodule to a scratch repo, then clone it fresh with --recurse-submodules and confirm the submodule content actually appears",
+            "Deliberately commit inside a submodule while in detached HEAD, switch branches without pushing first, and explain what happened to that commit",
+            "Write one paragraph stating a concrete monorepo vs. multi-repo trade-off you would defend in an interview",
+        ]);
+
+        var module = BuildModule(topicId, "releases-and-repo-organization", "Releases & Repository Organization",
+            "Tagging and cutting releases correctly, keeping .gitignore and .gitattributes right, and structuring multi-project work with submodules, subtree, or a monorepo.",
+            65, [lesson1, lesson2], sortOrder: 3);
+
+        return (module, [lesson1Checklist, lesson2Checklist]);
+    }
+
     // ============================== DevOps ==============================
 
     private static (Module, List<ChecklistSeed>) BuildDevOpsModule(int topicId)
@@ -6483,6 +9050,272 @@ public static class CurriculumContentSeedData
         var module = BuildModule(topicId, "infrastructure-as-code-and-reliability", "Infrastructure as Code & Reliability Engineering",
             "Managing infrastructure as versioned, reviewable code with Terraform's state file, module, and plan/apply workflow — then proving that resilience by deliberately injecting controlled failure instead of waiting for production to fail on its own.",
             75, [lesson1, lesson2], sortOrder: 2);
+
+        return (module, [lesson1Checklist, lesson2Checklist]);
+    }
+
+    private static (Module, List<ChecklistSeed>) BuildDevOpsConfigurationAndCapacityModule(int topicId)
+    {
+        var lesson1 = BuildLesson(
+            slug: "configuration-management-and-secrets-handling",
+            title: "Configuration Management & Secrets Handling",
+            summary: "Declaratively, idempotently configuring what's already running on provisioned infrastructure, and getting secrets to services without ever putting them in source control.",
+            estimatedMinutes: 35,
+            objectives:
+            [
+                "Explain what a configuration management tool actually owns, and how that differs from what Terraform/IaC owns",
+                "Explain idempotency in configuration application, and why re-running the same playbook must be safe",
+                "Describe a vault-style secret injection pattern and why static secrets in source control or plain env files are a liability",
+                "Design a secret rotation process that overlaps old and new credentials instead of a hard, downtime-causing cutover",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    **Configuration management** tools (Ansible, Chef, Puppet, SaltStack) describe the desired state of software already running on a machine — which packages are installed, which config files exist and what they contain, which services are running and enabled — and then converge the machine toward that state. This is a different job from **infrastructure as code**: Terraform provisions the box (the VM, the network, the load balancer); a configuration management tool configures what runs *inside* that box once it exists. A typical pipeline runs both — Terraform creates the server, then a configuration management run installs and configures the application on it.
+
+                    Most modern configuration management tools are **declarative**, not imperative: instead of scripting "run this shell command, then this one," you declare "nginx should be installed and running" and the tool figures out what, if anything, needs to change to get there. This declarative model is what makes **idempotency** possible — an Ansible task like `state: present` checks whether the package is already installed before doing anything, so running the same playbook 100 times against an already-correct server produces zero changes on runs 2 through 100, instead of erroring out or reinstalling unnecessarily.
+
+                    **Secrets** (database passwords, API keys, TLS private keys) should never live in source control or a plaintext `.env` file checked into a repo — anyone with repo access (or repo history) gets the secret forever, even after it's "removed." The standard pattern is a **secrets vault** (HashiCorp Vault, AWS Secrets Manager): the application or configuration management run authenticates to the vault at deploy/boot time (via a machine identity — an IAM role, an AppRole, a Kubernetes service account — never a hardcoded vault password), and the vault hands back the actual secret, often as a **short-lived, dynamic** credential with a lease rather than a permanent static password.
+                    """, 1),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    Infrastructure as code is like the general contractor who pours the foundation, frames the walls, and runs the plumbing and electrical — the structure of the house. Configuration management is the move-in crew that arrives afterward: painting walls a specific color, setting the thermostat schedule, and putting the right furniture in the right rooms. You don't want the framing crew re-pouring the foundation every time someone wants the thermostat schedule changed, and you don't want the move-in crew improvising where the plumbing goes — each tool owns a different layer.
+
+                    A vault-style secret store is like a hotel key card system instead of handing out a physical master key: a card is issued to one guest, works only for their room, only for the days they're checked in, and can be silently deactivated and reissued without anyone re-keying the actual locks — which is exactly what a short-lived, revocable dynamic secret gives you over a permanent, hand-copied password.
+                    """, 2),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Configuration management vs. IaC**
+
+                    - IaC (Terraform) — provisions infrastructure: VMs, networks, load balancers, managed databases
+                    - Config management (Ansible/Chef/Puppet) — configures what runs on already-provisioned infrastructure: packages, config files, services
+                    - Most real pipelines use both, in that order
+
+                    **Idempotency**
+
+                    - Running the same playbook/recipe twice against an already-correct system should report zero changes, not fail or reapply destructively
+                    - Achieved by using state-declaring modules (`state: present`, `state: started`) instead of raw imperative shell commands
+
+                    **Secrets patterns**
+
+                    - Never commit secrets to source control or plaintext `.env` files
+                    - Authenticate to a vault via machine identity (IAM role, AppRole, service account) — not a hardcoded vault credential
+                    - Prefer short-lived, dynamic, leased secrets over permanent static passwords
+                    - Rotate by overlapping old + new credentials, then revoking the old one — never a hard cutover
+                    """, 3),
+                Block(BlockType.CodeSnippet, "An Idempotent Playbook That Fetches a Secret from Vault", BodyFormat.PlainText, """
+                    ---
+                    - name: Configure app servers (idempotent)
+                      hosts: app_servers
+                      become: true
+                      vars:
+                        # Fetched at run time from Vault — never stored in this repo or on disk in plaintext.
+                        db_password: "{{ lookup('community.hashi_vault.hashi_vault', 'secret=secret/data/prod/db:password') }}"
+                      tasks:
+                        - name: Ensure nginx is installed
+                          ansible.builtin.apt:
+                            name: nginx
+                            state: present
+                            update_cache: true
+
+                        - name: Template application config with the secret injected
+                          ansible.builtin.template:
+                            src: app.conf.j2
+                            dest: /etc/myapp/app.conf
+                            mode: "0640"
+                          notify: Restart myapp
+
+                        - name: Ensure myapp service is running and enabled
+                          ansible.builtin.service:
+                            name: myapp
+                            state: started
+                            enabled: true
+
+                      handlers:
+                        - name: Restart myapp
+                          ansible.builtin.service:
+                            name: myapp
+                            state: restarted
+
+                    # Idempotent: apt/template/service each check current state before acting,
+                    # so re-running this against an already-correct server reports changed=0.
+                    # The restart handler only fires if the templated config actually changed.
+                    """, 4, language: "yaml"),
+                Block(BlockType.Diagram, "Dynamic Secret Issuance and Rotation Without Downtime", BodyFormat.StructuredSteps, """
+                    [{"label":"App boots, authenticates to Vault","note":"machine identity — AppRole/IAM — no static secret needed"},{"label":"Vault issues a short-lived dynamic secret","note":"e.g. a DB credential with a lease, not a permanent password"},{"label":"App uses the secret until its lease nears expiry"},{"label":"App renews or fetches a new secret","note":"old and new credentials both valid during the overlap window"},{"label":"Old credential revoked","note":"zero downtime — no restart or redeploy required"}]
+                    """, 5),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Use state-declaring modules (`apt`/`package`, `service`, `template`, `file`) instead of raw `shell`/`command` tasks wherever possible — a shell command that blindly re-runs `useradd foo` fails on the second run, while `ansible.builtin.user: name=foo state=present` is safely idempotent by design.
+
+                    Rotate secrets by issuing the new credential alongside the old one, letting running instances pick up the new value on their normal refresh cycle, and only revoking the old credential once nothing is using it anymore — a rotation that deletes the old secret before every consumer has the new one causes an outage instead of preventing one.
+                    """, 6),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    If asked "Terraform vs. Ansible, when would you use each," give the precise division of labor — Terraform provisions the infrastructure, configuration management configures the software on it — rather than treating them as interchangeable or competing tools. If asked how you'd rotate a database password with zero downtime, describe the overlap window (new secret issued and adopted before the old one is revoked) explicitly; "just change the password" is the answer that signals you haven't thought about the cutover.
+                    """, 7),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Committing a secret to a plaintext `.env` file or hardcoding it in application config "temporarily" — it's now in git history forever, even after a later commit removes it, and must be treated as compromised and rotated, not just deleted.
+
+                    Also common: writing configuration management playbooks out of raw shell commands instead of idempotent modules, so re-running the playbook against a server that's already correctly configured either errors out or reapplies changes destructively — defeating the entire point of being able to safely re-converge state at any time.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "What is the key difference between an infrastructure-as-code tool like Terraform and a configuration management tool like Ansible?",
+                    "Terraform provisions the underlying infrastructure itself (VMs, networks, load balancers); configuration management tools configure the software running on infrastructure that already exists. Real pipelines typically use both, in that order.",
+                    [
+                        new QuizOptionSeed("They are interchangeable — either one can do the other's job equally well", false),
+                        new QuizOptionSeed("Terraform provisions infrastructure; configuration management configures what runs on infrastructure that already exists", true),
+                        new QuizOptionSeed("Configuration management tools can only run inside Docker containers", false),
+                        new QuizOptionSeed("Terraform is only for on-premises servers, never cloud infrastructure", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "How should a database credential be rotated to avoid causing downtime?",
+                    "Issue the new credential alongside the still-valid old one, let running instances pick up the new credential on their normal cycle, and only revoke the old credential once nothing depends on it anymore — a hard cutover that kills the old credential first breaks anything still using it.",
+                    [
+                        new QuizOptionSeed("Revoke the old credential immediately, then generate a new one", false),
+                        new QuizOptionSeed("Issue the new credential, let consumers adopt it, then revoke the old one only once nothing uses it", true),
+                        new QuizOptionSeed("Restart every service simultaneously at midnight with the new password baked into the deploy", false),
+                        new QuizOptionSeed("Rotation isn't necessary as long as the secret isn't in source control", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Ansible Documentation", "https://docs.ansible.com/ansible/latest/index.html", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("HashiCorp Vault: What is Vault?", "https://developer.hashicorp.com/vault/docs/what-is-vault", LinkType.OfficialDocs),
+            ]);
+
+        var lesson1Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson1.Slug,
+        [
+            "Write an idempotent configuration task (Ansible or equivalent) for a service you run, and confirm running it twice produces zero changes the second time",
+            "Find one secret in your own project that's currently hardcoded or in a plaintext .env file, and sketch how you'd move it behind a vault-style secret store",
+            "Design a rotation plan for one credential that overlaps old and new values instead of a hard cutover",
+        ]);
+
+        var lesson2 = BuildLesson(
+            slug: "load-testing-and-capacity-planning",
+            title: "Load Testing & Capacity Planning",
+            summary: "Load, stress, and soak testing answer different questions — and turning the results into real headroom and growth numbers is what actually prevents next quarter's outage.",
+            estimatedMinutes: 40,
+            objectives:
+            [
+                "Distinguish load testing, stress testing, and soak testing, and explain what question each one answers",
+                "Identify the key metrics captured during a load test: throughput, latency percentiles, and error rate under load",
+                "Locate a system's breaking point from load test results and identify the limiting bottleneck",
+                "Turn load test results into a capacity plan that includes headroom and a growth projection",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    **Load testing**, **stress testing**, and **soak testing** sound similar but answer different questions. A **load test** applies the traffic you actually expect (current or projected peak) and confirms the system handles it within acceptable latency and error rate. A **stress test** deliberately pushes traffic *past* expected peak, increasing until something breaks, specifically to find the system's actual breaking point and see *how* it fails (does it degrade gracefully, or fall over completely?). A **soak test** (endurance test) runs a moderate, sustainable load for an extended period — hours, not minutes — to catch problems that only appear over time, like memory leaks, connection pool exhaustion, or disk filling up with logs.
+
+                    The metrics that matter during any of these are **throughput** (requests/second the system is sustaining), **latency percentiles**, and **error rate under load**. Percentiles matter far more than the average: **p50** (median) is the typical experience, but **p95** and **p99** show what the slowest 5% and 1% of requests experience — and at scale, "1% of requests" can be thousands of real users having a bad time while the average latency number looks perfectly healthy.
+
+                    Pushing load upward eventually reveals the system's **breaking point** — the load level where latency spikes or errors start climbing sharply, not gradually. Finding *which* resource caused it (CPU saturation, database connection pool exhaustion, thread pool starvation, a downstream API's own rate limit) is the **bottleneck**, and it's usually the single narrowest point in the whole chain, not the whole system failing at once. **Capacity planning** then works backward from that breaking point: pick a safety margin (headroom) below it, and project forward using expected traffic growth, so a "when do we need to scale" decision has a real number attached instead of a guess.
+                    """, 1),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    A load test is like checking a restaurant can handle a normal busy Friday dinner rush. A stress test is deliberately booking far more reservations than that to find the exact point where the kitchen stops keeping up — and watching whether it slows down gracefully (tickets take longer) or collapses entirely (orders get lost). A soak test is keeping the restaurant open continuously for a full week at a normal, sustainable pace to see if something wears down over time that a two-hour dinner rush would never reveal — the dishwasher overheating, or the walk-in cooler slowly losing its seal.
+
+                    Average latency is like judging a restaurant by the *average* wait time across every table — it can look fine even if one table in twenty waited an hour, because the other nineteen were fast enough to drag the average down. Looking at p95/p99 is asking "how bad was it for the unluckiest 5% or 1% of tables," which is what actually determines whether people complain.
+                    """, 2),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Load vs. stress vs. soak**
+
+                    - Load test — expected/peak traffic, confirms it's handled within SLA
+                    - Stress test — traffic pushed past expected peak, finds the actual breaking point and failure mode
+                    - Soak test — moderate load sustained for hours, finds leaks/degradation over time
+
+                    **Metrics that matter**
+
+                    - Throughput — requests/sec sustained
+                    - Latency percentiles — p50 (typical), p95/p99 (tail — what the unluckiest users feel)
+                    - Error rate under load — not just at baseline, specifically as load increases
+
+                    **Capacity planning, roughly**
+
+                    - Find the breaking point (where latency/errors spike sharply)
+                    - Identify the limiting bottleneck (CPU, DB connections, thread pool, downstream rate limit)
+                    - Set a headroom target below the breaking point (e.g., operate at 60-70% of max sustained throughput)
+                    - Project forward using expected traffic growth to decide when to scale
+                    """, 3),
+                Block(BlockType.CodeSnippet, "A k6 Script Ramping from Load Test into Stress Test", BodyFormat.PlainText, """
+                    import http from 'k6/http';
+                    import { check, sleep } from 'k6';
+
+                    export const options = {
+                      stages: [
+                        { duration: '2m', target: 100 },  // ramp up to expected peak
+                        { duration: '5m', target: 100 },  // hold at peak — this is the load test
+                        { duration: '2m', target: 400 },  // stress: push well past peak
+                        { duration: '3m', target: 400 },  // hold to find the breaking point
+                        { duration: '2m', target: 0 },    // ramp down
+                      ],
+                      thresholds: {
+                        // Fail the run automatically if tail latency or error rate blow past target.
+                        http_req_duration: ['p(95)<300', 'p(99)<800'],
+                        http_req_failed: ['rate<0.01'],
+                      },
+                    };
+
+                    export default function () {
+                      const res = http.get('https://staging.example.com/api/orders');
+                      check(res, { 'status is 200': (r) => r.status === 200 });
+                      sleep(1);
+                    }
+                    """, 4, language: "javascript"),
+                Block(BlockType.Diagram, "From Baseline to a Capacity Plan", BodyFormat.StructuredSteps, """
+                    [{"label":"Baseline","note":"measure p50/p95/p99 and error rate at low traffic"},{"label":"Load test","note":"sustained expected peak traffic — confirm it's within SLA"},{"label":"Stress test","note":"push past peak until latency/errors spike sharply"},{"label":"Identify the bottleneck","note":"CPU? DB connection pool? thread pool? a downstream API limit?"},{"label":"Capacity plan","note":"headroom below breaking point, projected forward with expected growth"}]
+                    """, 5),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Track and alert on p95/p99 latency and error rate under load, never just the average — a system can have a perfectly reasonable average latency while a meaningful fraction of real requests are timing out. Automate pass/fail thresholds directly in the load test script (as above) so a regression fails the run instead of requiring someone to eyeball a dashboard afterward.
+
+                    When you find a breaking point, change one variable at a time to isolate the actual bottleneck (scale the app tier only, then the database connection pool only) rather than scaling everything at once — otherwise you learn "it got better" without learning *why*, and can't target the real constraint next time.
+                    """, 6),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    If asked how you'd capacity-plan a service before a big traffic event (a product launch, a holiday sale), walk through the full chain: baseline, load test at expected peak, stress test past it to find the breaking point, name the specific bottleneck you'd expect to hit first (usually the database or a downstream dependency, rarely raw CPU on a stateless app tier), and then state a concrete headroom target and growth-adjusted number — not just "we load tested it and it was fine."
+                    """, 7),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Judging system health by average latency alone — a system can have a great average while p99 users are timing out, and those users are exactly the ones who churn or complain.
+
+                    Also common: only load testing up to today's expected peak and never stress testing past it, which means the team has no idea where the actual breaking point is until it's discovered live in production during an unexpected traffic spike. Skipping soak tests is similarly common and just as costly — a memory leak or connection leak that takes six hours to surface will never show up in a fifteen-minute load test.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "What is the primary purpose of a stress test, as distinct from a standard load test?",
+                    "A load test confirms the system handles expected/peak traffic within SLA. A stress test deliberately pushes traffic past that expected peak to find the system's actual breaking point and observe how it fails.",
+                    [
+                        new QuizOptionSeed("It's identical to a load test, just run for longer", false),
+                        new QuizOptionSeed("It pushes traffic past expected peak to find the actual breaking point and failure mode", true),
+                        new QuizOptionSeed("It only tests the database layer in isolation", false),
+                        new QuizOptionSeed("It replaces the need for monitoring in production", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "Why do capacity planning conversations focus on p95/p99 latency rather than average latency?",
+                    "Average latency can look healthy even while a meaningful fraction of real requests (the tail, captured by p95/p99) are far slower or timing out — and at scale, that 'small' fraction can be thousands of real users having a bad experience.",
+                    [
+                        new QuizOptionSeed("Average latency is mathematically impossible to compute under load", false),
+                        new QuizOptionSeed("p95/p99 reveal how bad the tail of the distribution is, which the average can hide", true),
+                        new QuizOptionSeed("p95/p99 are easier to compute than an average", false),
+                        new QuizOptionSeed("Average latency only applies to soak tests, not load tests", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Grafana k6 Documentation", "https://grafana.com/docs/k6/latest/", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("Google SRE Book: Handling Overload", "https://sre.google/sre-book/handling-overload/", LinkType.FurtherReading),
+            ],
+            prerequisites: [lesson1]);
+
+        var lesson2Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson2.Slug,
+        [
+            "Run a load test against a service you own (k6 or similar) and capture p50/p95/p99 latency, not just the average",
+            "Push traffic past expected peak until you find the actual breaking point, and identify which resource (CPU, DB connections, thread pool) is the bottleneck",
+            "Calculate a capacity plan for one service: current peak throughput, a headroom target below the breaking point, and a growth-adjusted number for the next 6-12 months",
+        ]);
+
+        var module = BuildModule(topicId, "configuration-and-capacity-management", "Configuration & Capacity Management",
+            "Configuring what's already running on provisioned infrastructure idempotently and handling secrets without ever putting them in source control, then proving under real load exactly how much capacity a system has and when it'll run out.",
+            75, [lesson1, lesson2], sortOrder: 3);
 
         return (module, [lesson1Checklist, lesson2Checklist]);
     }
@@ -7339,6 +10172,397 @@ public static class CurriculumContentSeedData
         return (module, [lesson1Checklist, lesson2Checklist]);
     }
 
+    private static (Module, List<ChecklistSeed>) BuildDesignPatternsAndAntiPatternsModule(int topicId)
+    {
+        var lesson1 = BuildLesson(
+            slug: "structural-and-behavioral-design-patterns",
+            title: "Structural & Behavioral Design Patterns Deep Dive",
+            summary: "Factory Method/Abstract Factory, Decorator, Observer, and Adapter — with real C# examples, not just definitions.",
+            estimatedMinutes: 45,
+            objectives:
+            [
+                "Explain the difference between Factory Method and Abstract Factory, and when object creation should be abstracted away from calling code",
+                "Explain how the Decorator pattern adds behavior at runtime without a subclass per combination",
+                "Explain the Observer pattern and how it enables one-to-many notification without tight coupling",
+                "Explain how the Adapter pattern lets incompatible interfaces work together, and identify a real use case",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    Four more patterns worth recognizing on sight, because they show up constantly in real codebases and in interviews.
+
+                    **Factory Method** (creational): define a method for creating an object, but let subclasses decide which concrete class to instantiate. The caller depends only on an abstract product type, never on `new ConcreteClass()` directly.
+
+                    **Abstract Factory** (creational): one level up from Factory Method — a factory that creates *families* of related objects meant to be used together (e.g., a `LightThemeFactory` producing a matching `Button`, `Checkbox`, and `Scrollbar`, vs. a `DarkThemeFactory` producing the dark-themed equivalents of the same three). Abstract Factory groups several Factory Methods behind one interface so the whole family stays consistent.
+
+                    **Decorator** (structural): wrap an object in another object that implements the same interface, adding behavior before/after delegating to the wrapped object — without touching the wrapped object's class and without a subclass for every combination of behavior.
+
+                    **Observer** (behavioral): a subject maintains a list of dependents (observers) and notifies them automatically of any state change, without the subject needing to know anything concrete about what each observer does with that notification.
+
+                    **Adapter** (structural): wrap an existing class with an incompatible interface so it satisfies the interface a caller expects, without modifying the original class — most often used to make a third-party or legacy type fit an interface your code already depends on.
+                    """, 1),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    Factory Method is like a pizza restaurant's "make me today's special" order — you get a pizza back, but the exact recipe (concrete type) is decided by whichever branch you ordered from.
+
+                    Abstract Factory is like ordering a full matched furniture set (chair + table + sofa) from either the "modern" showroom or the "rustic" showroom — you always get a coordinated family of pieces, and swapping showrooms swaps the whole family consistently.
+
+                    Decorator is like adding toppings to a coffee order — whipped cream and caramel each wrap the base drink and add their own charge, and you can stack any combination without a separate menu item for every possible combination of syrup and topping.
+
+                    Observer is like subscribing to a YouTube channel — the channel (subject) doesn't know or care who you are; it just notifies every subscriber (observer) when it publishes, and you can subscribe or unsubscribe without the channel changing at all.
+
+                    Adapter is like a travel plug adapter — your laptop charger's plug (existing interface) doesn't fit a foreign socket (expected interface), so the adapter sits between them and translates the shape without modifying either the charger or the wall socket.
+                    """, 2),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Quick recognition guide**
+
+                    - Factory Method — one product type, subclasses choose the concrete class ("virtual constructor")
+                    - Abstract Factory — a *family* of related products that must stay consistent with each other
+                    - Decorator — same interface as the wrapped object, adds behavior by wrapping, stackable at runtime
+                    - Observer — one subject, many dependents, automatic push notification on state change
+                    - Adapter — translates an existing, incompatible interface into the one the caller expects; no new behavior, just translation
+
+                    **Fast test**: "Am I choosing WHICH class to build?" -> Factory Method/Abstract Factory. "Am I ADDING behavior to an existing object?" -> Decorator. "Do MANY things need to react automatically when ONE thing changes?" -> Observer. "Do I have the WRONG SHAPE interface for code that already exists?" -> Adapter.
+                    """, 3),
+                Block(BlockType.CodeSnippet, "Factory Method, Abstract Factory, Decorator, Observer, and Adapter", BodyFormat.PlainText, """
+                    // ---- Factory Method: subclasses decide the concrete product ----
+                    public interface INotification { void Send(string message); }
+
+                    public abstract class NotificationCreator
+                    {
+                        protected abstract INotification CreateNotification();
+                        public void Notify(string message) => CreateNotification().Send(message);
+                    }
+                    public class EmailNotificationCreator : NotificationCreator
+                    {
+                        protected override INotification CreateNotification() => new EmailNotification();
+                    }
+                    public class SmsNotificationCreator : NotificationCreator
+                    {
+                        protected override INotification CreateNotification() => new SmsNotification();
+                    }
+
+                    // ---- Abstract Factory: a FAMILY of related products, kept consistent ----
+                    public interface IUiFactory
+                    {
+                        IButton CreateButton();
+                        ICheckbox CreateCheckbox();
+                    }
+                    public class DarkThemeFactory : IUiFactory
+                    {
+                        public IButton CreateButton() => new DarkButton();
+                        public ICheckbox CreateCheckbox() => new DarkCheckbox();
+                    }
+                    public class LightThemeFactory : IUiFactory
+                    {
+                        public IButton CreateButton() => new LightButton();
+                        public ICheckbox CreateCheckbox() => new LightCheckbox();
+                    }
+                    // Swapping factories swaps the whole matched family —
+                    // never mixing a DarkButton with a LightCheckbox.
+
+                    // ---- Decorator: add behavior without subclassing or touching the original ----
+                    public class EmailNotification : INotification
+                    {
+                        public void Send(string message) => Console.WriteLine($"Email: {message}");
+                    }
+                    public class LoggingNotificationDecorator(INotification inner) : INotification
+                    {
+                        public void Send(string message)
+                        {
+                            Console.WriteLine($"[log] sending: {message}");
+                            inner.Send(message);   // delegate, after adding behavior
+                        }
+                    }
+                    // new LoggingNotificationDecorator(new EmailNotification()).Send("Hi");
+                    // Stack more decorators (retry, metrics) with zero new subclasses.
+
+                    // ---- Observer: one subject, many dependents notified automatically ----
+                    public class OrderShippedEvent
+                    {
+                        private readonly List<Action<string>> _observers = [];
+                        public void Subscribe(Action<string> observer) => _observers.Add(observer);
+                        public void Publish(string trackingNumber)
+                        {
+                            foreach (var observer in _observers) observer(trackingNumber);
+                        }
+                    }
+                    // orderShipped.Subscribe(tn => emailService.Notify(tn));
+                    // orderShipped.Subscribe(tn => analytics.Track("order_shipped", tn));
+
+                    // ---- Adapter: make an incompatible interface fit the one callers expect ----
+                    public interface IPaymentProcessor { void Charge(decimal amount); }
+                    public class LegacyBillingSystem   // third-party, can't modify: takes cents
+                    {
+                        public int ChargeInCents(int cents) => 12345; // returns a receipt id
+                    }
+                    public class LegacyBillingAdapter(LegacyBillingSystem legacy) : IPaymentProcessor
+                    {
+                        public void Charge(decimal amount) => legacy.ChargeInCents((int)(amount * 100));
+                    }
+                    """, 4, language: "csharp"),
+                Block(BlockType.Diagram, "Decorator Wrapping vs. Observer Fan-Out", BodyFormat.AsciiArt, """
+                    Decorator — behavior added by wrapping, not by subclassing:
+
+                        LoggingDecorator( RetryDecorator( EmailNotification ) )
+                        +------------------+     +------------------+     +-------------------+
+                        | LoggingDecorator | --> |  RetryDecorator  | --> | EmailNotification |
+                        +------------------+     +------------------+     +-------------------+
+                        Each layer implements the SAME interface (INotification) and delegates
+                        inward after/before doing its own work. Stack or reorder freely.
+
+                    Observer — one subject, many independent observers:
+
+                                            +----------------+
+                                            |  OrderShipped  |  (subject)
+                                            +--------+-------+
+                                                     | Publish(trackingNumber)
+                                 +-------------------+-------------------+
+                                 v                   v                   v
+                          EmailNotifier        AnalyticsTracker      SmsNotifier
+
+                        The subject knows only that observers exist — never what they do.
+                    """, 5),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Reach for Factory Method/Abstract Factory when the calling code genuinely shouldn't (or can't) know which concrete type to build — e.g., the choice depends on configuration, environment, or plugin registration, not a single `if` that will never change. Don't wrap trivial `new SomeClass()` calls in a factory "just in case."
+
+                    Reach for Decorator when you need to add cross-cutting behavior (logging, retry, caching, metrics) to some but not all instances of an interface, and the number of combinations would otherwise mean a subclass per combination.
+
+                    Reach for Observer when a change in one place should trigger reactions in several unrelated places (send an email, update analytics, invalidate a cache) and those reactions shouldn't need to know about each other, or block each other.
+
+                    Reach for Adapter as a boundary-layer fix — wrap the third-party/legacy type once, at the edge of your system, rather than adapting to its shape throughout your codebase.
+                    """, 6),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    Interviewers often ask "what's the difference between Factory Method and Abstract Factory?" — the crisp answer is: Factory Method produces ONE product and subclasses choose the concrete type; Abstract Factory produces a FAMILY of related products that must stay consistent with each other. If you can only name one product being created, you're describing Factory Method, not Abstract Factory.
+
+                    For Decorator vs. inheritance: be ready to explain why N behaviors would need up to 2^N subclasses if implemented via inheritance, but only N decorator classes (composed at runtime) if implemented via Decorator — that combinatorial argument is usually what the interviewer is listening for.
+                    """, 7),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Calling any factory-shaped helper method "the Factory pattern" — a static helper that just wraps `new X()` with no polymorphic subclass choosing the type isn't the Factory Method pattern, it's just a factory function.
+
+                    Confusing Decorator with simple inheritance/subclassing — if the "decorator" is a single hardcoded subclass rather than something that wraps an arbitrary implementation of the same interface at runtime, it isn't actually the Decorator pattern.
+
+                    Forgetting to unsubscribe Observers — a subject holding a strong reference to observers that never unregister is a classic memory leak (and, in UI code, a source of "the event fired twice" bugs from double subscription).
+
+                    Writing a new Adapter for every call site instead of one shared Adapter at the system boundary — scattering the incompatible-interface handling throughout the codebase defeats the entire purpose of isolating it in one place.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "What's the core difference between Factory Method and Abstract Factory?",
+                    "Factory Method creates one product and lets subclasses choose the concrete type. Abstract Factory creates a family of related products that must stay consistent with each other — it groups several Factory Methods behind one interface.",
+                    [
+                        new QuizOptionSeed("Factory Method creates one product via subclassing; Abstract Factory creates a consistent family of related products", true),
+                        new QuizOptionSeed("Abstract Factory is just Factory Method with a different name", false),
+                        new QuizOptionSeed("Factory Method requires a database connection; Abstract Factory does not", false),
+                        new QuizOptionSeed("Factory Method only works with sealed classes", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "Why does the Decorator pattern avoid the 'subclass explosion' problem that pure inheritance runs into when combining independent behaviors?",
+                    "Behaviors are added by wrapping objects that share the same interface at runtime, so N behaviors need only N decorator classes composed as needed, instead of one subclass for every possible combination.",
+                    [
+                        new QuizOptionSeed("Because behaviors are composed at runtime by wrapping the same interface, needing only N decorators instead of one subclass per combination", true),
+                        new QuizOptionSeed("Because decorator classes are generated automatically by the compiler", false),
+                        new QuizOptionSeed("Because Decorator avoids the use of interfaces entirely", false),
+                        new QuizOptionSeed("Because Decorator only applies to static methods", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Refactoring Guru: Factory Method", "https://refactoring.guru/design-patterns/factory-method", LinkType.FurtherReading),
+                new ReferenceLinkSeed("Refactoring Guru: Observer", "https://refactoring.guru/design-patterns/observer", LinkType.FurtherReading),
+            ]);
+
+        var lesson1Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson1.Slug,
+        [
+            "Find one place in your code using if/else or switch purely to decide which concrete class to `new` up, and sketch how Factory Method would remove it",
+            "Identify a cross-cutting behavior (logging, retry, caching) in your code implemented via subclassing, and describe how Decorator would let you compose it instead",
+            "Describe one Observer relationship (real or hypothetical) in your code and confirm observers are properly unsubscribed to avoid a leak",
+        ]);
+
+        var lesson2 = BuildLesson(
+            slug: "anti-patterns-and-technical-debt-management",
+            title: "Anti-Patterns & Technical Debt Management",
+            summary: "Recognizing God Object, Spaghetti Code, Golden Hammer, and Premature Optimization, and a practical framework for deciding which technical debt to pay down first.",
+            estimatedMinutes: 40,
+            objectives:
+            [
+                "Recognize God Object, Spaghetti Code, Golden Hammer, and Premature Optimization in real code",
+                "Explain how technical debt accumulates over time and its real cost to team velocity",
+                "Distinguish deliberate/prudent debt from reckless/inadvertent debt using Fowler's technical debt quadrant",
+                "Apply a practical framework for deciding which debt to pay down now vs. consciously accept",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    **Anti-patterns** are named, recurring "solutions" that look reasonable at first but reliably make a codebase worse — the mirror image of design patterns: common enough to have a name, but common because they're an easy trap, not because they're good.
+
+                    **God Object**: a single class (often a "Manager," "Helper," or "Service") that accumulates responsibility for large swaths of the system — order processing, email sending, discount calculation, logging — until nearly every change to the system requires touching it, and nearly every other class depends on it.
+
+                    **Spaghetti Code**: control flow so tangled (deep nesting, code that jumps between unrelated modules with no clear structure) that tracing what happens for a given input requires holding the entire execution path in your head at once.
+
+                    **Golden Hammer**: reaching for one familiar tool, pattern, or technology to solve every problem, regardless of fit — "we know microservices, so everything is a microservice" — because it's familiar, not because it's the right tool for this problem.
+
+                    **Premature Optimization**: spending effort optimizing code before measuring whether it's actually a bottleneck — usually making the code harder to read and maintain in exchange for a performance gain that may not even matter.
+
+                    **Technical debt** is the compounding cost of choosing a faster, lower-quality solution now instead of a better one — like financial debt, it isn't automatically bad, but unpaid debt accrues interest: every future change to that area takes longer, and defect risk rises until the debt is paid down (refactored) or explicitly accepted.
+                    """, 1),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    A God Object is like one employee who's the only person who knows how payroll, IT support, and the vending machines all work — every request routes through them, they're a single point of failure, and onboarding anyone else means understanding their personal, undocumented system first.
+
+                    Spaghetti Code is like a house renovated a dozen times by a dozen different contractors with no shared blueprint — wires and pipes cross behind walls in ways nobody fully understands, and fixing one outlet risks breaking a light three rooms away.
+
+                    Golden Hammer is the proverb it's named for: "if all you have is a hammer, everything looks like a nail" — a carpenter who only owns a hammer will try to use it on a screw, not because it's the right tool, but because it's the only one they know.
+
+                    Premature Optimization is like reinforcing a bridge's steel to handle ten times its actual traffic before a single car has driven over it — the extra strength, cost, and construction time may be solving a problem that was never going to happen.
+
+                    Technical debt is exactly like credit card debt: a shortcut today, and an interest payment (extra time on every future change) that keeps accruing until the principal — the actual refactor — gets paid off.
+                    """, 2),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Anti-pattern spotting guide**
+
+                    - God Object — one class touched by nearly every change, no cohesive single responsibility
+                    - Spaghetti Code — you can't predict what a function does without reading everything it (and everything it calls) does
+                    - Golden Hammer — same tool/pattern applied regardless of whether the problem actually fits it
+                    - Premature Optimization — complexity added for performance with no profiler data showing it was needed
+
+                    **Fowler's Technical Debt Quadrant** (Deliberate vs. Inadvertent x Reckless vs. Prudent)
+
+                    |           | Deliberate                                    | Inadvertent                                          |
+                    |-----------|------------------------------------------------|-------------------------------------------------------|
+                    | Reckless  | "We don't have time for tests"                 | "What's a layering violation?"                         |
+                    | Prudent   | "Ship now, refactor after we validate the idea" | "Now that we understand the domain, we know how it should've been designed" |
+
+                    Only the Reckless row is straightforwardly bad. Prudent debt (both kinds) is a normal, healthy part of building software under real constraints — the problem is never paying it down.
+                    """, 3),
+                Block(BlockType.CodeSnippet, "God Object Decomposed, and Premature Optimization vs. Simple Code", BodyFormat.PlainText, """
+                    // ---- God Object: one class doing everything ----
+                    public class OrderManager
+                    {
+                        public void PlaceOrder(Order order) { /* validate */ }
+                        public void CalculateDiscount(Order order) { /* pricing rules */ }
+                        public void ChargeCard(Order order) { /* payment gateway calls */ }
+                        public void SendConfirmationEmail(Order order) { /* SMTP details */ }
+                        public void WriteAuditLog(Order order) { /* logging */ }
+                        public void UpdateInventory(Order order) { /* stock levels */ }
+                        // Six unrelated responsibilities in one class — every one of these
+                        // reasons to change ripples through the same file and its tests.
+                    }
+
+                    // ---- Decomposed: each responsibility owns its own class ----
+                    public class OrderService(IPricingEngine pricing, IPaymentGateway payments,
+                        INotificationSender notifier, IInventoryRepository inventory)
+                    {
+                        public void PlaceOrder(Order order)
+                        {
+                            var total = pricing.CalculateTotal(order);
+                            payments.Charge(order.CustomerId, total);
+                            inventory.Reserve(order.Items);
+                            notifier.SendConfirmation(order);
+                        }
+                        // OrderService now orchestrates; it doesn't implement pricing rules,
+                        // SMTP details, or payment-gateway specifics itself.
+                    }
+
+                    // ---- Premature optimization: complexity with no measured payoff ----
+                    // "Optimized" before anyone profiled it:
+                    public static string BuildReportBad(List<string> lines)
+                    {
+                        var sb = new StringBuilder(lines.Count * 64); // guessed capacity, unverified
+                        foreach (var line in lines) sb.Append(line).Append(''); // custom separator "for speed"
+                        return sb.ToString();
+                    }
+                    // Simple, correct, and fast enough until a profiler says otherwise:
+                    public static string BuildReportGood(List<string> lines) =>
+                        string.Join(Environment.NewLine, lines);
+                    """, 4, language: "csharp"),
+                Block(BlockType.Diagram, "Debt Quadrant and Prioritization Flow", BodyFormat.AsciiArt, """
+                    Technical Debt Quadrant (Fowler):
+
+                                       Deliberate               Inadvertent
+                                  +----------------------+----------------------+
+                       Reckless   | "No time for tests"  | "Didn't know better" |
+                                  +----------------------+----------------------+
+                       Prudent    | "Ship now, refactor  | "Now we know how it  |
+                                  |  after validating"   |  should've been built"|
+                                  +----------------------+----------------------+
+
+                    Prioritization flow for an existing piece of debt:
+
+                      Is this code on a hot path (changed often / high traffic)?
+                             |
+                          yes -> Is the interest cost (slower changes, more bugs) growing?
+                                      |
+                                   yes -> PAY DOWN NOW
+                                      |
+                                    no -> schedule, revisit next quarter
+                             |
+                          no  -> ACCEPT the debt; document why, revisit only if usage changes
+                    """, 5),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Make technical debt visible instead of invisible — a ticket ("PricingEngine has three copy-pasted discount branches; extract a strategy when a fourth is added") is far more actionable than an unspoken feeling that "this file is bad."
+
+                    Budget dedicated time for debt paydown as a standing line item (a fixed percentage of each sprint, or an explicit stabilization sprint) rather than hoping it gets addressed whenever things are slow — debt paydown reliably loses to new-feature pressure unless it has protected time.
+
+                    Prioritize debt by its actual interest rate: how often is this code touched, and how much does its condition slow down or risk each of those touches? A messy module nobody has opened in two years is far lower priority than a messy module in the critical path of every release.
+                    """, 6),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    When asked "how do you deal with technical debt," avoid a purely philosophical answer — describe one specific example: what the debt was, why it was taken on, what it was costing the team, and how you decided to pay it down (or explicitly not to). Concrete numbers help: "changes to that module took roughly 3x longer because there was no test coverage" is a much stronger answer than "the code was messy."
+
+                    Also be ready to distinguish debt from just "bad code" — debt implies a conscious (or at least identifiable) tradeoff of speed now for cost later; not all bad code was ever a deliberate tradeoff, some was simply never revisited as understanding improved (Fowler's "prudent-inadvertent" quadrant), which is a normal and expected part of building anything non-trivial.
+                    """, 7),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Treating all technical debt as equally urgent — debt in a rarely-touched, stable corner of the system is a very different priority than debt in the module every feature has to modify; paying down the wrong debt first wastes capacity the hot-path debt actually needed.
+
+                    Letting "we'll refactor later" become the default plan with no ticket, owner, or trigger condition attached — debt that isn't tracked anywhere is debt that never gets paid down, because nothing ever forces the conversation.
+
+                    Mistaking Golden Hammer familiarity for genuine technical judgment — defending a tool or pattern choice with "it's what we always use" instead of "here's why it fits this specific problem" is a sign the decision was never actually evaluated against the problem at hand.
+
+                    Optimizing code before profiling it — this is Premature Optimization's actual failure mode: it burns time and adds complexity while frequently missing the real bottleneck entirely, which a profiler would have pointed to directly.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "What best characterizes the 'God Object' anti-pattern?",
+                    "A God Object accumulates many unrelated responsibilities into a single class, becoming a hub that nearly every change in the system has to touch — the opposite of a cohesive, single-responsibility design.",
+                    [
+                        new QuizOptionSeed("A single class accumulates many unrelated responsibilities, becoming a hub that nearly every change has to touch", true),
+                        new QuizOptionSeed("A class that implements the Singleton pattern", false),
+                        new QuizOptionSeed("Any class with more than 100 lines of code", false),
+                        new QuizOptionSeed("A class marked public instead of internal", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "According to Fowler's technical debt quadrant, which category of debt is the only one that's straightforwardly bad rather than a normal, sometimes-healthy tradeoff?",
+                    "Reckless debt — whether deliberate ('no time for tests') or inadvertent ('didn't know better') — is the problematic category. Prudent debt, deliberate or inadvertent, is a normal part of building software under real-world constraints and evolving understanding.",
+                    [
+                        new QuizOptionSeed("Reckless debt (both deliberate and inadvertent), taken on without care or awareness of the cost", true),
+                        new QuizOptionSeed("Prudent-deliberate debt, since it was chosen consciously", false),
+                        new QuizOptionSeed("Prudent-inadvertent debt, since the team didn't know better at the time", false),
+                        new QuizOptionSeed("All four quadrants are equally acceptable", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Martin Fowler: TechnicalDebtQuadrant", "https://martinfowler.com/bliki/TechnicalDebtQuadrant.html", LinkType.FurtherReading),
+                new ReferenceLinkSeed("Refactoring Guru: Code Smells", "https://refactoring.guru/refactoring/smells", LinkType.FurtherReading),
+            ],
+            prerequisites: [lesson1]);
+
+        var lesson2Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson2.Slug,
+        [
+            "Identify one class in your codebase showing early God Object symptoms (touched by unrelated features) and sketch how you'd split its responsibilities",
+            "Classify one piece of debt in your own project using Fowler's quadrant (deliberate/inadvertent x reckless/prudent)",
+            "Using the prioritization flow, decide whether one real debt item should be paid down now or explicitly accepted, and write one sentence justifying it",
+        ]);
+
+        var module = BuildModule(topicId, "design-patterns-and-anti-patterns", "Design Patterns & Anti-Patterns",
+            "Structural and behavioral design patterns beyond Strategy and Repository — Factory Method, Abstract Factory, Decorator, Observer, and Adapter — plus the anti-patterns and technical debt dynamics that show up when patterns are misapplied or skipped entirely.",
+            85, [lesson1, lesson2], sortOrder: 3);
+
+        return (module, [lesson1Checklist, lesson2Checklist]);
+    }
+
     // ============================== Soft Skills ==============================
 
     private static (Module, List<ChecklistSeed>) BuildSoftSkillsModule(int topicId)
@@ -7979,6 +11203,261 @@ public static class CurriculumContentSeedData
         var module = BuildModule(topicId, "leadership-and-career-growth", "Leadership & Career Growth",
             "Leading through influence instead of authority, mentoring engineers effectively, and building an evidence-based case for promotion and self-advocacy.",
             75, [lesson1, lesson2], sortOrder: 2);
+
+        return (module, [lesson1Checklist, lesson2Checklist]);
+    }
+
+    private static (Module, List<ChecklistSeed>) BuildEstimationAndCollaborationModule(int topicId)
+    {
+        var lesson1 = BuildLesson(
+            slug: "estimation-and-handling-ambiguous-requirements",
+            title: "Estimation & Handling Ambiguous Requirements",
+            summary: "Why engineers systematically underestimate, techniques for producing a defensible estimate, and how to de-ambiguous a vague ticket before you commit to a number.",
+            estimatedMinutes: 30,
+            objectives:
+            [
+                "Explain why engineers systematically underestimate work, citing optimism bias and unknown unknowns",
+                "Break a task into subtasks and apply three-point (PERT) estimation instead of guessing a single number",
+                "Add an explicit, named buffer for ambiguity and integration risk instead of silently padding an estimate",
+                "Ask clarifying questions that turn a vague ticket into something you can actually estimate",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    Engineers are not bad at arithmetic — they're systematically optimistic. The **planning fallacy** is the well-documented tendency to predict task duration based on the best-case, everything-goes-right scenario, even when you know from experience that things rarely go that way.
+
+                    Two forces drive this:
+
+                    - **Optimism bias** — when asked "how long will this take," people picture the *happy path*: writing the code. They mentally skip code review, addressing review comments, writing tests, fixing what the tests reveal, deployment, and the inevitable meeting or two.
+                    - **Unknown unknowns** — a vague ticket hides work you can't see yet. You can pad for risks you know about (a "known unknown"), but you can't pad for a risk you don't know exists until you're already inside the problem.
+
+                    The fix isn't "try harder to guess correctly" — it's a process: break the work down, estimate each piece as a range instead of a point, and add an explicit, *named* buffer for the ambiguity you can't yet see.
+                    """, 1),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    Estimating a vague ticket is like a contractor quoting a kitchen remodel from a photo: the visible work — cabinets, paint, countertops — is easy to price. But once they open the wall, they might find outdated wiring or rotten subfloor that was never visible from the photo. A good contractor doesn't pretend that risk doesn't exist — they quote the visible work plus an explicit contingency line for "unknowns behind the wall," so the client isn't blindsided later.
+                    """, 2),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Three-point (PERT) estimation**
+
+                    For each subtask, estimate three numbers instead of one:
+
+                    - **O** — Optimistic (best case, if nothing goes wrong)
+                    - **M** — Most likely (realistic case)
+                    - **P** — Pessimistic (worst case, if things go wrong)
+
+                    `Estimate = (O + 4M + P) / 6` — this weights the realistic case four times as heavily as either extreme, while still accounting for both.
+
+                    **Breaking work down**
+
+                    - Split work into subtasks no larger than about a day each — a single 2-week "line item" hides too much uncertainty to estimate honestly.
+                    - Separate "known implementation work" from "spike/investigation work" — don't let unresearched unknowns get buried inside a confident-sounding number.
+                    - Explicitly budget for code review, addressing feedback, testing, and deployment — these are not free.
+
+                    **Buffer, named not hidden**
+
+                    - Well-understood, single-team work: ~15-20% buffer.
+                    - Ambiguous requirements, cross-team dependencies, unfamiliar code: 50%+ buffer — and say so out loud, rather than quietly inflating the base number so it "looks like" a bigger single estimate.
+                    """, 3),
+                Block(BlockType.CodeSnippet, "Clarifying Questions Before Committing to an Estimate", BodyFormat.PlainText, """
+                    // Ticket as written:
+                    "Add support for exporting reports."
+
+                    // Weak response — guesses at an estimate for a ticket
+                    // that could mean five very different amounts of work.
+                    "Sure, I'd say about 3 days."
+
+                    // Stronger response — asks the questions needed to turn
+                    // a vague ticket into something estimable, before naming
+                    // any number at all.
+                    "Before I size this: which format(s) — CSV, PDF, both?
+                    Is this for the existing reports or a new report type?
+                    Any expected data volume (rows/records) that might need
+                    pagination or a background job instead of a synchronous
+                    export? Any permissions/access-control angle — can any
+                    user export any report? Once I know these, I can give
+                    you a real range instead of a guess."
+                    """, 4),
+                Block(BlockType.Diagram, "From Vague Ticket to a Defensible Estimate", BodyFormat.StructuredSteps, """
+                    [{"label":"Read the ticket"},{"label":"List what's ambiguous","note":"what would change the size of this?"},{"label":"Ask clarifying questions","note":"get answers in writing"},{"label":"Break into subtasks","note":"under ~1 day each"},{"label":"Three-point estimate each subtask"},{"label":"Sum + explicit named buffer"},{"label":"Communicate as a range","note":"not a single promised date"}]
+                    """, 5),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Break work into subtasks small enough that each one is individually estimable with real confidence, and give the overall estimate as a range with a stated confidence level ("3-5 days, assuming the API contract doesn't change") rather than a single number that sounds more certain than it is.
+
+                    Get clarifying answers to an ambiguous ticket in writing (a comment on the ticket, a written reply) before committing to an estimate — it protects you later if the requirement turns out to have been misunderstood, and it often surfaces scope the requester hadn't considered either.
+                    """, 6),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    "How do you estimate a project?" or "tell me about a time an estimate was wrong" is testing whether you have any repeatable process versus a pure gut-feel number. A strong answer mentions breaking work into subtasks, three-point estimation, an explicit buffer for ambiguity, and asking clarifying questions up front — and, for the "estimate was wrong" version, what you changed about your process afterward rather than just what went wrong.
+                    """, 7),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Anchoring on the first number said out loud — once you've said "2 days" in a meeting, it's psychologically hard to walk it back even after learning new information that should change it, so avoid stating a number until you've actually done the breakdown.
+
+                    Also common: estimating only the time to write the code, forgetting code review, addressing feedback, testing, deployment, and meetings; and treating an estimate as a firm promise/deadline rather than a probabilistic range — which quietly punishes the engineers who report new information honestly, compared to those who just don't mention it.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "Which of the following best explains why engineers systematically underestimate how long work will take?",
+                    "This is the planning fallacy: people tend to picture the best-case, happy-path scenario (just writing the code) and mentally skip review, testing, deployment, and unknown unknowns — not a math skill problem or intentional lowballing.",
+                    [
+                        new QuizOptionSeed("Optimism bias and the planning fallacy — picturing only the best-case scenario", true),
+                        new QuizOptionSeed("Engineers are generally bad at arithmetic", false),
+                        new QuizOptionSeed("Engineers intentionally lowball estimates to look fast", false),
+                        new QuizOptionSeed("Software task duration is fundamentally random and unestimable", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "In three-point (PERT) estimation, which value is weighted four times as heavily as the other two?",
+                    "The PERT formula is (O + 4M + P) / 6 — the most-likely estimate is counted four times, reflecting that it's the most probable outcome, while still factoring in the optimistic and pessimistic cases.",
+                    [
+                        new QuizOptionSeed("The optimistic estimate", false),
+                        new QuizOptionSeed("The most likely estimate", true),
+                        new QuizOptionSeed("The pessimistic estimate", false),
+                        new QuizOptionSeed("A simple average of all three carries no extra weight", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("HBR: Delusions of Success: How Optimism Undermines Executives' Decisions", "https://hbr.org/2003/07/delusions-of-success-how-optimism-undermines-executives-decisions", LinkType.FurtherReading),
+                new ReferenceLinkSeed("Atlassian: How Estimation Works (Three-Point / PERT)", "https://www.atlassian.com/agile/project-management/estimation", LinkType.FurtherReading),
+            ]);
+
+        var lesson1Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson1.Slug,
+        [
+            "Break down your current task into subtasks under a day each, and give each a three-point (O/M/P) estimate",
+            "Identify a buffer percentage you'll explicitly name (not hide) on your next estimate, and explain why that number",
+            "Draft 3 clarifying questions you'd ask before estimating a genuinely vague ticket you've actually received",
+        ]);
+
+        var lesson2 = BuildLesson(
+            slug: "cross-team-collaboration-stakeholder-management",
+            title: "Cross-Team Collaboration & Stakeholder Management",
+            summary: "Mapping who actually needs what from you, translating technical trade-offs for non-technical stakeholders, unblocking a stalled cross-team dependency, and pushing back on scope without burning the relationship.",
+            estimatedMinutes: 30,
+            objectives:
+            [
+                "Identify the stakeholders on a project and the one thing each of them actually needs from you",
+                "Translate a technical trade-off into a decision a non-technical stakeholder can actually act on",
+                "Manage a blocking dependency on another team instead of silently absorbing the delay",
+                "Push back on scope or a deadline respectfully, backed by options instead of a flat no",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    A single project usually has several stakeholders, and each one is actually asking a different question even when their words sound similar:
+
+                    - **Product/program manager** — wants scope and timeline: what's shipping, and when.
+                    - **Your manager** — wants risk and resourcing: is this on track, do you need help, what could go wrong.
+                    - **A downstream team** — wants contract stability: will your API/schema change break them.
+                    - **An upstream team you depend on** — has their own roadmap and capacity, and your request is one of many competing asks on their plate.
+                    - **Support/customer-facing teams** — want to know what changes for users, in plain terms.
+                    - **An executive sponsor** — wants business outcome only, with essentially zero appetite for implementation detail.
+
+                    Communicating a **technical trade-off** to a non-technical stakeholder means translating it into terms they can act on — cost, timeline, risk, user impact — and pairing it with a recommendation, not just a lecture on the technical options.
+
+                    **Managing a dependency** on another team means never silently trusting a verbal "should be done by Friday" — get an explicit owner and date, track it proactively, and have a fallback if it slips.
+
+                    **Pushing back on scope** doesn't mean refusing — it means reframing a flat "no" as a trade-off: here's the real constraint, here are 1-2 alternative paths, which do you want.
+                    """, 1),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    Managing stakeholders is like being a translator at a summit between parties who don't speak the same language: each side needs the same underlying information, but translated into the terms *they* operate in — an executive needs the business-outcome sentence, not the raw technical detail dump, just as a diplomat wouldn't hand over a verbatim transcript when a one-sentence summary is what's actually needed.
+
+                    A cross-team dependency is like a relay race baton pass: if you don't explicitly confirm the handoff — who has it, by when — both runners quietly assume the other has it covered, and the baton gets dropped silently, with no one noticing until it's already too late to recover cleanly.
+                    """, 2),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Stakeholder map — what each one actually wants**
+
+                    - PM/PO -> scope & timeline
+                    - Manager -> risk & resourcing
+                    - Downstream team -> API/contract stability
+                    - Upstream/dependency team -> their own roadmap & capacity
+                    - Support -> plain-language user impact
+                    - Exec sponsor -> business outcome only
+
+                    **Trade-off communication template**
+
+                    "Option A: [approach] — [cost/benefit]. Option B: [approach] — [cost/benefit]. Recommendation: [A or B], because [business reason]."
+
+                    **Dependency-risk checklist**
+
+                    - Named owner + explicit date, not a vague "soon"
+                    - Confirmed in writing (ticket/email), not just verbally
+                    - Tracked proactively — don't wait to be told it slipped
+                    - A fallback plan exists before you need it
+                    - Escalated early, with stated impact, the moment it looks at risk
+
+                    **Pushing back template**
+
+                    Acknowledge the request -> state the real constraint -> offer 1-2 concrete alternatives -> ask which they want.
+                    """, 3),
+                Block(BlockType.CodeSnippet, "Pushing Back on Scope Respectfully", BodyFormat.PlainText, """
+                    // Weak: a flat refusal with no path forward.
+                    "I can't add that now, sorry."
+
+                    // Stronger: acknowledges the request, states the real
+                    // constraint, and offers concrete alternatives instead
+                    // of just a no.
+                    "I hear that this matters for the launch. Adding X now
+                    would push our deadline by about a week since it touches
+                    the same code as the export feature. Two options: (1) we
+                    ship without X and add it next sprint, or (2) we keep X
+                    and move the deadline by a week. Which would you rather
+                    prioritize?"
+                    """, 4),
+                Block(BlockType.Diagram, "Managing a Blocking Cross-Team Dependency", BodyFormat.StructuredSteps, """
+                    [{"label":"Identify the dependency early","note":"as soon as you know you need it"},{"label":"Confirm an explicit owner + date","note":"not a vague \"soon\""},{"label":"Get it in writing","note":"a ticket or email, not just a hallway chat"},{"label":"Track status proactively","note":"check in before you're told it's late"},{"label":"Escalate early if it's slipping","note":"state the impact, not just the delay"},{"label":"Have a fallback plan ready"},{"label":"Confirm you're actually unblocked before resuming"}]
+                    """, 5),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Map your stakeholders before you write a single status update, and tailor the message to what each one actually needs — the executive sponsor and the downstream engineer should not receive the same email.
+
+                    When pushing back on scope or a deadline, always pair it with 1-2 concrete alternatives rather than a flat no — it reframes the conversation from "can you or can't you" into "which trade-off do we prefer," which is a decision most stakeholders can actually engage with.
+                    """, 6),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    "Tell me about a time you had to manage a difficult stakeholder" or "a dependency on another team that was blocking you" is listening for whether you escalated early with a stated business impact, offered real alternatives, and kept the relationship intact — not whether you can describe how frustrating the other team or person was.
+                    """, 7),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Silently absorbing scope creep or a slipping dependency without telling anyone until the deadline arrives — by then there's no time left to adjust scope, get help, or reset expectations, and it looks like the surprise was yours to have caught earlier.
+
+                    Also common: explaining a technical trade-off to an executive or PM in pure implementation jargon instead of translating it into timeline/cost/risk terms; and responding to a scope request with a flat "no" instead of reframing it as a trade-off with real alternatives.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "A product manager and your engineering manager are both asking about the same project. What's the key difference in what each actually needs from you?",
+                    "Different stakeholders are usually asking different underlying questions even when the words sound similar — a PM typically needs scope and timeline, while a manager typically needs risk and resourcing. Sending both the identical status update misses what each actually needs to act on.",
+                    [
+                        new QuizOptionSeed("Nothing — the exact same update works equally well for both", false),
+                        new QuizOptionSeed("The PM typically needs scope/timeline; the manager typically needs risk/resourcing", true),
+                        new QuizOptionSeed("The PM needs raw implementation code detail; the manager needs marketing copy", false),
+                        new QuizOptionSeed("Only the manager should ever receive status updates at all", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "Your team is blocked waiting on an API from another team, and the date they gave you is starting to look at risk. What should you do first?",
+                    "The earlier a slipping dependency is flagged, with its concrete impact stated, the more options everyone has to respond — waiting for the original deadline, silently absorbing the delay, or escalating loudly without first confirming status with the other team all remove options that early, direct communication preserves.",
+                    [
+                        new QuizOptionSeed("Wait until the original deadline to see if they still deliver on time", false),
+                        new QuizOptionSeed("Confirm status directly and flag the risk, with impact stated, early — before it becomes a crisis", true),
+                        new QuizOptionSeed("Escalate loudly to your manager immediately, without first checking in with the other team", false),
+                        new QuizOptionSeed("Silently absorb the delay by quietly cutting your own testing time", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("HBS Online: How to Build Effective Stakeholder Management & Engagement", "https://online.hbs.edu/blog/post/stakeholder-management-engagement", LinkType.FurtherReading),
+                new ReferenceLinkSeed("HBR: How to Say No to Taking on More Work", "https://hbr.org/2015/12/how-to-say-no-to-taking-on-more-work", LinkType.FurtherReading),
+            ],
+            prerequisites: [lesson1]);
+
+        var lesson2Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson2.Slug,
+        [
+            "Map the stakeholders on your current project and write one sentence on what each one actually needs from you",
+            "Rewrite a technical trade-off you've explained recently in business terms (cost/timeline/risk), ending with a recommendation",
+            "Identify one dependency you're currently trusting on a verbal basis, and confirm an explicit owner + date for it this week",
+        ]);
+
+        var module = BuildModule(topicId, "estimation-and-collaboration", "Estimation & Cross-Team Collaboration",
+            "Producing defensible estimates under ambiguity, and navigating stakeholders, blocking dependencies, and scope pushback across teams.",
+            60, [lesson1, lesson2], sortOrder: 3);
 
         return (module, [lesson1Checklist, lesson2Checklist]);
     }
