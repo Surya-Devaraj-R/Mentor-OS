@@ -22,6 +22,11 @@ public static class CurriculumContentSeedData
             BuildCSharpModule(topicIdBySlug["csharp"]),
             BuildCSharpAsyncAndTestingModule(topicIdBySlug["csharp"]),
             BuildCSharpOopDeepDiveModule(topicIdBySlug["csharp"]),
+            BuildCSharpDelegatesAndFunctionalStyleModule(topicIdBySlug["csharp"]),
+            BuildCSharpRecordsAndPatternMatchingModule(topicIdBySlug["csharp"]),
+            BuildCSharpValueSemanticsAndMemoryModule(topicIdBySlug["csharp"]),
+            BuildCSharpConcurrencyAndMultithreadingModule(topicIdBySlug["csharp"]),
+            BuildCSharpReflectionAndAdvancedGenericsModule(topicIdBySlug["csharp"]),
             BuildDotNetModule(topicIdBySlug["dotnet"]),
             BuildDotNetProductionReadinessModule(topicIdBySlug["dotnet"]),
             BuildDotNetScalingAndResilienceModule(topicIdBySlug["dotnet"]),
@@ -1222,6 +1227,1782 @@ public static class CurriculumContentSeedData
         var module = BuildModule(topicId, "csharp-oop-deep-dive", "OOP Deep Dive & Exception Handling",
             "Real inheritance mechanics beyond SOLID basics — virtual dispatch, constructor order, enums, and the exception-handling discipline every C# interview probes.",
             75, [lesson1, lesson2], sortOrder: 3);
+
+        return (module, [lesson1Checklist, lesson2Checklist]);
+    }
+
+    private static (Module, List<ChecklistSeed>) BuildCSharpValueSemanticsAndMemoryModule(int topicId)
+    {
+        var lesson1 = BuildLesson(
+            slug: "structs-boxing-value-vs-reference-deep-dive",
+            title: "Structs, Boxing & Value-vs-Reference Deep Dive",
+            summary: "When to design a struct instead of a class, exactly what boxing costs on the heap, and how to pass structs correctly with in/ref/out.",
+            estimatedMinutes: 35,
+            objectives:
+            [
+                "Decide when a struct is the right design choice instead of a class, and apply `readonly struct` for immutable value types",
+                "Explain exactly what happens on the heap during boxing and unboxing, and why List<int> avoids it while ArrayList doesn't",
+                "Override Equals/GetHashCode on a struct instead of relying on the default reflection-based comparison",
+                "Choose correctly between `in`, `ref`, and `out` when passing a struct to a method",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    Reach for a **struct** instead of a class when the type is small (a common rule of thumb is 16 bytes or less, though it's a guideline, not a hard rule), logically immutable, and has value semantics you actually want — independent copies, like a `Point` or a `Money` amount. Reach for a **class** for anything larger, mutable, or that needs identity (two instances holding the same data should NOT be treated as "the same object").
+
+                    Mark structs `readonly struct` whenever every field is set once at construction and never mutated afterward. This lets the compiler guarantee immutability, and it lets the compiler skip inserting a hidden defensive copy every time the struct is accessed through an `in` parameter — something it otherwise has to do defensively, since it can't prove a non-readonly struct's members won't mutate it.
+
+                    **The large-struct copy cost pitfall**: value types are copied on assignment, on every method call (unless passed by reference), on return, and on boxing. A struct with a couple of `int`/`bool` fields is a cheap copy — but a struct with several `decimal`s, `DateTime`s, or a dozen fields can cost more to copy than a class's 8-byte reference. Keeping structs small is the rule precisely because a "large struct" quietly turns every pass-by-value operation into a full memcpy, and that cost multiplies badly across a `List<T>` of them or a chain of method calls.
+
+                    **Boxing** happens when a value type needs to be treated as a reference type (`object`, or a non-generic interface). The CLR allocates a new object on the **managed heap**, copies the value type's bits into it, and hands back a reference to that heap object. **Unboxing** is the reverse: casting that heap object back to the value type copies the bits back out onto the stack. Both directions cost a heap allocation and a copy that reference types never pay, since they're already heap references.
+
+                    `List<int>` avoids boxing entirely because `List<T>` is generic — the JIT compiles a specialized version of `List<T>` for `T = int` that stores an `int[]` directly, with no `object` involved anywhere. The older non-generic `ArrayList`, by contrast, stores `object[]`: every `int` you `Add()` gets boxed onto the heap, and every read requires an unboxing cast. In a hot loop that's one extra heap allocation per element, added GC pressure, and worse cache locality — an `int[]` is contiguous memory, while an `object[]` of boxed ints is a scattered array of pointers to separate heap objects.
+
+                    **Struct equality**: unless you override it, `struct.Equals(object)` uses reflection to compare every field one by one (and boxes its argument to do so) — correct, but measurably slow if called often. Implement `IEquatable<T>` and override `Equals`/`GetHashCode` (and, conventionally, `==`/`!=`) for any struct you'll compare frequently or use as a dictionary/HashSet key in a hot path.
+
+                    **Passing structs — `in`/`ref`/`out`**: plain pass-by-value copies the whole struct. `ref` passes by reference and lets the callee both read and mutate the caller's original (the variable must already be assigned before the call). `out` also passes by reference but is a write-only contract — the callee must assign it before returning, regardless of what the caller passed in. `in` passes a (typically large) struct by reference *without* copying it, as a read-only view — the compiler prevents the callee from mutating it, and for a `readonly struct` it can do so without needing any defensive copy at all.
+                    """, 1),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    A **struct** is like a paper boarding pass — cheap to print, easy to hand someone a photocopy of, and if they scribble on their copy, yours stays untouched. A **class** is more like a shared hotel reservation record in the front desk's computer — everyone holding a reference to that reservation (concierge, housekeeping, billing) is looking at the exact same record, and a change any of them makes is visible to all the others.
+
+                    **Boxing** is like laminating that paper boarding pass and mailing it in an envelope so a system that only accepts envelopes can handle it — the trip to the print shop (heap allocation) and the lamination (copying the data in) cost time and material that a system built to handle paper directly would never have needed.
+                    """, 2),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Struct vs. class — quick decision**
+
+                    - Small (roughly 16 bytes or less), immutable, value semantics wanted -> `struct` (ideally `readonly struct`)
+                    - Larger, mutable, needs identity/inheritance/polymorphism -> `class`
+                    - Used heavily as a dictionary key or in equality checks -> override `Equals`/`GetHashCode`, especially for structs, to skip the reflection-based default
+
+                    **Boxing cheat sheet**
+
+                    - Boxing happens: assigning a value type to `object`, to a non-generic interface variable, to `params object[]`, or adding to `ArrayList`/`Hashtable`
+                    - Boxing does NOT happen: adding to a generic `List<T>`/`Dictionary<TKey,TValue>` (T is the concrete type, not `object`), or assigning to another variable of the same value type
+                    - Cost: one heap allocation + a full field copy per box; one type-check + field copy per unbox
+
+                    **`in` / `ref` / `out` at a glance**
+
+                    - (none) — pass by value, callee gets an independent copy
+                    - `ref` — pass by reference, callee can read and mutate the caller's original; caller's variable must already be assigned
+                    - `out` — pass by reference, write-only contract; callee MUST assign it before returning
+                    - `in` — pass by reference, read-only; avoids copying a large struct without letting the callee mutate it
+                    """, 3),
+                Block(BlockType.CodeSnippet, "A Readonly Struct with Overridden Equality and an `in` Parameter", BodyFormat.PlainText, """
+                    public readonly struct Money : IEquatable<Money>
+                    {
+                        public readonly decimal Amount;
+                        public readonly string CurrencyCode;
+
+                        public Money(decimal amount, string currencyCode)
+                        {
+                            Amount = amount;
+                            CurrencyCode = currencyCode;
+                        }
+
+                        // The compiler-generated default falls back to reflection over
+                        // every field to compare two structs — this is far faster.
+                        public bool Equals(Money other) =>
+                            Amount == other.Amount && CurrencyCode == other.CurrencyCode;
+
+                        public override bool Equals(object? obj) => obj is Money other && Equals(other);
+
+                        public override int GetHashCode() => HashCode.Combine(Amount, CurrencyCode);
+
+                        public static bool operator ==(Money left, Money right) => left.Equals(right);
+                        public static bool operator !=(Money left, Money right) => !left.Equals(right);
+                    }
+
+                    // 'in' passes Money by reference (read-only) instead of copying it,
+                    // without letting this method mutate the caller's original value.
+                    public static bool IsSameCurrency(in Money a, in Money b) =>
+                        a.CurrencyCode == b.CurrencyCode;
+
+                    // Boxing in action: List<int> never boxes, ArrayList boxes every element.
+                    List<int> noBoxing = new() { 1, 2, 3 };          // stores int[] directly
+                    System.Collections.ArrayList boxesEveryValue = new() { 1, 2, 3 }; // stores object[]
+                    """, 4, language: "csharp"),
+                Block(BlockType.Diagram, "Boxing an int Into an object", BodyFormat.StructuredSteps, """
+                    [{"label":"int count = 42;","note":"lives on the stack, no heap involved"},{"label":"object boxed = count;","note":"CLR allocates a new object on the managed heap"},{"label":"Heap object stores a copy of 42","note":"plus a type handle and sync block, like any other heap object"},{"label":"int unboxed = (int)boxed;","note":"casts back, copying the bits out of the heap object onto the stack"}]
+                    """, 5),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Default to `readonly struct` for small immutable value types (`Point`, `Money`, `Coordinates`) — it documents intent, blocks accidental mutation, and lets the compiler skip defensive copies when the struct is passed `in`.
+
+                    Always override `Equals`, `GetHashCode`, and implement `IEquatable<T>` on any struct you'll compare frequently or use as a collection key — don't rely on the default reflection-based implementation in anything performance-sensitive. Pass a struct larger than roughly 16 bytes as `in` (or `ref`/`ref readonly` where mutation is genuinely intended) instead of by value, to skip the copy on every call.
+                    """, 6),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    A frequent interview probe is "what actually happens when you box a value type?" Answer with the mechanics: the CLR allocates a new object on the managed heap, copies the value's bits into it, and returns a reference; unboxing copies the bits back out. Then connect it to something concrete: "that's why a non-generic ArrayList of ints is slower than a List<int> — the ArrayList boxes every element." Being able to explain *why* generics avoid boxing (the JIT specializes the generic type per value-type argument instead of using `object`) is what separates "I've heard boxing is bad" from real understanding.
+                    """, 7),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Designing a struct that's large (many fields) or mutable "because it seemed like a value type conceptually" — every assignment, method argument, and return then silently copies the whole thing, and if it's mutable, changing a copy inside a method or a `foreach` loop variable silently doesn't affect the original, which reads as a bug to the next person.
+
+                    Also very common: unknowingly boxing in a hot path — passing an `int` to a method or API that takes `object`, storing value types in a non-generic collection like `ArrayList`/`Hashtable`, or casting a value type to a non-generic interface it implements (`IComparable` instead of `IComparable<T>`).
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "You box an int into an object and later unbox it back into an int. Where does the boxed value actually live while boxed?",
+                    "Boxing allocates a brand-new object on the managed heap and copies the value type's bits into it; the original stack-based int is untouched. Unboxing later copies those bits back out onto the stack.",
+                    [
+                        new QuizOptionSeed("On the managed heap, as a new object", true),
+                        new QuizOptionSeed("Still on the stack, just marked as an object", false),
+                        new QuizOptionSeed("In a CPU register cache reserved for boxed values", false),
+                        new QuizOptionSeed("In a special boxed-value segment of the stack frame", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "Which of these does NOT cause boxing?",
+                    "List<T> is generic, so the JIT compiles a specialized version of List<T> for T = int that stores an int[] directly — no conversion to object occurs. ArrayList, casting to a non-generic interface, and assigning to object all require boxing.",
+                    [
+                        new QuizOptionSeed("object o = 5;", false),
+                        new QuizOptionSeed("new ArrayList().Add(5);", false),
+                        new QuizOptionSeed("new List<int>().Add(5);", true),
+                        new QuizOptionSeed("IComparable c = 5;", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Boxing and Unboxing (C# Programming Guide)", "https://learn.microsoft.com/en-us/dotnet/csharp/programming-guide/types/boxing-and-unboxing", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("Write safe and efficient C# code", "https://learn.microsoft.com/en-us/dotnet/csharp/write-safe-efficient-code", LinkType.OfficialDocs),
+            ]);
+
+        var lesson1Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson1.Slug,
+        [
+            "Convert one mutable struct in your own code (or a toy example) into a readonly struct with overridden Equals/GetHashCode",
+            "Find one place where a value type is implicitly boxed in your own code (an object parameter, a non-generic collection, a non-generic interface) and fix it",
+            "Explain out loud the difference between `ref`, `in`, and `out` for struct parameters, and when you'd reach for each",
+        ]);
+
+        var lesson2 = BuildLesson(
+            slug: "memory-management-and-garbage-collection",
+            title: "Memory Management & Garbage Collection",
+            summary: "The stack vs. the managed heap, generational GC, and using IDisposable/using to clean up unmanaged resources deterministically.",
+            estimatedMinutes: 35,
+            objectives:
+            [
+                "Explain the stack vs. the managed heap, and which one holds value types vs. reference types in practice",
+                "Explain the generational hypothesis and why Gen 0/1/2 collection makes the GC fast in the common case",
+                "Use IDisposable and `using` (statement or declaration) to deterministically clean up unmanaged resources",
+                "Build a mental model for when GC pressure becomes a real performance problem",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    The **stack** is a simple, fast, per-thread block of memory used for method call frames — local variables, parameters, and the return address. It grows and shrinks in strict last-in-first-out order as methods are called and return, so allocating on it is just moving a pointer, with no search and no bookkeeping. Value types declared as local variables live inline on the stack (or, when a struct is a field of a class, inline inside that object on the heap). Reference-type instances (anything created with `new` for a `class`, arrays, strings) always live on the **managed heap** — the local variable itself is just a reference/pointer sitting on the stack.
+
+                    The managed heap is managed by the **Garbage Collector (GC)**, which is generational, based on the **generational hypothesis**: most objects die young, and the few that survive tend to survive a long time. The heap is split into:
+
+                    - **Gen 0** — brand-new objects. Collected most frequently; a Gen 0 collection is fast because it only scans a small, recently-allocated region.
+                    - **Gen 1** — a buffer between Gen 0 and Gen 2; objects that survived one Gen 0 collection land here.
+                    - **Gen 2** — long-lived objects (caches, singletons, static-rooted data). Collected least often, and a Gen 2 collection is the most expensive since it may have to scan the entire long-lived object graph.
+
+                    Promoting a survivor from Gen 0 to Gen 1 to Gen 2 costs a copy, but because most objects never survive their first collection, the GC does the vast majority of its work over a tiny Gen 0 region — that's what makes the generational strategy fast in practice, despite full heap scans being expensive.
+
+                    **IDisposable** is the contract for deterministic cleanup of anything the GC doesn't manage directly: file handles, database connections, sockets, unmanaged memory. `Dispose()` releases those resources immediately, rather than waiting for a GC that may not run again for a while (or before the process exits). The **`using` statement** (`using (var conn = ...) { }`) and the newer **`using` declaration** (`using var conn = ...;`, scoped to the end of the enclosing block) both compile down to a `try`/`finally` that calls `Dispose()` even if an exception is thrown.
+
+                    The **dispose pattern** combines a finalizer (`~ClassName()`) with `IDisposable` as a safety net: if a caller forgets to call `Dispose()`/`using`, the finalizer eventually runs (on a dedicated finalizer thread, at some GC-determined point) and cleans up unmanaged resources anyway. A well-behaved caller using `using` never actually depends on the finalizer running, since finalization timing isn't guaranteed and adds GC overhead — a finalizable object always survives at least one extra collection before it can be reclaimed.
+
+                    **Mental model for GC pressure**: GC cost scales with how much you allocate and how long objects live, not simply with how much memory is "in use" at any instant. Warning signs of real pressure: high allocation rates in hot paths (allocating inside a loop that runs millions of times — boxing, string concatenation via `+`, LINQ closures), objects promoted to Gen 2 that die shortly after (defeating the generational hypothesis), and objects at or above 85,000 bytes landing on the **Large Object Heap (LOH)**, which is collected only during Gen 2 collections and isn't compacted by default — making it prone to fragmentation.
+                    """, 1),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    The **stack** is like a stack of trays in a cafeteria — you can only take from, or add to, the top, so it's instant; nobody has to search for the "right" tray. The **managed heap** is more like a warehouse with a forklift crew (the GC) — items go wherever there's space, and periodically the crew walks the aisles, discards anything nobody references anymore, and consolidates what's left so there's room for new stock.
+
+                    The **generational GC** is like tidying that warehouse by fully re-checking the loading dock (Gen 0) constantly, a middle storage area (Gen 1) less often, and the deep long-term archive (Gen 2) rarely — because in practice almost everything that arrives at the loading dock ships back out within a day, and only a small amount ever earns a spot in the archive.
+
+                    A **finalizer** is like a "please mail this rental key back if you forget to drop it at the desk" clause — a backstop for when someone forgets to check out (`Dispose()`) properly, but slower and far less certain than checking out on time.
+                    """, 2),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Stack vs. heap**
+
+                    - Stack: local value types, method frames, references (pointers) to heap objects — fast, LIFO, no GC involved
+                    - Managed heap: all `class` instances, arrays, boxed value types — managed and reclaimed by the GC
+
+                    **Generational GC**
+
+                    - Gen 0 — newest objects, collected most often, fastest collections
+                    - Gen 1 — buffer / Gen 0 survivors
+                    - Gen 2 — long-lived objects, collected least often, most expensive
+                    - LOH (Large Object Heap) — objects >= 85,000 bytes, collected with Gen 2, not compacted by default
+
+                    **Cleanup**
+
+                    - `IDisposable.Dispose()` — deterministic, immediate release of unmanaged resources
+                    - `using (x) { }` / `using var x = ...;` — compiler-generated try/finally calling Dispose()
+                    - Finalizer (`~Type()`) — non-deterministic safety net; adds GC cost, avoid unless truly needed
+
+                    **GC pressure red flags**
+
+                    - Allocating inside hot loops (boxing, string concatenation, LINQ closures)
+                    - Objects that reach Gen 2 and then die shortly after
+                    - Frequent large allocations (>= 85 KB) fragmenting the LOH
+                    """, 3),
+                Block(BlockType.CodeSnippet, "The Dispose Pattern: Finalizer + IDisposable Together", BodyFormat.PlainText, """
+                    public sealed class FileLogger : IDisposable
+                    {
+                        private readonly StreamWriter _writer;
+                        private bool _disposed;
+
+                        public FileLogger(string path) => _writer = new StreamWriter(path, append: true);
+
+                        public void Log(string message) => _writer.WriteLine(message);
+
+                        public void Dispose()
+                        {
+                            Dispose(true);
+                            GC.SuppressFinalize(this); // finalizer no longer needed once disposed explicitly
+                        }
+
+                        private void Dispose(bool disposing)
+                        {
+                            if (_disposed) return;
+
+                            if (disposing)
+                            {
+                                _writer.Dispose(); // release the managed StreamWriter (and its unmanaged handle)
+                            }
+
+                            _disposed = true;
+                        }
+
+                        // Safety net only: runs if a caller forgets to Dispose(). Not guaranteed
+                        // to run promptly (or at all before process exit) — never rely on it.
+                        ~FileLogger() => Dispose(false);
+                    }
+
+                    // Deterministic cleanup even if LogStartup throws:
+                    void LogStartup()
+                    {
+                        using var logger = new FileLogger("startup.log");
+                        logger.Log("Application starting...");
+                    } // logger.Dispose() runs here automatically, exception or not
+                    """, 4, language: "csharp"),
+                Block(BlockType.Diagram, "Object Lifetime Through GC Generations", BodyFormat.StructuredSteps, """
+                    [{"label":"new Order() allocated","note":"placed in Gen 0"},{"label":"Gen 0 collection runs","note":"most Gen 0 objects are already dead -> reclaimed almost instantly"},{"label":"Order is still referenced -> survives","note":"promoted to Gen 1"},{"label":"Gen 1 collection runs, Order still referenced","note":"promoted to Gen 2"},{"label":"Order becomes unreferenced much later","note":"only reclaimed on the next, rarer and costlier, Gen 2 collection"}]
+                    """, 5),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Always pair `IDisposable` with `using` (statement or declaration) at the call site — don't call `Dispose()` manually in a way that skips cleanup on an exception path. Implement the full dispose pattern (`Dispose(bool)` + `GC.SuppressFinalize(this)`) only when your class directly owns unmanaged resources or a finalizable object; delegating to another `IDisposable` (like the `StreamWriter` above) is usually enough without needing a finalizer of your own.
+
+                    Reduce GC pressure by reusing buffers (`ArrayPool<T>`), preferring `StringBuilder` over repeated string concatenation in loops, and avoiding unnecessary allocations in per-request/per-iteration hot paths — reducing what you allocate is almost always a bigger win than trying to tune the GC itself.
+                    """, 6),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    When asked "how does .NET garbage collection work," lead with the generational hypothesis ("most objects die young"), not a rote list of Gen 0/1/2 names — that's the *why* behind the design, and it's what interviewers are actually checking for. Be ready to also explain the difference between `Dispose()` and a finalizer: `Dispose()` is deterministic and caller-invoked, a finalizer is non-deterministic and GC-invoked, and a well-designed class shouldn't force callers to depend on the finalizer ever running.
+                    """, 7),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Forgetting to wrap an `IDisposable` (a `FileStream`, a `StreamReader`, a database connection) in a `using` — the resource stays held until the finalizer eventually runs, which can be much later than expected, or exhausts a limited resource pool (like database connections) well before that.
+
+                    Also common: sprinkling `GC.Collect()` calls into code assuming it "helps" performance. In the vast majority of cases this forces an expensive full collection at an arbitrary time and fights the GC's own tuning, making things slower rather than faster. The right fix for GC pressure is almost always allocating less, not collecting more aggressively.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "Why is a Gen 0 garbage collection typically much faster than a Gen 2 collection?",
+                    "Gen 0 only scans a small region of recently-allocated objects, most of which are already dead, while a Gen 2 collection may have to scan the entire long-lived object graph — the generational hypothesis (most objects die young) is what makes the cheap Gen 0 case the common one.",
+                    [
+                        new QuizOptionSeed("Gen 0 only scans a small, recently-allocated region where most objects are already dead, unlike Gen 2's full long-lived graph scan", true),
+                        new QuizOptionSeed("Gen 0 objects are stored on the stack, so no heap scan is needed", false),
+                        new QuizOptionSeed("Gen 2 collections run on a deliberately slower background thread", false),
+                        new QuizOptionSeed("Gen 0 collections skip checking whether objects are still referenced", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "What's the main risk of forgetting to call Dispose() (or wrap a resource in a using) on a class holding an unmanaged resource like a file handle?",
+                    "The unmanaged resource stays held until an eventual, non-deterministic finalizer run (if one even exists), which can exhaust a limited resource pool — like database connections — well before that finalizer ever runs.",
+                    [
+                        new QuizOptionSeed("The unmanaged resource stays held until a non-deterministic finalizer eventually runs, potentially exhausting a limited resource pool first", true),
+                        new QuizOptionSeed("The program fails to compile", false),
+                        new QuizOptionSeed("The CLR immediately terminates the process", false),
+                        new QuizOptionSeed("The resource is automatically reclaimed the next time any Gen 0 collection runs", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Fundamentals of garbage collection", "https://learn.microsoft.com/en-us/dotnet/standard/garbage-collection/fundamentals", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("Implement a Dispose method", "https://learn.microsoft.com/en-us/dotnet/standard/garbage-collection/implementing-dispose", LinkType.OfficialDocs),
+            ],
+            prerequisites: [lesson1]);
+
+        var lesson2Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson2.Slug,
+        [
+            "Wrap one IDisposable resource in your own code with `using` if it isn't already, and verify cleanup happens even when an exception is thrown",
+            "Explain out loud why most objects are collected in Gen 0 and never reach Gen 2",
+            "Find one allocation-heavy hot loop in your own code (string concatenation, boxing, LINQ) and describe how you'd reduce allocations there",
+        ]);
+
+        var module = BuildModule(topicId, "csharp-value-semantics-and-memory", "Value Semantics & Memory Management",
+            "Struct design, boxing mechanics, and the managed heap: how the CLR actually stores, copies, and reclaims your data.",
+            70, [lesson1, lesson2], sortOrder: 6);
+
+        return (module, [lesson1Checklist, lesson2Checklist]);
+    }
+
+    private static (Module, List<ChecklistSeed>) BuildCSharpDelegatesAndFunctionalStyleModule(int topicId)
+    {
+        var lesson1 = BuildLesson(
+            slug: "delegates-events-and-func-action-predicate",
+            title: "Delegates, Events & Func/Action/Predicate",
+            summary: "What a delegate actually is, multicast delegates, the built-in Func/Action/Predicate generics, and how the event keyword locks a delegate field down to safe += / -= from outside the class.",
+            estimatedMinutes: 35,
+            objectives:
+            [
+                "Explain what a delegate is (a type-safe reference to a method with a matching signature), and declare a custom delegate type vs. reaching for Func<>/Action<>/Predicate<>",
+                "Combine delegates with += into a multicast delegate, and predict what happens to a shared invocation list's return value and to an exception thrown partway through it",
+                "Explain why the `event` keyword restricts external code to += / -= only, and why that encapsulation matters compared to a plain public delegate field",
+                "Implement the standard .NET event pattern using `EventHandler<TEventArgs>` and a custom `EventArgs` subclass",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    A **delegate** is a type-safe reference to a method — conceptually a "function pointer," but one the compiler checks: a delegate type declares a specific signature (parameter types and a return type), and only a method, lambda, or anonymous method matching that exact signature can be assigned to it. Under the hood a delegate instance actually wraps two things: a reference to the method to call, and (for instance methods) a reference to the target object it should be called on.
+
+                    You declare a **custom delegate type** with the `delegate` keyword — `public delegate int MathOperation(int a, int b);` — which defines a brand-new type usable anywhere a type name is: as a field, a parameter, a return type. In practice you rarely need to do this anymore, because the BCL ships three generic delegate families that cover almost every shape:
+
+                    - `Func<T1, ..., TResult>` — takes zero or more input parameters and **returns** `TResult`. The last type parameter is always the return type.
+                    - `Action<T1, ...>` — takes zero or more input parameters and returns **void**.
+                    - `Predicate<T>` — takes one `T` and returns `bool`; functionally identical to `Func<T, bool>`, but idiomatic in older BCL APIs like `List<T>.Find`.
+
+                    A **multicast delegate** is a delegate that holds more than one method in its **invocation list**. Every delegate type in C# is multicast-capable by default: combining with `+=` appends a method to the list, `-=` removes the first matching entry, and invoking the delegate runs every entry in the list, in the order they were added. This works cleanly for `Action`-shaped (void-returning) delegates — every subscriber just does its thing. It's a poor fit for anything that returns a value: the caller of a multicast invocation only ever gets the *last* invoked method's return value, and every earlier result is silently discarded. If any subscriber throws partway through, the exception propagates immediately and every subscriber later in the list never runs at all.
+
+                    The **`event` keyword** takes a delegate field and narrows what code outside the declaring class is allowed to do with it. A plain `public Action<string> OnMessage;` field can be freely reassigned with `=` by any external caller — which silently wipes out every other subscriber — and can be invoked directly by anyone who holds a reference to the object. Declaring the same thing as `public event Action<string> OnMessage;` instead compiles down to a *private* backing delegate field plus a pair of compiler-generated `add`/`remove` accessors: from outside the declaring class, the only operations available are `+=` and `-=`. Direct invocation (`obj.OnMessage(...)`) and plain assignment (`obj.OnMessage = ...`) are only legal from *inside* the class that declared the event. That's the entire point of `event` — it's encapsulation applied to a delegate field, the same way a property's `private set` protects a backing field from uncontrolled external writes.
+
+                    The **standard .NET event pattern** declares an event of type `EventHandler` (no extra data, just "something happened") or the generic `EventHandler<TEventArgs>` (carries a payload). By convention, `TEventArgs` derives from `System.EventArgs` and is an immutable bag of data describing what happened. The declaring class exposes a `protected virtual void On<EventName>(TEventArgs e)` method that raises the event — `virtual` so a derived class can intercept or extend the behavior — and always raises it with the null-conditional operator (`SomeEvent?.Invoke(this, e);`) because an event with zero subscribers is `null`, not a harmless no-op delegate, and invoking a null delegate throws `NullReferenceException`.
+                    """, 1),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    A delegate is like a standardized job-request form at a company — the form has fixed fields (the signature), so any department that can fill out those exact fields can be handed the form and asked to do the work, without the requester needing to know or care which department actually processes it.
+
+                    A multicast delegate combined with `+=` is like a company-wide fire alarm: pulling the lever (invoking the delegate) doesn't call one office, it notifies every subscribed department in the order they registered — security, facilities, and the fire department all react to the same single pull. But it makes no sense to ask a fire alarm for a "return value," which is exactly why multicast delegates are built for void-returning notifications, not computations.
+
+                    `event` is like the difference between a building's fire alarm panel and its wiring closet. Tenants (external code) are only given access to the panel — they can register a pager (`+=`) or unregister one (`-=`) — but they can never rewire the whole system (`=`) or manually trigger every alarm in the building by reaching into the wiring closet directly (invoking it). Only building management (the declaring class) has keys to the closet.
+                    """, 2),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Delegate basics**
+
+                    - `public delegate int MathOperation(int a, int b);` — custom delegate type (rarely needed)
+                    - `Func<T1,...,TResult>` — has parameters, returns `TResult`
+                    - `Action<T1,...>` — has parameters, returns `void`
+                    - `Predicate<T>` — one `T` in, `bool` out (same shape as `Func<T,bool>`)
+
+                    **Multicast delegates**
+
+                    - `+=` appends to the invocation list; `-=` removes the first match
+                    - Invocation runs every entry, in add order
+                    - Value-returning multicast: caller only sees the **last** subscriber's return value
+                    - If one subscriber throws, later subscribers in the list never run
+
+                    **`event` vs. plain delegate field**
+
+                    - Plain `public Action Foo;` — outside code can `=`, `+=`, `-=`, and invoke directly
+                    - `public event Action Foo;` — outside code can ONLY `+=` / `-=`; `=` and direct invocation are class-internal only
+                    - Always raise with `Foo?.Invoke(...)` — no subscribers means `null`, not a no-op
+
+                    **Standard event pattern**
+
+                    - `public event EventHandler<TEventArgs> SomethingHappened;`
+                    - `TEventArgs : EventArgs`, immutable payload
+                    - `protected virtual void OnSomethingHappened(TEventArgs e) => SomethingHappened?.Invoke(this, e);`
+                    """, 3),
+                Block(BlockType.CodeSnippet, "Custom Delegate, Func/Action/Predicate, Multicast, and the Standard Event Pattern", BodyFormat.PlainText, """
+                    // 1. Custom delegate type vs. the built-in generic delegates
+                    public delegate int MathOperation(int a, int b);
+
+                    public class Calculator
+                    {
+                        public int Execute(int a, int b, MathOperation operation) => operation(a, b);
+                    }
+
+                    MathOperation add = (a, b) => a + b;
+                    MathOperation multiply = (a, b) => a * b;
+                    var calculator = new Calculator();
+                    Console.WriteLine(calculator.Execute(3, 4, add));      // 7
+                    Console.WriteLine(calculator.Execute(3, 4, multiply)); // 12
+
+                    // In practice, Func<>/Action<>/Predicate<> cover almost every shape you need,
+                    // so a custom delegate type like MathOperation above is rarely necessary:
+                    Func<int, int, int> addFunc = (a, b) => a + b;               // has params, RETURNS a value
+                    Action<string> log = message => Console.WriteLine(message); // has params, returns void
+                    Predicate<int> isEven = n => n % 2 == 0;                     // one param in, bool out
+
+                    // 2. Multicast delegates: += builds an invocation list
+                    Action<string> notify = null;
+                    notify += msg => Console.WriteLine($"Email: {msg}");
+                    notify += msg => Console.WriteLine($"SMS: {msg}");
+                    notify += msg => Console.WriteLine($"Push: {msg}");
+                    notify("Server restarting in 5 minutes"); // all three run, in the order added
+
+                    Func<int> multicastFunc = null;
+                    multicastFunc += () => 1;
+                    multicastFunc += () => 2;
+                    multicastFunc += () => 3;
+                    int result = multicastFunc(); // all three run, but result == 3 — the earlier
+                                                    // return values (1 and 2) are silently discarded
+
+                    // 3. The `event` keyword restricts external code to += / -=
+                    public class StockTicker
+                    {
+                        // Standard .NET event pattern: EventHandler<TEventArgs>
+                        public event EventHandler<PriceChangedEventArgs> PriceChanged;
+
+                        private decimal _price;
+                        public decimal Price
+                        {
+                            get => _price;
+                            set
+                            {
+                                if (value == _price) return;
+                                var oldPrice = _price;
+                                _price = value;
+                                OnPriceChanged(new PriceChangedEventArgs(oldPrice, value));
+                            }
+                        }
+
+                        protected virtual void OnPriceChanged(PriceChangedEventArgs e)
+                        {
+                            PriceChanged?.Invoke(this, e); // null-conditional: safe with zero subscribers
+                        }
+                    }
+
+                    public class PriceChangedEventArgs : EventArgs
+                    {
+                        public decimal OldPrice { get; }
+                        public decimal NewPrice { get; }
+
+                        public PriceChangedEventArgs(decimal oldPrice, decimal newPrice)
+                        {
+                            OldPrice = oldPrice;
+                            NewPrice = newPrice;
+                        }
+                    }
+
+                    // Subscriber code, from outside StockTicker:
+                    var ticker = new StockTicker();
+                    ticker.PriceChanged += (sender, e) =>
+                        Console.WriteLine($"Price moved from {e.OldPrice:C} to {e.NewPrice:C}");
+                    ticker.Price = 101.50m;
+
+                    // ticker.PriceChanged(this, someArgs); // COMPILE ERROR outside StockTicker: can't invoke an event directly
+                    // ticker.PriceChanged = null;           // COMPILE ERROR outside StockTicker: can't assign an event directly
+                    """, 4, language: "csharp"),
+                Block(BlockType.Diagram, "Multicast Delegate Invocation List", BodyFormat.StructuredSteps, """
+                    [{"label":"notify += EmailHandler","note":"Invocation list: [Email]"},{"label":"notify += SmsHandler","note":"Invocation list: [Email, Sms]"},{"label":"notify += PushHandler","note":"Invocation list: [Email, Sms, Push]"},{"label":"notify(\"Server restarting\") invoked","note":"Each entry runs in add order: Email, then Sms, then Push"},{"label":"notify -= SmsHandler","note":"Invocation list becomes [Email, Push] — Sms removed by delegate equality"},{"label":"If this were Func<int> instead of Action<string>","note":"All three still run in order, but the caller only observes Push's return value"}]
+                    """, 5),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Reach for `Func<>`/`Action<>`/`Predicate<>` before declaring a custom delegate type — a custom delegate type only earns its keep when the name itself adds real documentation value (a domain-specific callback like `MathOperation`, or a public API surface where that name is part of the published contract).
+
+                    Prefer `event` over a plain public delegate field for anything meant to notify multiple, independent subscribers. A plain delegate field can be reassigned with `=` by any caller, silently wiping out every existing subscriber; an `event` field only permits the safe, additive `+=` / `-=` from outside the class.
+
+                    Always guard invocation with the null-conditional operator (`SomeEvent?.Invoke(...)`) — an event or delegate field with zero subscribers is `null`, not a harmless no-op, and invoking a null delegate throws a `NullReferenceException`.
+                    """, 6),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    A very common ask: "what's the actual difference between a delegate and an event?" The precise answer isn't "events are for UI" — it's that `event` is encapsulation applied to a delegate field: it compiles down to a private delegate plus public `add`/`remove` accessors, so external code is restricted to `+=` / `-=`, while only the declaring class can assign it with `=` or invoke it directly. State the mechanism, not just a use case.
+
+                    Also be ready to reason about multicast pitfalls: if you combine several methods into one `Func<T>` and one throws partway through, the remaining subscribers in the invocation list never run at all — the exception propagates straight out. This, plus the "only the last return value survives" behavior, is exactly why multicast delegates are reserved for void-returning notifications (events), not value-returning computations.
+                    """, 7),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Exposing a public delegate field (`public Action<string> OnMessage;`) instead of an `event` — any external code can wipe out every other subscriber with a careless `=` assignment (`someObject.OnMessage = myHandlerOnly;`), instead of being limited to the safe, additive `+=` an `event` would enforce.
+
+                    Invoking a multicast `Func<T>` and assuming you'll somehow get an aggregate of every subscriber's return value — you only ever get the *last* invoked subscriber's return value; every earlier one is silently discarded. This is a frequent source of "why is my result wrong" bugs the first time someone multicasts a delegate that's supposed to return something meaningful.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "You build `Func<int> calc = null; calc += () => 1; calc += () => 2; calc += () => 3;` then call `int result = calc();`. What is `result`?",
+                    "Invoking a multicast delegate runs every method in its invocation list in order, but a single call site can only capture one return value — the generated code discards every result except the last one's. This is exactly why multicast delegates are a poor fit for anything with a meaningful return value; they're intended for void-returning notifications like events.",
+                    [
+                        new QuizOptionSeed("6, because multicast delegates sum every subscriber's result", false),
+                        new QuizOptionSeed("3, because invoking a multicast delegate runs every subscriber but the caller only observes the last one's return value", true),
+                        new QuizOptionSeed("1, because only the first subscriber in the invocation list actually runs", false),
+                        new QuizOptionSeed("A compile-time error: Func<> delegates cannot be combined with +=", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "Outside the `StockTicker` class, `ticker.PriceChanged += handler;` compiles fine, but `ticker.PriceChanged(this, args);` does not. Why?",
+                    "The `event` keyword compiles a public event field down to a private delegate field plus add/remove accessors. Outside the declaring class, the compiler only exposes those accessors (+= and -=); direct invocation and plain assignment (=) remain legal only from inside the class that declared the event — this restriction is the entire point of `event` versus a raw public delegate field.",
+                    [
+                        new QuizOptionSeed("Because `event` restricts external code to only += and -=; direct invocation and = assignment are internal-only", true),
+                        new QuizOptionSeed("Because EventHandler<T> is sealed and can never be invoked, even inside the declaring class", false),
+                        new QuizOptionSeed("Because PriceChanged was never initialized before use", false),
+                        new QuizOptionSeed("Because events require the sender argument to always be null", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Delegates (C# Programming Guide)", "https://learn.microsoft.com/en-us/dotnet/csharp/delegates-overview", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("Handle and raise events", "https://learn.microsoft.com/en-us/dotnet/standard/events/", LinkType.OfficialDocs),
+            ]);
+
+        var lesson1Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson1.Slug,
+        [
+            "Declare a custom delegate type, then rewrite the same signature using Func<>/Action<>, and note when a custom delegate type would still earn its keep",
+            "Build a multicast delegate with three subscribers via +=, invoke it, and predict what a Func<> version of the same chain would return",
+            "Add a public event to a class using EventHandler<TEventArgs>, subscribe to it from outside the class, and confirm the compiler blocks direct invocation and assignment from outside",
+        ]);
+
+        var lesson2 = BuildLesson(
+            slug: "lambda-expressions-and-extension-methods",
+            title: "Lambda Expressions & Extension Methods",
+            summary: "How lambdas evolved from anonymous methods, what closures actually capture (including the real foreach-vs-for loop-variable story), Func<T> vs. Expression<Func<T>>, and writing extension methods.",
+            estimatedMinutes: 40,
+            objectives:
+            [
+                "Trace the syntax evolution from anonymous methods to lambda expressions to expression-bodied members, and rewrite one form as the others",
+                "Explain what a closure captures, and correctly state which loop construct's captured-variable bug C# 5 actually fixed (foreach) versus which one it did not (for)",
+                "Distinguish `Func<T>` (compiled to IL, executes immediately) from `Expression<Func<T>>` (compiled to a data structure) and explain why IQueryable providers like EF Core require the latter",
+                "Write an extension method using the `this` parameter modifier, and state the resolution rule that lets a real instance method always win over one",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    **Lambda expressions** are the terse, modern syntax for an unnamed inline method, and they're the midpoint of an evolution: C# 1.0 only had named methods referenced via a delegate; C# 2.0 added **anonymous methods** (`delegate (int a, int b) { return a + b; }`) so you could inline a method body without naming it; C# 3.0 replaced that with **lambda expressions** (`(a, b) => a + b`), which are shorter and — unlike anonymous methods — can also be captured as **expression trees**, not just compiled delegates. C# 6.0 later generalized the same `=>` arrow to **expression-bodied members**: ordinary methods, properties, and constructors whose entire body is one expression. All four forms can express identical logic; lambdas are simply what you reach for day to day.
+
+                    A lambda has two shapes: an **expression lambda** (`x => x * 2`, a single expression, implicitly returned) and a **statement lambda** (`x => { var y = x * 2; return y; }`, a braced body of one or more statements requiring an explicit `return` if it produces a value).
+
+                    **Closures**: a lambda that references a local variable from its enclosing method doesn't copy that variable's value — it captures the *variable itself* (the compiler hoists it into a field on a generated class), keeping it alive on the heap for as long as the delegate exists. Multiple lambdas capturing the same variable share the same storage location, so one lambda's mutation is visible to another, and any lambda invoked after the variable changes sees the *new* value, not whatever value existed when the lambda was created.
+
+                    **The classic captured-loop-variable bug is specifically a `foreach` story.** In C# up to version 4, `foreach`'s iteration variable was scoped *once, outside* the loop body and reused every pass, so a lambda created inside `foreach (var item in list) { actions.Add(() => Print(item)); }` captured that one shared variable — by the time the stored delegates ran, `item` held whatever the *last* iteration had left it with, so every lambda printed the same final item. Starting with C# 5.0, the compiler scopes `foreach`'s iteration variable *fresh, inside* each iteration, so each lambda now captures its own private copy, and the bug is gone for `foreach`.
+
+                    **This fix never touched `for` loops — and that surprises a lot of people.** A C-style `for (int i = 0; i < n; i++)` loop declares `i` exactly once, in the loop header, and the entire point of that variable is to be mutated in place every iteration — there has only ever been one `i` for the whole loop, before and after C# 5, in every version of the language. So `for (int i = 0; i < 3; i++) { actions.Add(() => Console.WriteLine(i)); }` has always printed `3, 3, 3` once the stored delegates run after the loop ends — this was never "fixed," because a `for` loop's counter cannot be given fresh-per-iteration scoping without changing what a `for` loop fundamentally is. To capture each iteration's value inside a `for` loop, introduce a new local variable *inside* the loop body and capture that instead.
+
+                    **Expression trees**: writing `Func<int, bool> f = n => n > 10;` compiles the lambda straight to IL — an ordinary, immediately invocable delegate. Writing `Expression<Func<int, bool>> e = n => n > 10;` compiles the *same-looking* lambda into a **data structure** instead — a tree of `Expression` objects describing "parameter `n`, greater-than, constant `10`" — rather than executable code. You can inspect that tree, transform it, or call `.Compile()` to turn it into a real delegate on demand. This is exactly the mechanism LINQ providers rely on: LINQ to Objects (`IEnumerable<T>`) uses `Func<T>` and genuinely executes your delegate in-process, while `IQueryable<T>` providers like EF Core use `Expression<Func<T>>` and never run your lambda as C# at all — they walk the expression tree and translate it into another language (SQL) instead.
+
+                    **Extension methods** add an apparent instance method to a type you don't own, by writing a `static` method in a `static` class whose *first* parameter carries the `this` modifier — `public static bool IsNullOrBlank(this string value)`. Callers write `someString.IsNullOrBlank()` as if it were a real instance method, even though it's syntactic sugar for `StringExtensions.IsNullOrBlank(someString)`. Extension methods are what makes LINQ's fluent chaining (`.Where(...).Select(...).OrderBy(...)`) possible on plain `IEnumerable<T>`, which itself declares none of those methods.
+
+                    **Resolution rules**: if a type already has an instance (or inherited) member with a matching signature, the compiler always prefers it over any extension method — an extension method can never override or hide a real instance member, only fill a gap when nothing else matches. Extension methods also require the extension class's namespace to be in scope via `using` at the call site, and they cannot access private members of the type they extend, since underneath they're just ordinary static methods.
+                    """, 1),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    A closure is like a walkie-talkie channel shared by a group of hikers — each hiker's lambda doesn't get a frozen recording of the channel's status at the moment they tuned in; it just holds onto the same open channel, so whatever was last said on it is what everyone hears when they check back in later.
+
+                    The `foreach` fix is like giving every runner in a relay their own personal sign instead of one shared scoreboard: before C# 5, everyone was told "read whichever number is on the shared scoreboard when your name gets called," and since the scoreboard kept getting overwritten, everyone read the same final number. A `for` loop is different — it's a single odometer that keeps ticking upward for the entire trip by design; asking for "each mile's own odometer reading" doesn't make sense unless you deliberately write the current reading down on a separate slip of paper at that exact mile.
+
+                    An extension method is like clipping a laminated quick-reference card onto a rental car you don't own — the card looks like part of the dashboard, but it's really an accessory added afterward, and if the dashboard already has its own built-in version of that feature, the car's real dashboard wins every time, not your card.
+                    """, 2),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Syntax evolution**
+
+                    - Anonymous method (C# 2): `delegate(int a, int b) { return a + b; }`
+                    - Lambda expression (C# 3): `(a, b) => a + b`
+                    - Expression-bodied member (C# 6): `int Add(int a, int b) => a + b;`
+
+                    **Lambda shapes**
+
+                    - Expression lambda: `x => x * 2` (implicit return)
+                    - Statement lambda: `x => { var y = x * 2; return y; }` (explicit return)
+
+                    **Closures & the loop-variable bug**
+
+                    - A lambda captures the *variable*, not a snapshot of its value
+                    - `foreach`: fresh iteration variable per pass since C# 5 — bug fixed
+                    - `for`: one shared, mutated counter in every C# version — never "broken," never "fixed"
+                    - Fix for `for`: copy the counter into a new local *inside* the loop body before capturing it
+
+                    **`Func<T>` vs. `Expression<Func<T>>`**
+
+                    - `Func<T,...>` → compiled to IL, runs immediately when invoked
+                    - `Expression<Func<T,...>>` → compiled to a data structure (expression tree); `.Compile()` turns it into a delegate
+                    - LINQ to Objects (`IEnumerable<T>`) → `Func<T>`, executes in-process
+                    - LINQ providers (`IQueryable<T>`, e.g. EF Core) → `Expression<Func<T>>`, translated (e.g. to SQL)
+
+                    **Extension methods**
+
+                    - `public static R Name(this T value, ...)` inside a `static` class
+                    - Called like an instance method: `value.Name(...)`
+                    - A real instance/inherited member always wins over a same-signature extension method
+                    - Cannot access private members of the extended type
+                    """, 3),
+                Block(BlockType.CodeSnippet, "Syntax Evolution, Closures, Expression Trees, and Extension Methods", BodyFormat.PlainText, """
+                    // 1. Syntax evolution: anonymous method -> lambda -> expression-bodied member
+                    Comparison<int> compareOld = delegate (int a, int b) { return a.CompareTo(b); }; // C# 2
+                    Comparison<int> compareLambda = (a, b) => { return a.CompareTo(b); };            // C# 3, statement lambda
+                    Comparison<int> compareShort = (a, b) => a.CompareTo(b);                          // C# 3, expression lambda
+
+                    public class IntComparer
+                    {
+                        public int Compare(int a, int b) => a.CompareTo(b); // C# 6, expression-bodied member
+                    }
+
+                    // 2. Closures: a lambda captures VARIABLES, not their values at creation time
+                    int counter = 0;
+                    Action increment = () => counter++; // captures the *variable* counter, by reference
+                    increment();
+                    increment();
+                    Console.WriteLine(counter); // 2 — the lambda shares the same storage location as counter
+
+                    // foreach (C# 5+): each iteration gets a FRESH copy of the iteration variable
+                    var foreachActions = new List<Action>();
+                    foreach (var item in new[] { 0, 1, 2 })
+                    {
+                        foreachActions.Add(() => Console.WriteLine(item));
+                    }
+                    foreach (var action in foreachActions) action();
+                    // Prints 0, 1, 2 today. (Pre-C#5, 'item' was ONE shared variable reused
+                    // every pass, so this used to print 2, 2, 2 instead.)
+
+                    // for: the counter has ALWAYS been one shared, mutated variable — never
+                    // "fixed," because that's what makes a for-loop counter work at all
+                    var forActions = new List<Action>();
+                    for (int i = 0; i < 3; i++)
+                    {
+                        forActions.Add(() => Console.WriteLine(i));
+                    }
+                    foreach (var action in forActions) action();
+                    // Prints 3, 3, 3 in EVERY version of C# — 'i' has already reached 3
+                    // (the value that failed the i < 3 check) by the time these run
+
+                    // Fix for 'for' loops: introduce a fresh local INSIDE the loop body and capture that
+                    var fixedForActions = new List<Action>();
+                    for (int i = 0; i < 3; i++)
+                    {
+                        int captured = i; // a brand-new variable each iteration
+                        fixedForActions.Add(() => Console.WriteLine(captured));
+                    }
+                    foreach (var action in fixedForActions) action(); // now prints 0, 1, 2
+
+                    // 3. Func<T> (compiled code) vs. Expression<Func<T>> (compiled data)
+                    Func<int, bool> asDelegate = n => n > 10;
+                    Console.WriteLine(asDelegate(15)); // executes immediately: True
+
+                    Expression<Func<int, bool>> asExpressionTree = n => n > 10;
+                    // asExpressionTree is NOT executable yet — it's a tree of Expression nodes.
+                    // A provider like EF Core walks that tree and translates it, e.g. into:
+                    //   WHERE n > 10
+                    Func<int, bool> compiled = asExpressionTree.Compile();
+                    Console.WriteLine(compiled(15)); // True — now it behaves like the first example
+
+                    // 4. Extension methods: the 'this' modifier on the first parameter
+                    public static class StringExtensions
+                    {
+                        public static bool IsNullOrBlank(this string? value) =>
+                            string.IsNullOrWhiteSpace(value);
+
+                        public static string Truncate(this string value, int maxLength) =>
+                            value.Length <= maxLength ? value : value[..maxLength] + "...";
+                    }
+
+                    string? input = "   ";
+                    Console.WriteLine(input.IsNullOrBlank());                          // true
+                    Console.WriteLine("Hello, world!".Truncate(5).IsNullOrBlank());    // fluent chaining: false
+                    """, 4, language: "csharp"),
+                Block(BlockType.Diagram, "Func<T> vs. Expression<Func<T>>: Same Lambda, Two Compile Targets", BodyFormat.AsciiArt, """
+                                         n => n > 10
+                                              |
+                                 +------------+------------+
+                                 |                          |
+                                 v                          v
+                         Func<int, bool>          Expression<Func<int, bool>>
+                         compiles to IL            compiles to a DATA STRUCTURE
+                                 |                          |
+                                 v                          v
+                      Runs immediately when          .Compile() -> real delegate,
+                      you call it like a method       OR a LINQ provider (EF Core)
+                      asDelegate(15) -> True           walks the tree and emits SQL
+                    """, 5),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Prefer expression lambdas over statement lambdas when the body is genuinely one expression — they read better and keep call sites compact — but don't force multi-step logic into one cramped expression just to avoid braces; a clear statement lambda beats an unreadable one-liner.
+
+                    When writing a lambda that might run against `IQueryable<T>` (EF Core or another ORM), avoid calling arbitrary C# methods inside it that the provider can't translate — stick to simple property access, comparisons, and the specific methods that provider supports, or materialize the query first (`.ToList()`/`.AsEnumerable()`) and do anything exotic afterward, in memory.
+
+                    Name extension-method classes and their namespace deliberately (e.g. `StringExtensions` in a narrowly-scoped namespace), and keep each extension method's behavior obvious from its name alone — because they appear to be built-in members at the call site, a surprising or side-effecting extension method is far more confusing than an equally surprising static helper would be.
+                    """, 6),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    A frequent trap question: "does C# still have the captured-loop-variable bug?" Many candidates answer a flat "no, fixed in C# 5" — the precise, correct answer is that C# 5 fixed it only for `foreach` (by giving each iteration a fresh copy of the iteration variable). A `for` loop's counter is still one shared, mutated variable in every version of C#, so lambdas capturing a `for` loop's counter directly still print the loop's final value unless you explicitly copy it into a fresh local inside the loop body first. Getting this exact distinction right is a strong signal.
+
+                    Also expect: "why does EF Core use `Expression<Func<T,bool>>` instead of `Func<T,bool>`?" The concise answer: `Func<T>` is already-compiled, directly runnable code; `Expression<Func<T>>` is an inspectable data structure describing that same logic, which is exactly what a query provider needs in order to translate your lambda into SQL instead of running it as C#.
+                    """, 7),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Assuming the C# 5 loop-variable fix applies to `for` loops the same way it applies to `foreach` — it doesn't. `for (int i = ...)` has always had, and still has, a single shared `i` for the whole loop, so lambdas created inside a `for` loop that capture `i` directly all observe the loop's final value once invoked, regardless of C# version. Only `foreach`'s per-iteration variable scoping changed.
+
+                    Confusing `Expression<Func<T,bool>>` with `Func<T,bool>` — trying to invoke an expression tree directly, or passing a `Func<>` where a provider expects an `Expression<Func<>>`. The two are not interchangeable: a `Func<>` has already been compiled to code and thrown away the structural information a provider needs, so it can only ever run locally and can never be translated by something like EF Core into SQL.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "You write `for (int i = 0; i < 3; i++) { actions.Add(() => Console.WriteLine(i)); }` then invoke every stored action after the loop. In current C# (5 and later), what is printed?",
+                    "The C# 5 fix for captured-variable bugs applies only to foreach — a for loop has always declared its counter once, in the loop header, and mutates that single variable every iteration, in every C# version. Since all three lambdas capture the same i, and i equals 3 by the time the loop condition fails, all three print 3 once invoked.",
+                    [
+                        new QuizOptionSeed("0, 1, 2, because C# 5 gave every loop a fresh variable per iteration", false),
+                        new QuizOptionSeed("3, 3, 3, because a for loop's counter is still one shared variable across all iterations, even in modern C#", true),
+                        new QuizOptionSeed("A compile-time error, because i is out of scope outside the loop", false),
+                        new QuizOptionSeed("0, 1, 2, but only because Console.WriteLine defers evaluation", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "An EF Core query calls `.Where(u => u.Age > 18)` against a `DbSet<User>` (an `IQueryable<User>`). What does the compiler do with the lambda, and why?",
+                    "IQueryable<T>'s Where overload takes an Expression<Func<T,bool>>, not a Func<T,bool>, so the compiler builds an expression tree instead of ordinary executable IL. EF Core inspects that tree at runtime and translates it into SQL, rather than pulling every row into memory and running the lambda as C#.",
+                    [
+                        new QuizOptionSeed("Compiles it into a Func<User,bool> and EF Core executes it once per row after loading all rows into memory", false),
+                        new QuizOptionSeed("Compiles it into an Expression<Func<User,bool>> — a data structure describing the lambda — which EF Core walks and translates into a SQL WHERE clause", true),
+                        new QuizOptionSeed("Compiles it into IL identically to any other lambda; IQueryable<T> has no special handling", false),
+                        new QuizOptionSeed("It's a compile-time error, because Where cannot be used on IQueryable<T>", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Lambda expressions (C# reference)", "https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/operators/lambda-expressions", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("Extension Methods (C# Programming Guide)", "https://learn.microsoft.com/en-us/dotnet/csharp/programming-guide/classes-and-structs/extension-methods", LinkType.OfficialDocs),
+            ],
+            prerequisites: [lesson1]);
+
+        var lesson2Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson2.Slug,
+        [
+            "Rewrite the same two-parameter comparison as an anonymous method, a lambda expression, and an expression-bodied method, and confirm all three compile and behave identically",
+            "Reproduce the for-loop vs. foreach-loop captured-variable behavior yourself, predict the printed output before running it, then verify it",
+            "Write one extension method using the this modifier, call it fluently off an instance, then add a same-signature real instance method to the type and confirm the instance method wins",
+        ]);
+
+        var module = BuildModule(topicId, "csharp-delegates-and-functional-style", "Delegates & Functional-Style C#",
+            "Delegates, events, and the lambda/closure/extension-method toolkit that underlies LINQ and modern functional-style C#.",
+            75, [lesson1, lesson2], sortOrder: 4);
+
+        return (module, [lesson1Checklist, lesson2Checklist]);
+    }
+    private static (Module, List<ChecklistSeed>) BuildCSharpRecordsAndPatternMatchingModule(int topicId)
+    {
+        var lesson1 = BuildLesson(
+            slug: "records-and-advanced-pattern-matching",
+            title: "Records Deep Dive & Advanced Pattern Matching",
+            summary: "Value-based equality with record/record struct/class, non-destructive `with` mutation, and pattern matching beyond basic switch expressions.",
+            estimatedMinutes: 40,
+            objectives:
+            [
+                "Explain how record equality differs from class equality, and why record struct trades a heap allocation for value-type storage",
+                "Use `with` expressions for non-destructive mutation, and rely on a positional record's compiler-generated Deconstruct",
+                "Write property patterns, tuple patterns, and relational patterns in a switch expression instead of chained if/else",
+                "Use C# 11 list patterns and the and/or/not pattern combinators to express multi-condition checks in one pattern",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    A **record** is a reference type (by default) designed for immutable, value-based data. The compiler synthesizes `Equals`, `GetHashCode`, `ToString`, and a copy constructor for you — two records are `==` equal when all their public property values match, not merely when they're the same reference, which is the opposite of what a plain `class` does.
+
+                    - `record` (or `record class`) — reference type, still lives on the heap, but with value-based equality.
+                    - `record struct` — same generated members (equality, `ToString`, deconstruction) but is a *value type*: stored inline/on the stack, copied by value on assignment, like any other `struct`.
+                    - Plain `class` — reference-based equality by default (`==` compares references unless you override `Equals`/`==`) and gets none of this for free.
+
+                    **Positional records** (`public record Point(int X, int Y);`) generate, in one line: a constructor, init-only properties for `X` and `Y`, `Equals`/`GetHashCode` based on those properties, a `ToString()` override that prints them, and a `Deconstruct` method — so `var (x, y) = point;` works out of the box.
+
+                    **`with` expressions** produce a new instance that copies every property from the original except the ones you explicitly override — non-destructive mutation. The original instance is untouched; `with` calls the compiler-generated copy constructor under the hood.
+
+                    **Pattern matching beyond `switch` basics:**
+                    - **Property patterns** — `{ Radius: > 10 }` matches an object shape by inspecting its properties, and can nest arbitrarily deep.
+                    - **Tuple patterns** — `(x, y) switch { (0, 0) => ..., (var x, 0) => ... }` matches on multiple values as one unit.
+                    - **Relational patterns** — `> 10`, `<= 0`, etc., test ordering directly inside a pattern instead of a separate `if`.
+                    - **List patterns** (C# 11) — `[1, 2, ..]` matches an array/list's first elements and captures or ignores the rest with `..` (the "slice" pattern); `[var first, .., var last]` grabs the first and last elements regardless of length.
+                    - **Pattern combinators** — `and`, `or`, `not` combine patterns: `> 0 and < 100`, `Circle or Square`, `not null`.
+
+                    Together these let a single `switch` expression replace a wall of nested `if`/`else` checking types, ranges, and shapes all at once.
+                    """, 1),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    A positional record is like a pre-printed shipping label template — fill in "From," "To," and "Weight" once, and the template automatically knows how to compare two labels (do they say the same thing?), print itself, and hand back its fields individually. A plain class is a blank sheet of paper — you get none of that unless you write it by hand.
+
+                    A `with` expression is like photocopying a filled-out form and only crossing out and rewriting one field — the copy is a new physical piece of paper, but every other field carries over untouched, and the original form in the drawer is never touched.
+
+                    A list pattern's `..` is like a bouncer who only cares that "the first two people in line are Alice and Bob" — however many people are behind them, and whoever they are, doesn't matter to that particular check.
+                    """, 2),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **record vs record struct vs class**
+
+                    - `record` — reference type, value-based `Equals`/`GetHashCode`, `with` support, `ToString()` override
+                    - `record struct` — same generated members, but a value type (stack/inline, copied by value)
+                    - `class` — reference-based equality by default; you write `Equals`/`GetHashCode`/`ToString` yourself if you want them
+
+                    **Positional record generates for free**
+
+                    - Init-only properties for each positional parameter
+                    - `Equals`/`GetHashCode` based on all properties
+                    - `ToString()` printing `TypeName { Prop1 = val1, Prop2 = val2 }`
+                    - `Deconstruct(out ...)` — enables `var (x, y) = instance;`
+
+                    **Pattern matching cheat sheet**
+
+                    - Property pattern: `{ Status: "Active", Retries: > 3 }`
+                    - Tuple pattern: `(x, y) switch { (0, 0) => "origin", _ => "elsewhere" }`
+                    - Relational pattern: `age switch { < 13 => "child", < 20 => "teen", _ => "adult" }`
+                    - List pattern: `[1, 2, ..]` (starts with 1, 2), `[.., var last]` (ends with `last`), `[]` (empty)
+                    - Combinators: `and` (both), `or` (either), `not` (negate) — e.g. `not null and > 0`
+                    """, 3),
+                Block(BlockType.CodeSnippet, "Records with `with`/Deconstruct, and Advanced Pattern Matching", BodyFormat.PlainText, """
+                    public record Point(int X, int Y);
+
+                    var p1 = new Point(1, 2);
+                    var p2 = new Point(1, 2);
+                    Console.WriteLine(p1 == p2);                 // True — value-based equality
+                    var p3 = p1 with { Y = 99 };                  // non-destructive mutation; p1 unchanged
+                    var (x, y) = p3;                              // compiler-generated Deconstruct
+
+                    public record Order(string Status, int Retries, int[] Items);
+
+                    string Describe(Order order) => order switch
+                    {
+                        { Status: "Cancelled" } => "ignore",
+                        { Status: "Active", Retries: > 3 } => "escalate — too many retries",
+                        { Items: [var only] } => $"single-item order: {only}",
+                        { Items: [var first, _, ..] } => $"starts with {first}, has more items",
+                        { Items: [] } => "empty order",
+                        _ => "normal order",
+                    };
+
+                    // Tuple + relational + combinator patterns together
+                    string Classify(int x, int y) => (x, y) switch
+                    {
+                        (0, 0) => "origin",
+                        ( > 0, > 0 ) => "quadrant I",
+                        (var a, var b) when a == b => "on the diagonal",
+                        _ => "elsewhere",
+                    };
+
+                    string Grade(int score) => score switch
+                    {
+                        < 0 or > 100 => "invalid",
+                        >= 90 and <= 100 => "A",
+                        >= 80 => "B",
+                        _ => "C or below",
+                    };
+                    """, 4, language: "csharp"),
+                Block(BlockType.Diagram, "Value Equality vs. Reference Equality", BodyFormat.AsciiArt, """
+                    record Point(int X, int Y)                class Point(int X, int Y)
+
+                    p1 = Point(1,2)   p2 = Point(1,2)          p1 = Point(1,2)   p2 = Point(1,2)
+                       [heap obj A]      [heap obj B]              [heap obj A]      [heap obj B]
+                            \\                /                          \\                /
+                             \\              /                            \\              /
+                           Equals compares X and Y                  Equals compares
+                           -> p1 == p2 is TRUE                       references A vs B
+                                                                     -> p1 == p2 is FALSE
+
+                    with expression:
+                    p1 with { Y = 99 }  ->  new heap obj C, X copied from A, Y = 99
+                    p1 (obj A) is never modified
+                    """, 5),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Reach for a `record`/`record struct` the moment a type's identity IS its data — DTOs, value objects (Money, Coordinates), API request/response shapes, immutable domain events. Reach for a `class` when identity is independent of state (a `Customer` entity that keeps the "same" identity even after its `Name` changes) or when the type is mutable and reference semantics are the point.
+
+                    Prefer list patterns and property patterns over multiple nested `if` statements when a `switch` expression can express the same branching in one place — it keeps every case visible together instead of scattered across an `if`/`else if` chain, and the compiler will warn you about non-exhaustive matches.
+                    """, 6),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    When asked "record vs class," don't just say "records are immutable" — records aren't inherently immutable (you can declare mutable `set` properties on one), the defining difference is value-based equality plus the free `with`/deconstruction/ToString support. Be ready to point out that `record struct` exists precisely for when you want that same generated equality/deconstruction behavior with value-type storage instead of a heap allocation.
+                    """, 7),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Assuming two record instances with equal properties are the same object — `p1 == p2` being `true` doesn't mean `ReferenceEquals(p1, p2)` is `true`; they're still two distinct heap objects that happen to compare equal by value.
+
+                    Also common: forgetting a list pattern like `[var first, ..]` falls through (or hits `_`) on an empty sequence, since there's no first element to bind — always add an explicit `[]` case, or a `_` fallback, alongside patterns that assume at least one element.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "Given `public record Point(int X, int Y);` and `var a = new Point(1,2); var b = new Point(1,2);`, what does `a == b` evaluate to?",
+                    "Records get a compiler-generated Equals/GetHashCode based on property values, so == compares X and Y, not object identity — a and b are two distinct heap objects that compare equal by value.",
+                    [
+                        new QuizOptionSeed("True, because records compare by value via compiler-generated Equals", true),
+                        new QuizOptionSeed("False, because == always compares references for any type in C#", false),
+                        new QuizOptionSeed("True only if ReferenceEquals(a, b) is also true", false),
+                        new QuizOptionSeed("It's a compile error, since records don't support ==", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "Which switch arm correctly uses a pattern combinator to treat a score as invalid when it's either negative or over 100?",
+                    "`or` combines two relational patterns into one arm — `< 0 or > 100` matches if either condition holds, which is exactly what 'negative or over 100' means. `and` would require both simultaneously, which no int can satisfy.",
+                    [
+                        new QuizOptionSeed("< 0 or > 100 => \"invalid\"", true),
+                        new QuizOptionSeed("< 0 and > 100 => \"invalid\"", false),
+                        new QuizOptionSeed("not (< 0 || > 100) => \"invalid\"", false),
+                        new QuizOptionSeed("is < 0, > 100 => \"invalid\"", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Records (C# reference)", "https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/builtin-types/record", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("Patterns (C# reference)", "https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/operators/patterns", LinkType.OfficialDocs),
+            ]);
+
+        var lesson1Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson1.Slug,
+        [
+            "Write a positional record, create two instances with equal values, and verify == is true while ReferenceEquals is false",
+            "Rewrite a nested if/else chain using property, tuple, or list patterns in a single switch expression",
+            "Use a with expression to non-destructively update one property of a record you defined, and confirm the original is unchanged",
+        ]);
+
+        var lesson2 = BuildLesson(
+            slug: "nullable-reference-and-value-types",
+            title: "Nullable Reference Types & Nullable Value Types",
+            summary: "Nullable<T> for value types, nullable reference types as a compile-time-only warning system, and using ?./??/??= correctly together.",
+            estimatedMinutes: 35,
+            objectives:
+            [
+                "Explain Nullable<T>/T? for value types, including HasValue/Value and how boxing a Nullable<T> actually behaves",
+                "Explain that nullable reference types (NRT) are a compile-time-only annotation and warning system with zero runtime effect",
+                "Use the null-forgiving operator (!) correctly, and explain why it adds no runtime safety",
+                "Chain ?., ??, and ??= together correctly, and describe how NRT interacts with constructors and required members",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    **`Nullable<T>` / `T?` for value types** wraps a value type (`int`, `DateTime`, `bool`, ...) with an extra `bool` flag, giving it a third state beyond its normal range: "no value." `int? age = null;` is really `Nullable<int>`, exposing `HasValue` (true/false) and `Value` (throws `InvalidOperationException` if `HasValue` is false). Reading `.Value` without checking `HasValue` first is the value-type equivalent of a null reference exception.
+
+                    **Boxing behavior**: boxing a `Nullable<T>` doesn't box a `Nullable<T>` wrapper at all — the CLR special-cases it. If `HasValue` is `false`, boxing produces a plain `null` reference; if `HasValue` is `true`, boxing produces a boxed `T` (the underlying value, unwrapped), not a boxed `Nullable<T>`. `object o = (int?)null;` gives you a real `null`, and `o is int` is `false` for it — but for `object o2 = (int?)5;`, `o2 is int` is `true`.
+
+                    **Nullable reference types (NRT)** are a *compile-time-only* annotation and warning system introduced in C# 8 — enabled per-file with `#nullable enable` or project-wide via `<Nullable>enable</Nullable>` in the `.csproj`. Under NRT, `string` means "the compiler expects this to never be null, warn me if I don't check," while `string?` means "this may legitimately be null, and you must check before dereferencing." Critically: **NRT changes nothing at runtime.** No IL is emitted to enforce it, no exception is thrown because of it — it is purely a flow-analysis layer the compiler uses to emit warnings. A `string` field really can still be `null` at runtime — via reflection, deserialization, `default(string)`, or code compiled without NRT enabled — and dereferencing it still throws the exact same `NullReferenceException` it always did.
+
+                    **The null-forgiving operator `!`** tells the compiler "trust me, this isn't null here," suppressing the warning without adding any runtime check: `person!.Name` compiles as plain `person.Name` — if `person` actually is null at runtime, you still get a `NullReferenceException`, `!` just silenced the compile-time warning about it.
+
+                    **NRT and constructors/required members**: the compiler warns if a non-nullable reference property isn't definitely assigned by the end of every constructor. `required` (C# 11) lets you mark a member as mandatory without forcing a specific constructor shape — callers must set it via object initializer syntax (`new Person { Name = "Ann" }`), and the compiler enforces that at every construction site, which pairs naturally with non-nullable reference properties that must never be left null.
+
+                    **Null-conditional and null-coalescing operators**: `?.` short-circuits to `null` instead of throwing if the left side is `null` (`customer?.Address?.City`); `??` supplies a fallback value when the left side is `null` (`name ?? "Unknown"`); `??=` assigns only if the variable is currently `null` (`cache ??= ComputeExpensiveDefault();`). They compose: `customer?.Address?.City ?? "Unknown"` reads as "the city if we can safely reach it, otherwise a default."
+                    """, 1),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    `Nullable<T>` is like a form field with an explicit "N/A" checkbox next to a numeric box — the box itself still only ever holds a real number, but the checkbox lets the whole thing represent "not applicable" without needing a fake sentinel number like -1.
+
+                    Nullable reference types are like a building inspector who reviews blueprints before construction and flags "you didn't add a railing here" — the inspector's markup never stops anyone from actually building it wrong; it's a warning on paper, not a physical barrier. The null-forgiving operator `!` is telling the inspector "I've got this, skip the flag here" — the building still gets built exactly the same either way, railing or not.
+
+                    `?.`/`??`/`??=` together read like a chain of "if this exists, keep going; if not, stop here and use the default" — the same instinct as checking each drawer only if the one above it wasn't empty, and reaching for a spare key from the front desk if the whole chain comes up empty.
+                    """, 2),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Nullable value types (`Nullable<T>` / `T?`)**
+
+                    - `int? x = null;` — `x.HasValue` is `false`, `x.Value` throws if accessed
+                    - `x ?? 0` — safely unwrap with a fallback
+                    - `x is int value` — pattern match to safely extract and use in one step
+                    - Boxing: `HasValue == false` -> boxes to `null`; `HasValue == true` -> boxes to plain boxed `T`
+
+                    **Nullable reference types (NRT)**
+
+                    - `#nullable enable` (file) or `<Nullable>enable</Nullable>` (csproj) turns it on
+                    - `string` — "should never be null," warns if assigned/returned null without a check
+                    - `string?` — "may be null," compiler tracks whether you've null-checked before use
+                    - Compile-time only — zero runtime behavior change, zero IL emitted for it
+                    - `!` (null-forgiving) — suppresses the warning, adds no runtime check
+                    - `required` (C# 11) — compiler enforces the member is set at every construction site
+
+                    **Operators**
+
+                    - `?.` — null-conditional; short-circuits to `null` instead of throwing
+                    - `??` — null-coalescing; supplies a fallback when the left side is `null`
+                    - `??=` — null-coalescing assignment; assigns only if currently `null`
+                    """, 3),
+                Block(BlockType.CodeSnippet, "Nullable Value Types, NRT, and the Operators Together", BodyFormat.PlainText, """
+                    #nullable enable
+
+                    public class Person
+                    {
+                        public required string Name { get; init; }   // must be set at every construction site
+                        public string? MiddleName { get; init; }      // explicitly allowed to be null
+                        public int? Age { get; init; }                 // Nullable<int>: HasValue / Value
+                    }
+
+                    var p = new Person { Name = "Ann", Age = 30 };    // compiler enforces Name is provided
+
+                    // Nullable<T>: safe patterns for reading a possibly-absent value
+                    int ageOrDefault = p.Age ?? 0;
+                    if (p.Age is int actualAge)
+                    {
+                        Console.WriteLine($"Age is {actualAge}");
+                    }
+
+                    // Boxing behavior: HasValue false boxes to null; HasValue true boxes the raw T
+                    object? boxedMissing = (int?)null;   // boxedMissing is really null
+                    object boxedPresent = (int?)5;        // boxedPresent is a boxed int, not a boxed int?
+                    Console.WriteLine(boxedPresent is int); // True
+
+                    // Null-conditional + null-coalescing chained together
+                    string city = p.MiddleName?.ToUpperInvariant() ?? "N/A";
+
+                    // Null-forgiving operator: suppresses the warning, adds NO runtime check
+                    string? maybeNull = GetNameOrNull();
+                    string definitelyNotNull = maybeNull!;  // still throws NRE at runtime if maybeNull really is null
+
+                    // Null-coalescing assignment: compute once, cache thereafter
+                    Person? _cached = null;
+                    Person GetCached() => _cached ??= new Person { Name = "Default" };
+
+                    string? GetNameOrNull() => null;
+                    """, 4, language: "csharp"),
+                Block(BlockType.Diagram, "NRT: Compile-Time Warnings, Not a Runtime Feature", BodyFormat.AsciiArt, """
+                       Source code (#nullable enable)
+                                |
+                                v
+                       Roslyn flow analysis
+                       tracks "possibly null" state
+                       per variable, per branch
+                                |
+                                v
+                       string? name = maybeGetName();
+                       name.Length            <-- WARNING here (name might be null)
+                       name!.Length           <-- warning suppressed, still compiles to name.Length
+                                |
+                                v
+                       Compiled IL / runtime
+                       -------------------------------
+                       NO nullability checks exist here.
+                       If name is actually null at runtime,
+                       name.Length (or name!.Length) throws
+                       the exact same NullReferenceException
+                       it always would have.
+                    """, 5),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Enable nullable reference types project-wide (`<Nullable>enable</Nullable>`) on new projects from day one — retrofitting NRT onto a large existing codebase later means wading through hundreds of warnings at once, while enabling it early keeps the compiler catching missed null checks as you write each new file.
+
+                    Prefer `?.`/`??` over an explicit `if (x != null)` when the whole point is "use this value or fall back" — `customer?.Address?.City ?? "Unknown"` says the same thing as a three-line null check in one readable line. Reserve `!` for the rare case where you, a human, know something the compiler's flow analysis can't see — and treat every `!` in a code review as a claim that deserves scrutiny, not a shortcut to wave through.
+                    """, 6),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    A frequent trap question: "If a variable is typed `string` (non-nullable) under NRT, can it still be null at runtime?" The correct answer is yes — NRT is purely a compile-time warning system with zero runtime enforcement, so null can still arrive via deserialization, reflection, an older non-NRT assembly, or `default(string)`. Naming that gap is what shows you understand NRT is a linting layer, not a language guarantee like non-nullable types in languages such as Kotlin or Swift that actually enforce it at runtime.
+                    """, 7),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Treating `!` (null-forgiving) as if it were a null check — it isn't. `value!.ToString()` compiles cleanly but throws a `NullReferenceException` at runtime exactly as before if `value` really is `null`; `!` only silences the compiler's warning, it inserts no guard.
+
+                    Also common: calling `.Value` on a `Nullable<T>` without checking `HasValue` first (or using `??`/pattern matching instead), which throws `InvalidOperationException` — the value-type sibling of dereferencing a null reference. And chaining `??=` onto a property with a side-effecting setter, accidentally re-triggering those side effects every time the "assign if null" check runs.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "Under `#nullable enable`, a method's return type is `string` (not `string?`), but it actually returns null at runtime via `default!`. What happens when the caller dereferences the result?",
+                    "NRT only affects compile-time flow analysis and warnings — it never inserts a runtime null check. Dereferencing the null value throws a NullReferenceException exactly as it would without NRT enabled at all.",
+                    [
+                        new QuizOptionSeed("The compiler prevents this from ever compiling", false),
+                        new QuizOptionSeed("A NullReferenceException is thrown at the point of dereference, exactly as it would without NRT", true),
+                        new QuizOptionSeed("NRT inserts a runtime null check that throws before the caller receives the value", false),
+                        new QuizOptionSeed("Nothing happens, because the compiler treats string as guaranteed non-null at runtime", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "What does `object o = (int?)null;` actually produce at runtime?",
+                    "The CLR special-cases boxing a Nullable<T>: when HasValue is false, boxing produces a real null reference rather than some 'boxed Nullable with HasValue false' object. When HasValue is true, boxing instead produces a plain boxed T.",
+                    [
+                        new QuizOptionSeed("A boxed Nullable<int> object with HasValue set to false", false),
+                        new QuizOptionSeed("A real null reference", true),
+                        new QuizOptionSeed("A boxed int with value 0", false),
+                        new QuizOptionSeed("A compile-time error, since int? cannot be boxed", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Nullable value types (C# reference)", "https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/builtin-types/nullable-value-types", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("Nullable reference types", "https://learn.microsoft.com/en-us/dotnet/csharp/nullable-references", LinkType.OfficialDocs),
+            ],
+            prerequisites: [lesson1]);
+
+        var lesson2Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson2.Slug,
+        [
+            "Enable #nullable enable (or project-wide Nullable) in a small file/project and fix the resulting warnings one by one",
+            "Write a HasValue/Value check (or ?? fallback) for an int? before using its value, and observe the InvalidOperationException if you skip it",
+            "Chain ?./?? in your own code to replace an explicit null check, and explain out loud why ! doesn't add any runtime safety",
+        ]);
+
+        var module = BuildModule(topicId, "csharp-records-and-pattern-matching", "Records, Pattern Matching & Nullable Types",
+            "Value-based equality with records, advanced pattern matching beyond basic switch expressions, and the difference between compile-time nullable reference types and runtime Nullable<T>.",
+            75, [lesson1, lesson2], sortOrder: 5);
+
+        return (module, [lesson1Checklist, lesson2Checklist]);
+    }
+    private static (Module, List<ChecklistSeed>) BuildCSharpConcurrencyAndMultithreadingModule(int topicId)
+    {
+        var lesson1 = BuildLesson(
+            slug: "multithreading-fundamentals-thread-lock-monitor",
+            title: "Multithreading Fundamentals: Thread, lock & Monitor",
+            summary: "The Thread class, why race conditions happen on shared state, what the lock statement actually compiles to, and how deadlocks form.",
+            estimatedMinutes: 40,
+            objectives:
+            [
+                "Decide when to use the Thread class directly versus Task.Run for CPU-bound work",
+                "Explain why a race condition occurs on a shared read-modify-write operation like counter++",
+                "State what the lock statement compiles down to (Monitor.Enter/Monitor.Exit inside a try/finally) and why that guarantees release",
+                "Recognize the conditions that create a deadlock and fix two lock acquisitions to use a consistent order",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    This lesson is about **CPU-bound, thread-level concurrency** — genuinely running code in parallel across multiple CPU cores — which is a different concern from the `async`/`await` I/O concurrency covered earlier in this path. `async`/`await` is about *not blocking a thread* while waiting on I/O; multithreading is about *using more than one thread at once* to get CPU work done faster or to run independent work in parallel.
+
+                    The `Thread` class wraps a real operating-system thread. Creating one (`new Thread(...)`) and starting it (`.Start()`) is relatively expensive (OS-level allocation, its own stack) compared to queuing work onto the thread pool with `Task.Run(...)`. In practice you reach for `Thread` directly only when you need low-level control the thread pool doesn't give you — a dedicated long-running background thread, control over thread priority or name for diagnostics, or a specific apartment state (`STA`) for legacy COM interop. For ordinary CPU-bound parallel work, `Task.Run(...)` (backed by the thread pool) is almost always the right default.
+
+                    A **race condition** happens when multiple threads access shared mutable state and the outcome depends on timing. The classic example is `counter++`: it looks like one operation, but it's really three — read the current value, add one, write the new value back. If two threads both read the same value before either writes, one increment is silently lost. Nothing about the CLR makes `++` atomic by default.
+
+                    The `lock` statement is the standard way to protect a **critical section** (a block of code that must not run concurrently on more than one thread). `lock (obj) { body }` is compiler sugar — it expands to roughly `Monitor.Enter(obj)` before the body and `Monitor.Exit(obj)` in a `finally` block after it, guaranteeing the lock is released even if the body throws. Only one thread at a time can hold the monitor associated with `obj`; every other thread calling `Monitor.Enter` on the same object blocks until it's released.
+
+                    A **deadlock** occurs when two (or more) threads each hold a lock the other needs and neither can proceed — most commonly caused by acquiring the same two locks in opposite order on different threads. Thread-safety is a property of *how code coordinates access to shared state*, not something `lock` grants automatically just by being present somewhere in the codebase — a single unprotected read or write anywhere still breaks the guarantee.
+                    """, 1),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    A race condition is like two people reading the same whiteboard counter at the exact same instant, both seeing "5", both writing "6" — the count should be 7, but one increment vanished because neither person saw the other's update before writing.
+
+                    `lock` is a single bathroom key hanging on a hook: whoever takes the key can use the bathroom; everyone else waits in line at the hook until it's hung back up — and the `finally` behind `Monitor.Exit` is like a spring on the hook that hangs the key back up automatically even if the person inside trips and falls.
+
+                    A deadlock is two delivery trucks meeting head-on on a one-lane bridge, each having already committed to and blocked half the bridge behind them — neither can back up, and neither can get through, so both sit there forever.
+                    """, 2),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Thread basics**
+
+                    - `var t = new Thread(() => DoWork());` — creates a real OS thread, not started yet
+                    - `t.IsBackground = true;` — background threads don't keep the process alive on their own
+                    - `t.Start();` / `t.Join();` — start it, then block the caller until it finishes
+                    - `Thread.CurrentThread.Name` — useful for logging/diagnostics
+
+                    **lock / Monitor**
+
+                    - `lock (obj) { ... }` — sugar for `Monitor.Enter(obj)` + `try { ... } finally { Monitor.Exit(obj); }`
+                    - `Monitor.TryEnter(obj, timeout)` — attempt to acquire without blocking forever
+                    - Lock on a private, dedicated `readonly object`, never on `this`, a public field, or a boxed value type
+
+                    **Deadlock's four ingredients** (all four must hold)
+
+                    - Mutual exclusion — a resource can only be held by one thread at a time
+                    - Hold-and-wait — a thread holds one lock while waiting for another
+                    - No preemption — a lock can't be forcibly taken away from its owner
+                    - Circular wait — thread A waits on a lock thread B holds, and vice versa
+                    """, 3),
+                Block(BlockType.CodeSnippet, "Race Condition, the lock Fix, and a Deadlock", BodyFormat.PlainText, """
+                    public class Counter
+                    {
+                        private int _count;
+                        private readonly object _lock = new();
+
+                        // BROKEN: counter++ is read-modify-write (read _count, add 1, write back).
+                        // Two threads can both read the same value before either writes,
+                        // silently losing an increment. This is a classic race condition.
+                        public void UnsafeIncrement() => _count++;
+
+                        // FIXED: only one thread at a time can execute the critical section,
+                        // so the read-modify-write can no longer be interleaved.
+                        public void SafeIncrement()
+                        {
+                            lock (_lock)
+                            {
+                                _count++;
+                            }
+                        }
+
+                        public int Count => _count;
+                    }
+
+                    // Demonstrating the race: run this and Count is almost never 2,000,000.
+                    var counter = new Counter();
+                    var threads = new List<Thread>();
+                    for (int i = 0; i < 4; i++)
+                    {
+                        var t = new Thread(() =>
+                        {
+                            for (int j = 0; j < 500_000; j++)
+                                counter.UnsafeIncrement(); // swap for SafeIncrement() to fix it
+                        });
+                        threads.Add(t);
+                        t.Start();
+                    }
+                    foreach (var t in threads) t.Join();
+                    Console.WriteLine(counter.Count); // rarely 2,000,000
+
+                    // --- Deadlock: the same two locks acquired in opposite order ---
+                    object lockA = new();
+                    object lockB = new();
+
+                    void TransferOneWay()
+                    {
+                        lock (lockA)
+                        {
+                            Thread.Sleep(50); // gives the other thread time to grab lockB
+                            lock (lockB)
+                            {
+                                /* ... */
+                            }
+                        }
+                    }
+
+                    void TransferOtherWay()
+                    {
+                        lock (lockB)
+                        {
+                            Thread.Sleep(50);
+                            lock (lockA) // waits forever for a lock TransferOneWay is holding,
+                            {            // while TransferOneWay waits forever for lockB -> deadlock
+                                /* ... */
+                            }
+                        }
+                    }
+                    """, 4, language: "csharp"),
+                Block(BlockType.Diagram, "What lock(obj) { ... } Actually Compiles To", BodyFormat.StructuredSteps, """
+                    [{"label":"lock (obj) { body }","note":"the source you write"},{"label":"Monitor.Enter(obj)","note":"blocks the calling thread until it owns obj's monitor"},{"label":"try { body }","note":"the protected critical section runs"},{"label":"finally { Monitor.Exit(obj); }","note":"releases the monitor even if body throws, so the lock is never stuck held"}]
+                    """, 5),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Always acquire multiple locks in the same global order everywhere in the codebase (e.g., always `lockA` before `lockB`) — this alone eliminates the circular-wait condition that causes deadlocks. Keep critical sections as short as possible: do the minimum work needed under the lock, and never call unknown/external code (events, virtual methods) while holding one.
+
+                    Lock on a dedicated `private readonly object _lock = new();`, never on `this`, a public field, or `typeof(SomeType)` — those are visible to external code, which could take the same lock for an unrelated reason and create contention or deadlocks you can't control from inside your class. Default to `Task.Run` for CPU-bound parallel work; reach for `Thread` only when you specifically need OS-thread-level control.
+                    """, 6),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    Be ready to define a race condition with a concrete example (`counter++` across threads) and explain, precisely, why it's non-atomic — interviewers want to hear "read, modify, write" as three separate steps, not just "it's not thread-safe." A very common follow-up is "what does `lock` actually do?" — answer with `Monitor.Enter`/`Monitor.Exit` and the `try`/`finally`, not just "it makes it thread-safe."
+
+                    Also expect a deadlock scenario (two locks, opposite order, across two threads) and be able to name the fix (consistent lock ordering) without hesitating. If asked "is this class thread-safe?", resist answering based on whether `lock` appears anywhere — check whether *every* access path to the shared state, including reads, goes through the same synchronization.
+                    """, 7),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Locking on `this`, a public field, or a boxed value type: any external code holding a reference to that same object can take the same lock for an entirely unrelated reason, causing surprise contention or deadlocks you have no control over. Use a private, dedicated lock object instead.
+
+                    A more subtle mistake: protecting *some* accesses to a shared field with `lock` but leaving one read or write path unprotected (e.g., a fast-path check before the lock, or a debug/logging read) — thread-safety requires *every* access to go through the same synchronization; a single unguarded path reintroduces the race condition the rest of the locking was supposed to prevent.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "Why does incrementing a shared `int` field with `counter++` from multiple threads produce a race condition?",
+                    "counter++ is not a single atomic operation — it's read the current value, add one, and write the result back. Two threads can both read the same value before either writes, so one thread's increment gets silently overwritten by the other's.",
+                    [
+                        new QuizOptionSeed("The CLR only allows one thread to run at a time, so this can't actually happen", false),
+                        new QuizOptionSeed("counter++ is really a read-modify-write of three separate steps, which can interleave across threads", true),
+                        new QuizOptionSeed("int fields are reference types, so both threads share the same memory safely", false),
+                        new QuizOptionSeed("It only becomes a problem if the field is declared static", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "What does the C# compiler expand `lock (obj) { DoWork(); }` into?",
+                    "lock is syntactic sugar for Monitor.Enter(obj) followed by the body inside a try block, with Monitor.Exit(obj) in a finally block — guaranteeing the monitor is released even if DoWork() throws an exception.",
+                    [
+                        new QuizOptionSeed("A call to Thread.Sleep before and after the body", false),
+                        new QuizOptionSeed("Monitor.Enter(obj), then the body in a try, with Monitor.Exit(obj) in a finally", true),
+                        new QuizOptionSeed("A new Task.Run wrapping the body to run it on the thread pool", false),
+                        new QuizOptionSeed("A CancellationTokenSource guarding the body with a timeout", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Thread Class", "https://learn.microsoft.com/en-us/dotnet/api/system.threading.thread", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("lock statement (C# reference)", "https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/statements/lock", LinkType.OfficialDocs),
+            ]);
+
+        var lesson1Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson1.Slug,
+        [
+            "Write a small program that reproduces a race condition on a shared counter across four threads, then fix it with lock",
+            "Find one place in your own code (or a past project) where a lock is taken on `this` or a public field, and change it to a private lock object",
+            "Explain out loud, using the two-locks-opposite-order example, exactly why a deadlock happens and how consistent lock ordering fixes it",
+        ]);
+
+        var lesson2 = BuildLesson(
+            slug: "concurrent-collections-thread-safety-patterns",
+            title: "Concurrent Collections & Thread-Safety Patterns",
+            summary: "Why List<T> and Dictionary<TKey,TValue> break under concurrent access, the System.Collections.Concurrent types, Interlocked, and sharing state via immutable snapshots.",
+            estimatedMinutes: 40,
+            objectives:
+            [
+                "Explain why List<T> and Dictionary<TKey,TValue> can be corrupted by unsynchronized concurrent access, not merely produce a wrong value",
+                "Choose the right System.Collections.Concurrent type — ConcurrentDictionary, ConcurrentQueue, or BlockingCollection — for a given scenario",
+                "Use Interlocked for atomic updates to a single field without taking a full lock",
+                "Apply the immutable-snapshot-swap pattern to share state across threads without locking at all",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    Standard collections like `List<T>` and `Dictionary<TKey,TValue>` have **no internal synchronization** — they're optimized for the common single-threaded case. When one thread's write (say, a `Dictionary` resizing its internal bucket array while rehashing entries) overlaps with another thread's read or write, the result isn't just "you might read a stale value" — the internal data structure itself can be left in a corrupted, inconsistent state. In practice this shows up as `InvalidOperationException`, lost or duplicated entries, or an enumerator throwing "Collection was modified" — not a clean, predictable failure.
+
+                    The **`System.Collections.Concurrent`** namespace provides collections purpose-built for concurrent access, each with a different internal strategy: `ConcurrentDictionary<TKey,TValue>` uses fine-grained internal locking (locking only the affected bucket, not the whole table) plus lock-free reads; `ConcurrentQueue<T>` is largely lock-free, using atomic compare-and-swap operations on its internal linked segments; `BlockingCollection<T>` wraps a producer/consumer collection (a `ConcurrentQueue<T>` by default) and adds blocking, optionally-bounded `Add`/`Take` semantics for classic producer/consumer pipelines with backpressure.
+
+                    For the narrow case of a single shared counter, a full `lock` is overkill: **`Interlocked`** performs operations like `Increment`, `Decrement`, `Add`, and `CompareExchange` as a single atomic CPU instruction — no blocking, no kernel transition, far cheaper than acquiring a monitor for one field.
+
+                    A different strategy altogether is the **immutable-data-sharing pattern**: instead of mutating shared state in place (which is what requires locking), build a brand-new immutable object representing the updated state and atomically swap a reference to it (`Interlocked.Exchange`, or a `volatile`/`Volatile.Read` reference). Readers only ever see a fully-formed snapshot — never a half-updated one — and never need to take a lock at all, because there's nothing shared to mutate.
+                    """, 1),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    A plain `Dictionary` under concurrent writes is like two clerks scribbling in the same paper ledger at the same time without talking to each other — pages can get torn, entries overwritten mid-sentence, or the binding itself can come apart, not just one entry being wrong.
+
+                    `ConcurrentDictionary` is a bank with a wall of numbered teller windows: many customers can be served at once because each window (bucket) has its own short line, instead of the whole bank needing one single line for every transaction.
+
+                    The immutable-snapshot pattern is like a newsroom that never edits yesterday's printed newspaper — instead it prints a brand-new edition and puts it on the stand, swapping which paper is "today's" atomically. Readers grabbing a paper off the stand always get one complete, coherent edition, never a page half-updated mid-print.
+                    """, 2),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **System.Collections.Concurrent, at a glance**
+
+                    - `ConcurrentDictionary<TKey,TValue>` — `GetOrAdd`, `AddOrUpdate` give you atomic compound operations a plain Dictionary can't
+                    - `ConcurrentQueue<T>` — largely lock-free FIFO queue; `TryDequeue` instead of an indexer
+                    - `ConcurrentBag<T>` — unordered bag, optimized for same-thread produce-then-consume
+                    - `BlockingCollection<T>` — wraps a producer/consumer collection with blocking, boundable `Add`/`Take`
+
+                    **Interlocked essentials**
+
+                    - `Interlocked.Increment(ref field)` / `Decrement(ref field)` — atomic +1 / -1
+                    - `Interlocked.Add(ref field, value)` — atomic add of an arbitrary amount
+                    - `Interlocked.CompareExchange(ref field, newValue, comparand)` — atomic "if it's still X, set it to Y"
+                    - `Interlocked.Exchange(ref field, newValue)` — atomic unconditional swap, used to publish a new snapshot
+
+                    **Escalating strategies for shared state**
+
+                    - One field, simple update -> `Interlocked`
+                    - Shared collection -> a `Concurrent*` type
+                    - Multi-step invariant across several fields -> `lock`
+                    - Whole object replaced wholesale -> immutable snapshot + `Interlocked.Exchange`
+                    """, 3),
+                Block(BlockType.CodeSnippet, "From a Corrupted Dictionary to Concurrent-Safe Patterns", BodyFormat.PlainText, """
+                    // BROKEN: Dictionary<TKey,TValue> has no internal synchronization.
+                    // Concurrent writes from multiple threads can corrupt its internal
+                    // bucket array -- you may see InvalidOperationException, lost
+                    // entries, or a "Collection was modified" enumeration failure.
+                    var unsafeCounts = new Dictionary<string, int>();
+
+                    void UnsafeRecordHit(string key)
+                    {
+                        if (unsafeCounts.TryGetValue(key, out var count))
+                            unsafeCounts[key] = count + 1;
+                        else
+                            unsafeCounts[key] = 1;
+                        // Two threads can both miss the key, both write 1, and one hit is lost --
+                        // or, under real concurrent load, this can throw entirely.
+                    }
+
+                    // FIXED: ConcurrentDictionary gives you atomic compound operations.
+                    var safeCounts = new ConcurrentDictionary<string, int>();
+
+                    void SafeRecordHit(string key) =>
+                        safeCounts.AddOrUpdate(key, addValue: 1, updateValueFactory: (_, existing) => existing + 1);
+
+                    public class RequestStats
+                    {
+                        private int _requestCount;
+
+                        // A simple shared counter doesn't need a lock or a concurrent
+                        // collection at all -- Interlocked performs the update as a
+                        // single atomic CPU instruction.
+                        public void RecordRequest() => Interlocked.Increment(ref _requestCount);
+
+                        public int RequestCount => Volatile.Read(ref _requestCount);
+                    }
+
+                    // Producer/consumer handoff with backpressure:
+                    var workQueue = new BlockingCollection<string>(boundedCapacity: 100);
+                    // Producer(s): workQueue.Add(item);        // blocks if the queue is full
+                    // Consumer(s): workQueue.Take();           // blocks until an item is available
+                    //              workQueue.CompleteAdding();  // signals consumers no more items are coming
+
+                    // IMMUTABLE-DATA PATTERN: build a new snapshot and atomically swap the
+                    // reference, instead of locking around an in-place mutation. Readers
+                    // never see a half-updated object and never need to take a lock.
+                    public sealed record PriceSnapshot(decimal UsdPrice, DateTime AsOfUtc);
+
+                    public sealed class PriceCache
+                    {
+                        private PriceSnapshot _current = new(0m, DateTime.MinValue);
+
+                        public PriceSnapshot Current => Volatile.Read(ref _current);
+
+                        public void Update(decimal newPrice) =>
+                            Interlocked.Exchange(ref _current, new PriceSnapshot(newPrice, DateTime.UtcNow));
+                    }
+                    """, 4, language: "csharp"),
+                Block(BlockType.Diagram, "Escalating Strategies for Shared Mutable State", BodyFormat.AsciiArt, """
+                    No protection            Interlocked          lock / Monitor         Concurrent* type        Immutable snapshot
+                    +-------------+       +-------------+       +----------------+     +------------------+    +--------------------+
+                    | counter++   |  -->  | Interlocked. |  -->  | lock (obj) {   | --> | ConcurrentDict-  | -> | build new object,  |
+                    | (data race) |       | Increment()  |       |   multi-step   |     | ionary /Queue /   |    | Interlocked.       |
+                    |             |       | -- one field |       |   invariant }  |     | BlockingCollection |    | Exchange reference |
+                    +-------------+       +-------------+       +----------------+     +------------------+    +--------------------+
+                        unsafe             atomic, cheap        full mutual exclusion   fine-grained/lock-free    nothing mutable is
+                                           for a single field     for compound ops        internal locking          ever shared at all
+                    """, 5),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Pick the least amount of synchronization that actually solves the problem: a single field that only ever increments or swaps atomically -> `Interlocked`; a shared collection accessed from multiple threads -> the matching `Concurrent*` type; several fields that must change together and stay consistent as a group -> a `lock` around the whole invariant; a value that's replaced wholesale rather than mutated piecemeal -> an immutable snapshot swapped with `Interlocked.Exchange`.
+
+                    Never reach for a full `lock` by default "just to be safe" around a single counter or a single collection — it's correct, but it's also the most expensive option and often obscures a simpler, more scalable fix that's already available in the framework.
+                    """, 6),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    A common question is "how would you make a shared counter thread-safe without a lock?" — the expected answer is `Interlocked.Increment`, along with *why* it's cheaper (a single atomic CPU instruction vs. acquiring a monitor). An equally common follow-up: "is `ConcurrentDictionary` enough to make a check-then-add sequence safe?" — the correct answer is that two separate calls (`ContainsKey` then `Add`) are still racy; you need the single atomic `GetOrAdd`/`AddOrUpdate` operation instead.
+
+                    Be ready to explain the immutable-snapshot pattern as a legitimate alternative to locking, not just an academic idea — it's exactly how many real caches and configuration-reload systems share state across threads with zero lock contention.
+                    """, 7),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Assuming a `Concurrent*` collection makes *every* sequence of operations on it atomic. Each individual method call (`TryGetValue`, `TryAdd`, `AddOrUpdate`) is atomic, but a `ContainsKey` check followed by a separate `Add` call is still two operations another thread can interleave between — use the combined `GetOrAdd`/`AddOrUpdate` overloads instead of hand-rolling check-then-act.
+
+                    Also common: using `Interlocked` on one field that's actually part of a larger multi-field invariant (e.g., atomically incrementing a count while a related total is updated separately, unguarded) — this protects the single field but not the relationship between the fields, which still needs a `lock` around both updates together. And enumerating a plain mutable collection (`foreach` over a `List<T>`) while another thread adds or removes from it, which throws `InvalidOperationException` rather than silently working.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "Why is a plain Dictionary<TKey,TValue> unsafe to write to from multiple threads at the same time?",
+                    "Dictionary<TKey,TValue> has no internal synchronization. Concurrent structural changes (like an internal resize/rehash) can corrupt its internal bucket array, which can manifest as exceptions or lost/duplicated entries -- not merely 'the wrong value being read.'",
+                    [
+                        new QuizOptionSeed("It throws a compile-time error if accessed from more than one thread", false),
+                        new QuizOptionSeed("Its internal structure has no synchronization, so concurrent writes can corrupt it, not just produce a stale read", true),
+                        new QuizOptionSeed("It automatically serializes writes internally, so only reads are ever at risk", false),
+                        new QuizOptionSeed("It's only unsafe if the keys are reference types", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "What is the main advantage of Interlocked.Increment over wrapping counter++ in a lock, for a single shared counter?",
+                    "Interlocked.Increment performs the update as a single atomic CPU instruction with no blocking and no kernel-level synchronization object, making it significantly cheaper than acquiring a full lock just to protect one field.",
+                    [
+                        new QuizOptionSeed("It is the only way to update an int field safely; lock cannot be used on an int", false),
+                        new QuizOptionSeed("It performs the increment as a single atomic instruction, avoiding the overhead of acquiring a full lock", true),
+                        new QuizOptionSeed("It automatically makes any surrounding multi-field logic thread-safe as well", false),
+                        new QuizOptionSeed("It queues the increment to run later on a background thread", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Thread-Safe Collections", "https://learn.microsoft.com/en-us/dotnet/standard/collections/thread-safe/", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("Interlocked Class", "https://learn.microsoft.com/en-us/dotnet/api/system.threading.interlocked", LinkType.OfficialDocs),
+            ],
+            prerequisites: [lesson1]);
+
+        var lesson2Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson2.Slug,
+        [
+            "Replace a plain Dictionary<TKey,TValue> shared across threads in a sample program with ConcurrentDictionary, using AddOrUpdate instead of check-then-act",
+            "Rewrite a lock-protected single counter to use Interlocked.Increment instead, and explain out loud why that's a fair trade for this specific case",
+            "Implement the immutable-snapshot-swap pattern for one piece of shared state (e.g., a cached config or price) using Interlocked.Exchange",
+        ]);
+
+        var module = BuildModule(topicId, "csharp-concurrency-and-multithreading", "Concurrency & Multithreading",
+            "CPU-bound, thread-level concurrency in C# -- the Thread class, race conditions, lock/Monitor, deadlocks, concurrent collections, Interlocked, and lock-free patterns -- distinct from Task-based async/await I/O concurrency.",
+            80, [lesson1, lesson2], sortOrder: 7);
+
+        return (module, [lesson1Checklist, lesson2Checklist]);
+    }
+    private static (Module, List<ChecklistSeed>) BuildCSharpReflectionAndAdvancedGenericsModule(int topicId)
+    {
+        var lesson1 = BuildLesson(
+            slug: "reflection-and-custom-attributes",
+            title: "Reflection & Custom Attributes",
+            summary: "Inspecting and invoking types at runtime via System.Type/Assembly, defining and reading custom attributes, and why frameworks cache reflection instead of repeating it.",
+            estimatedMinutes: 45,
+            objectives:
+            [
+                "Explain what reflection is and use System.Type/Assembly to inspect a type's members at runtime",
+                "Build a minimal DI container that resolves constructor dependencies via reflection",
+                "Define a custom attribute, apply it to a member, and read it back with GetCustomAttribute<T>()",
+                "Explain why reflection is comparatively slow, and how frameworks avoid paying that cost on every call",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    **Reflection** is the ability to inspect and invoke types, members, and metadata *at runtime*, instead of everything being nailed down at compile time. Every loaded type is represented at runtime by a `System.Type` object — get one via `typeof(SomeType)` (compile-time known type) or `instance.GetType()` (the object's actual runtime type, which matters when `instance` is held through a base class or interface reference).
+
+                    From a `Type`, you can walk its metadata: `GetProperties()`, `GetMethods()`, `GetFields()`, `GetConstructors()` return `PropertyInfo`/`MethodInfo`/`FieldInfo`/`ConstructorInfo` arrays describing members you never referenced by name in your own source code. `Activator.CreateInstance(type)` constructs an instance of a type known only as a `Type` object, and `MethodInfo.Invoke(instance, args)` calls a method that wasn't known at compile time either. An `Assembly` (`Assembly.GetExecutingAssembly()`, `Assembly.Load(...)`) is the next level up — it lets you enumerate *every* type in a loaded `.dll`, which is how plugin systems and test runners discover things they were never directly compiled against.
+
+                    This is exactly how a lot of infrastructure you already use works under the hood: a **DI container** (like the one built into ASP.NET Core) reflects over a class's constructor to figure out what dependencies to inject; a **serializer** (like `System.Text.Json`) reflects over an object's properties to decide what to read or write; a **test runner** (like xUnit) reflects over every loaded assembly looking for methods marked with a specific attribute, and invokes each one it finds.
+
+                    **Custom attributes** are how you attach declarative metadata to code that reflection can later read back. You define one by subclassing `System.Attribute`, apply it with `[YourAttribute(...)]` above a class/method/property, and read it at runtime with `member.GetCustomAttribute<YourAttribute>()` (or `GetCustomAttributes` for more than one). `[AttributeUsage(AttributeTargets.Method)]` on the attribute class itself restricts where it's legal to apply it, and lets the compiler catch misuse instead of failing silently at runtime.
+
+                    Reflection is powerful precisely because it defers a decision that's normally made at compile time (which method runs, which constructor is called) to runtime, driven by data (a `Type`, a string, an attribute) rather than by a hardcoded call site.
+                    """, 1),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Getting a `Type`**
+
+                    - `typeof(SomeType)` — compile-time known type
+                    - `instance.GetType()` — the object's actual runtime type
+                    - `Assembly.GetExecutingAssembly().GetTypes()` — every type in an assembly
+
+                    **Inspecting a `Type`**
+
+                    - `GetProperties()` / `GetMethods()` / `GetFields()` / `GetConstructors()` — arrays of *Info objects
+                    - `BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static` — control what's included (defaults return only public instance members)
+                    - `GetMethod("Name")` / `GetProperty("Name")` — look up one specific member by name
+
+                    **Invoking dynamically**
+
+                    - `Activator.CreateInstance(type, args)` — construct an instance from a `Type`
+                    - `methodInfo.Invoke(instance, args)` — call a method found via reflection
+                    - `propertyInfo.GetValue(instance)` / `SetValue(instance, value)` — read/write a property
+
+                    **Custom attributes**
+
+                    - Define: `public sealed class FooAttribute : Attribute { ... }`
+                    - Restrict: `[AttributeUsage(AttributeTargets.Method)]`
+                    - Apply: `[Foo(SomeProperty = "x")]`
+                    - Read: `member.GetCustomAttribute<FooAttribute>()`
+                    """, 2),
+                Block(BlockType.CodeSnippet, "A Custom Attribute, a Test Runner, and a Reflection-Based DI Container", BodyFormat.PlainText, """
+                    // 1) A custom attribute marking test methods (conceptually, xUnit's [Fact])
+                    [AttributeUsage(AttributeTargets.Method)]
+                    public sealed class FactAttribute : Attribute
+                    {
+                        public string? DisplayName { get; init; }
+                    }
+
+                    public class CalculatorTests
+                    {
+                        [Fact(DisplayName = "Adding two positives returns their sum")]
+                        public void Add_TwoPositives_ReturnsSum()
+                        {
+                            if (2 + 2 != 4) throw new Exception("math is broken");
+                        }
+                    }
+
+                    // 2) A tiny test runner that DISCOVERS [Fact] methods via reflection,
+                    //    then reads the attribute back and invokes each method dynamically.
+                    public static class TinyTestRunner
+                    {
+                        public static void RunAll(Type testClass)
+                        {
+                            var instance = Activator.CreateInstance(testClass);
+                            var factMethods = testClass
+                                .GetMethods(BindingFlags.Public | BindingFlags.Instance)
+                                .Where(m => m.GetCustomAttribute<FactAttribute>() is not null);
+
+                            foreach (var method in factMethods)
+                            {
+                                var fact = method.GetCustomAttribute<FactAttribute>()!;
+                                var name = fact.DisplayName ?? method.Name;
+                                try
+                                {
+                                    method.Invoke(instance, parameters: null);
+                                    Console.WriteLine($"PASS: {name}");
+                                }
+                                catch (TargetInvocationException ex)
+                                {
+                                    Console.WriteLine($"FAIL: {name} - {ex.InnerException?.Message}");
+                                }
+                            }
+                        }
+                    }
+
+                    // 3) A minimal DI container that resolves constructor dependencies via reflection,
+                    //    the same core trick ASP.NET Core's built-in container uses.
+                    public class TinyContainer
+                    {
+                        private readonly Dictionary<Type, Type> _registrations = new();
+
+                        public void Register<TService, TImplementation>() where TImplementation : TService =>
+                            _registrations[typeof(TService)] = typeof(TImplementation);
+
+                        public object Resolve(Type serviceType)
+                        {
+                            var implementationType = _registrations.TryGetValue(serviceType, out var t) ? t : serviceType;
+                            var constructor = implementationType.GetConstructors().Single();
+                            var parameters = constructor.GetParameters()
+                                .Select(p => Resolve(p.ParameterType))
+                                .ToArray();
+
+                            return Activator.CreateInstance(implementationType, parameters)!;
+                        }
+                    }
+                    """, 3, language: "csharp"),
+                Block(BlockType.Diagram, "Reflecting Over a Type at Runtime", BodyFormat.StructuredSteps, """
+                    [{"label":"object instance","note":"e.g. a CalculatorTests instance, or just a Type reference"},{"label":"instance.GetType() / typeof(T)","note":"returns a System.Type - the runtime's metadata handle for that type"},{"label":"type.GetMethods() / GetProperties() / GetConstructors()","note":"arrays of MethodInfo / PropertyInfo / ConstructorInfo describing members"},{"label":"memberInfo.GetCustomAttribute<T>()","note":"reads metadata that was attached at compile time via [Attribute]"},{"label":"methodInfo.Invoke(instance, args)","note":"executes the method dynamically - no compile-time call site required"}]
+                    """, 4),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Cache the results of expensive reflection lookups (`GetMethod`, `GetProperty`, `GetCustomAttribute`) in a `static readonly` field the first time you need them, instead of calling `GetType().GetMethod(...)` again on every request or every loop iteration — the metadata never changes after the assembly is loaded, so there's nothing to gain by re-looking it up.
+
+                    For genuinely hot paths, don't stop at caching the `MethodInfo` itself — compile it once into a delegate (an `Expression<Action<T>>` compiled via `.Compile()`, or a source generator that emits real C# at build time instead of reflecting at all) and cache *that*. This is exactly how modern high-performance libraries (`System.Text.Json`'s source-generated serializers, minimal API request binding) avoid reflection's per-call cost while keeping the same "figure it out from the type" ergonomics.
+                    """, 5),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    When asked "where have you seen reflection used?", name the mechanism, not just the framework: ASP.NET Core's DI container reflects over a constructor's `ParameterInfo[]` to decide what to inject; `System.Text.Json` reflects over `GetProperties()` to decide what to (de)serialize; xUnit/NUnit scan a test assembly's types for methods carrying `[Fact]`/`[Test]` and invoke each one via `MethodInfo.Invoke`. Naming the specific reflection call being made under the hood is what separates "I've heard of reflection" from "I understand how the tools I use every day are built."
+                    """, 6),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Calling reflection APIs (`GetType().GetProperty(...)`, `GetCustomAttribute<T>()`) fresh inside a hot loop or a per-request code path instead of caching the result once — each lookup walks metadata by name/string comparison, so doing it thousands of times a second adds real, measurable overhead that's easy to miss in a profiler until it's already in production.
+
+                    Also common: forgetting that `GetMethods()`/`GetProperties()` with no `BindingFlags` argument only returns **public instance** members — private, protected, or static members are silently absent unless you explicitly pass `BindingFlags.NonPublic` and/or `BindingFlags.Static`. And with custom attributes: forgetting `[AttributeUsage(Inherited = false)]` when it's needed — by default, most attributes *are* inherited by derived classes/overriding methods, which can surprise you when `GetCustomAttribute<T>()` returns an attribute you never applied directly.
+                    """, 7),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    Normal compiled code is like a furniture delivery crew working from an exact, pre-agreed floor plan — they know before they arrive precisely which box goes in which room, because someone decided that at design time.
+
+                    Reflection is like handing that crew an X-ray scanner and no floor plan: they show up at an unfamiliar building, scan each room to see what's already there, and figure out on the spot where things should go and which rooms need what. It's far more flexible — the same crew can now furnish *any* building without a custom plan for each one — but scanning every room every single time is a lot slower than working from a floor plan you memorized once. That's why an experienced crew scans the building once, writes down what they found, and works from *that* note on every subsequent visit instead of re-scanning from scratch.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "What does reflection let you do that ordinary compiled C# code cannot?",
+                    "Reflection lets code inspect and invoke types, members, and attributes whose identity isn't known until runtime (from a Type object, a string name, or an assembly scan), instead of every call site being fixed at compile time. It doesn't make C# dynamically typed, bypass the JIT, or auto-parallelize anything.",
+                    [
+                        new QuizOptionSeed("Inspect and invoke types/members that aren't known until runtime, driven by metadata rather than a hardcoded call site", true),
+                        new QuizOptionSeed("Make C# variables dynamically typed instead of statically typed", false),
+                        new QuizOptionSeed("Skip the JIT compiler and run IL directly as an interpreter", false),
+                        new QuizOptionSeed("Automatically parallelize any loop that touches reflected members", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "Why do frameworks typically cache reflection results (e.g., a MethodInfo or a compiled delegate) instead of reflecting fresh on every call?",
+                    "Metadata lookups like GetMethod/GetProperty/GetCustomAttribute involve searching type metadata (often by string name) every time they're called; since that metadata never changes after the assembly loads, doing the lookup once and reusing the result (or compiling it into a cached delegate) turns a repeated cost into a one-time cost.",
+                    [
+                        new QuizOptionSeed("Because repeated metadata lookups are relatively slow, and caching turns a per-call cost into a one-time cost", true),
+                        new QuizOptionSeed("Because a MethodInfo becomes invalid after it's used once", false),
+                        new QuizOptionSeed("Because Activator.CreateInstance physically requires a cache to function at all", false),
+                        new QuizOptionSeed("Because the C# compiler strips custom attributes from an assembly after first use", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Reflection in .NET", "https://learn.microsoft.com/en-us/dotnet/fundamentals/reflection/reflection", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("Writing custom attributes", "https://learn.microsoft.com/en-us/dotnet/standard/attributes/writing-custom-attributes", LinkType.OfficialDocs),
+            ]);
+
+        var lesson1Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson1.Slug,
+        [
+            "Write a method that uses GetType().GetProperties() to print every property name and value of an arbitrary object",
+            "Define a custom attribute, apply it to a method, and read it back at runtime with GetCustomAttribute<T>()",
+            "Name one place in a framework you use daily (ASP.NET Core DI, System.Text.Json, xUnit/NUnit) where reflection is doing the work under the hood",
+        ]);
+
+        var lesson2 = BuildLesson(
+            slug: "generics-variance-and-constraints",
+            title: "Generics Deep Dive: Variance & Constraints",
+            summary: "Covariance and contravariance in generic interfaces, why arrays are unsafely covariant, the full range of generic constraints, and generic method type inference.",
+            estimatedMinutes: 45,
+            objectives:
+            [
+                "Explain covariance (`out T`) and contravariance (`in T`) using IEnumerable<out T> and Action<in T>, and state why each is safe",
+                "Explain why arrays are covariant but unsafely so (ArrayTypeMismatchException at runtime), while generic interface variance is checked at compile time",
+                "Apply the full range of generic constraints (class, struct, new(), a base class, an interface, notnull, and combinations of these)",
+                "Explain how the compiler performs generic method type inference from argument types, without an explicit type argument",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    **Variance** describes whether a generic type parameter can be substituted with a more derived type (**covariance**, `out T`) or a less derived type (**contravariance**, `in T`) than the one it was originally declared with, while remaining safe to use.
+
+                    - **Covariance (`out T`)** — `IEnumerable<out T>` lets `IEnumerable<Derived>` be assigned to an `IEnumerable<Base>`-typed variable. This is safe because `T` only ever comes *out* of the type (e.g., `Current`, return values) — reading a `Derived` where a `Base` was expected can never go wrong.
+                    - **Contravariance (`in T`)** — `Action<in T>` lets `Action<Base>` be assigned to an `Action<Derived>`-typed variable. This is safe because `T` only ever goes *in* (a parameter) — code that already knows how to handle any `Base` can certainly handle the more specific `Derived` it's actually given.
+                    - The compiler only allows `out`/`in` on a type parameter if it can prove that parameter is used exclusively in output or input positions, respectively. `List<T>` has both `Add(T)` (input) and an indexer getter (output), so it's necessarily **invariant** — there is no safe way to make it variant, which is exactly why `IList<T>` and `List<T>` don't carry `out`/`in`.
+
+                    **Arrays are covariant too — but unsafely.** Arrays predate generics (C# 1.0), so the CLR made every reference-type array covariant unconditionally, with no compile-time safety check: `object[] items = new string[3];` compiles. But the array's *actual* runtime element type is still `string[]`, so `items[0] = 42;` compiles (an `int` boxes to `object` fine at the call site) yet throws `ArrayTypeMismatchException` at runtime, because the CLR checks the real element type on every array store. Generic interfaces don't have this hole: the equivalent mistake (`IList<object> objs = new List<string>();`) simply **does not compile**, because `IList<T>` is invariant — the unsafe assignment is rejected before the program ever runs.
+
+                    **Generic constraints** (`where T : ...`) restrict what a type argument can be, in exchange for the ability to call more members on it inside the generic code:
+
+                    - `where T : class` — reference types only
+                    - `where T : struct` — value types only (implies non-nullable)
+                    - `where T : new()` — must expose a public parameterless constructor (must appear last if combined with others)
+                    - `where T : SomeBaseClass` — must derive from a specific class
+                    - `where T : ISomeInterface` — must implement a specific interface
+                    - `where T : notnull` — excludes both `Nullable<T>` value types used as null and reference types annotated as nullable
+                    - Constraints combine on one clause: `where T : class, IComparable<T>, new()`
+
+                    **Generic method type inference** lets the compiler determine `T` from the types of the arguments passed, without an explicit type argument — calling `Clamp(15, 0, 10)` infers `T = int` purely from the call site, with no need to write `Clamp<int>(15, 0, 10)`.
+                    """, 1),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    Covariance is like being handed a crate labeled "apples" and being told you can treat it as a crate of "fruit" for the purpose of *taking things out* — every apple you pull out genuinely is a fruit, so that substitution can never surprise you.
+
+                    Contravariance is the mirror image: a chef who advertises "I can prepare any fruit" can obviously be handed a job that only ever needs "prepare an apple" — a worker capable of the general case can always cover the specific case.
+
+                    Arrays doing this *unsafely* is like a warehouse that lets you relabel an "apples" crate as a "fruit" crate and then also lets anyone standing at the fruit-labeled crate drop a rock in — the label says it's fine, nothing stops it at the moment you do it, and the mistake is only discovered the next time someone actually reaches in expecting an apple and gets hurt. Generic interfaces refuse to print that ambiguous label in the first place.
+                    """, 2),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Variance**
+
+                    - `out T` (covariant) — T in output positions only; `IEnumerable<Derived>` -> `IEnumerable<Base>` assignable
+                    - `in T` (contravariant) — T in input positions only; `Action<Base>` -> `Action<Derived>` assignable
+                    - no modifier (invariant) — T in both positions; e.g. `List<T>`, `IList<T>` — no variance either direction
+                    - Arrays: covariant unconditionally, but unchecked at compile time -> `ArrayTypeMismatchException` at runtime
+
+                    **Generic constraints**
+
+                    - `where T : class` — reference type
+                    - `where T : struct` — value type
+                    - `where T : new()` — public parameterless constructor (must be listed last)
+                    - `where T : BaseClass` — must derive from BaseClass
+                    - `where T : IInterface` — must implement IInterface
+                    - `where T : notnull` — excludes nullable value/reference types
+                    - Combined: `where T : class, IComparable<T>, new()`
+
+                    **Type inference**
+
+                    - `Clamp(15, 0, 10)` infers `T = int` from the arguments — no `Clamp<int>(...)` needed
+                    """, 3),
+                Block(BlockType.CodeSnippet, "Variance, Unsafe Array Covariance, and Combined Constraints", BodyFormat.PlainText, """
+                    // --- Covariance: IEnumerable<out T> lets a more derived T flow "out" safely ---
+                    IEnumerable<string> strings = new List<string> { "a", "b" };
+                    IEnumerable<object> objects = strings; // legal: T only appears in output positions
+
+                    // --- Contravariance: Action<in T> lets a less derived T be substituted "in" ---
+                    Action<object> logAnything = obj => Console.WriteLine(obj);
+                    Action<string> logString = logAnything; // legal: T only appears as an input parameter
+
+                    // --- Arrays are covariant too, but WITHOUT compile-time safety ---
+                    object[] items = new string[3];  // compiles: arrays are unconditionally covariant
+                    items[0] = 42;                    // compiles (int boxes to object)...
+                                                       // ...but throws ArrayTypeMismatchException at runtime,
+                                                       // because the real backing array is still string[].
+
+                    // The equivalent mistake with a generic interface is caught at COMPILE time instead:
+                    // IList<object> objs = new List<string>();  // does not compile - IList<T> is invariant
+
+                    public interface IReadOnlyBox<out T>   // out => covariant, T only in output positions
+                    {
+                        T Peek();
+                    }
+
+                    public interface IWriteOnlySink<in T>  // in => contravariant, T only in input positions
+                    {
+                        void Accept(T item);
+                    }
+
+                    // --- The full range of generic constraints, combined ---
+                    public class Cache<TKey, TValue>
+                        where TKey : notnull            // required for use as a Dictionary<TKey, _> key
+                        where TValue : class, new()     // reference type with a public parameterless constructor
+                    {
+                        private readonly Dictionary<TKey, TValue> _entries = new();
+
+                        public TValue GetOrCreate(TKey key)
+                        {
+                            if (!_entries.TryGetValue(key, out var value))
+                            {
+                                value = new TValue();
+                                _entries[key] = value;
+                            }
+                            return value;
+                        }
+                    }
+
+                    // A value type implementing an interface, constrained with two combined clauses
+                    public static T Clamp<T>(T value, T min, T max)
+                        where T : struct, IComparable<T>
+                    {
+                        if (value.CompareTo(min) < 0) return min;
+                        if (value.CompareTo(max) > 0) return max;
+                        return value;
+                    }
+
+                    // --- Generic method type inference: the compiler infers T from the arguments ---
+                    int clamped = Clamp(15, 0, 10); // T inferred as int -> clamped == 10, no Clamp<int>(...) needed
+                    """, 4, language: "csharp"),
+                Block(BlockType.Diagram, "Variance Direction: How T Is Allowed to Flow", BodyFormat.AsciiArt, """
+                    out T   (covariant)      IEnumerable<Derived>  --------->  IEnumerable<Base>
+                                             (assignable in this direction; T only ever comes OUT, e.g. Current)
+
+                    in T    (contravariant)  Action<Base>          --------->  Action<Derived>
+                                             (assignable in this direction; T only ever goes IN, e.g. Invoke(T))
+
+                    invariant (no in/out)   List<Derived>    --x-- not assignable either way --x--    List<Base>
+                                             (T appears in BOTH positions: Add(T) takes it in, this[int] gives it out)
+
+                    Arrays cheat this whole system: object[] arr = new string[3]; compiles
+                    regardless of position, and the mismatch only surfaces via
+                    ArrayTypeMismatchException the moment you actually write to it.
+                    """, 5),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    When designing your own generic interfaces, mark a type parameter `out` the moment every member exposes it only as a return value, and `in` the moment every member only ever accepts it as a parameter — this lets your callers substitute more/less derived types naturally, the same way `IEnumerable<T>` and `Action<T>`/`Comparer<T>` already do. Don't force variance onto an interface that genuinely needs both directions (like a mutable collection) — that's what invariance exists to protect.
+
+                    Order combined constraints deliberately: a `class`/`struct` constraint (if present) comes first, followed by any base class, then interfaces, with `new()` always last — `where T : SomeBase, ISomeInterface, new()` — this is also simply the order the compiler requires.
+                    """, 6),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    A classic interview question is "why is `IEnumerable<T>` covariant but `List<T>` isn't, even though `List<T>` implements `IEnumerable<T>`?" The precise answer: variance is a property of the *type parameter's usage in a given interface*, not of the underlying class. `List<T>` has `Add(T)`, an input position, so `List<T>` itself can never be safely variant — but when you use it *through* the `IEnumerable<T>` interface, only the output-only members of that narrower interface are exposed, so covariance is sound there. Being able to explain that variance is checked per-interface, not per-class, is what distinguishes real understanding from a memorized rule.
+                    """, 7),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Assuming `out`/`in` variance applies to *any* generic type — trying to assign `List<Derived>` to `List<Base>` doesn't compile, and reaching for a cast to force it (or worse, `as` combined with array covariance tricks) is how the exact `ArrayTypeMismatchException`-style bug shows up in a codebase, just relocated from arrays into a hand-rolled unsafe workaround.
+
+                    Also common: writing constraints in the wrong order (`where T : new(), IComparable<T>` fails to compile — `new()` must be last), and reaching for `where T : class` when what's actually meant is "never null," without realizing `notnull` is the constraint that actually expresses that for both reference *and* value types (including excluding `Nullable<T>` when relevant).
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "Why is IEnumerable<out T> covariant-safe, while List<T> could never be marked out T?",
+                    "List<T> exposes T in an input position too (Add(T item)) as well as an output position (the indexer getter). If List<Derived> could be treated as List<Base>, calling Add(baseInstance) through that reference would try to insert a Base into storage that's actually holding Derived, breaking type safety at runtime — so the compiler forbids marking a type parameter out unless it's used exclusively in output positions, which IEnumerable<T> (Current only) satisfies and List<T> does not.",
+                    [
+                        new QuizOptionSeed("List<T> uses T in an input position (Add(T)) as well as an output position, so marking it out would let unsafe writes compile", true),
+                        new QuizOptionSeed("IEnumerable<T> is a class while List<T> is an interface, and only interfaces support out", false),
+                        new QuizOptionSeed("List<T> does not support generics at all", false),
+                        new QuizOptionSeed("Covariance only applies to value types, and List<T> can hold value types", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "What happens when you run: object[] arr = new string[3]; arr[0] = 42;",
+                    "Arrays are unconditionally covariant in C# for historical reasons predating generics, so object[] arr = new string[3] compiles. But the array's actual runtime element type is still string[], and the CLR checks that on every array element store, so arr[0] = 42 throws ArrayTypeMismatchException at runtime. The equivalent mistake with a generic interface (IList<object> objs = new List<string>()) is rejected at compile time instead, because IList<T> is invariant.",
+                    [
+                        new QuizOptionSeed("It throws ArrayTypeMismatchException at runtime", true),
+                        new QuizOptionSeed("It compiles and runs fine, silently boxing the int into the string array", false),
+                        new QuizOptionSeed("The object[] arr = new string[3]; line itself fails to compile", false),
+                        new QuizOptionSeed("It throws InvalidCastException, caught at compile time", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Covariance and contravariance in generics", "https://learn.microsoft.com/en-us/dotnet/standard/generics/covariance-and-contravariance", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("Constraints on type parameters (C# reference)", "https://learn.microsoft.com/en-us/dotnet/csharp/programming-guide/generics/constraints-on-type-parameters", LinkType.OfficialDocs),
+            ],
+            prerequisites: [lesson1]);
+
+        var lesson2Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson2.Slug,
+        [
+            "Write your own covariant interface (out T) and contravariant interface (in T), and explain in one sentence why each is safe",
+            "Reproduce the array covariance failure (object[] arr = new string[3]; arr[0] = 42;) and read the resulting ArrayTypeMismatchException",
+            "Write a generic method with at least two combined constraints (e.g. where T : class, new()) and call it letting the compiler infer T",
+        ]);
+
+        var module = BuildModule(topicId, "csharp-reflection-and-advanced-generics", "Reflection & Advanced Generics",
+            "Runtime type inspection and custom attributes, plus a deep dive into generic variance (out/in) and the full range of type constraints, beyond the basic generics covered in Collections & Generics.",
+            90, [lesson1, lesson2], sortOrder: 8);
 
         return (module, [lesson1Checklist, lesson2Checklist]);
     }
