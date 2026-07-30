@@ -59,6 +59,8 @@ public static class CurriculumContentSeedData
             BuildSoftSkillsModule(topicIdBySlug["soft-skills"]),
             BuildLeadershipAndCareerGrowthModule(topicIdBySlug["soft-skills"]),
             BuildEstimationAndCollaborationModule(topicIdBySlug["soft-skills"]),
+            BuildAiIntegrationLlmAndSemanticKernelModule(topicIdBySlug["ai-integration"]),
+            BuildAiIntegrationVectorSearchAndRagModule(topicIdBySlug["ai-integration"]),
         };
 
         return (
@@ -15223,6 +15225,745 @@ public static class CurriculumContentSeedData
         var module = BuildModule(topicId, "estimation-and-collaboration", "Estimation & Cross-Team Collaboration",
             "Producing defensible estimates under ambiguity, and navigating stakeholders, blocking dependencies, and scope pushback across teams.",
             60, [lesson1, lesson2], sortOrder: 3);
+
+        return (module, [lesson1Checklist, lesson2Checklist]);
+    }
+
+    // ============================== AI Integration ==============================
+
+    private static (Module, List<ChecklistSeed>) BuildAiIntegrationLlmAndSemanticKernelModule(int topicId)
+    {
+        var lesson1 = BuildLesson(
+            slug: "calling-llms-from-dotnet-azure-openai-and-openai-sdk",
+            title: "Calling LLMs from .NET: Azure OpenAI & the OpenAI SDK",
+            summary: "The chat completions API and its system/user/assistant message roles, streaming responses with IAsyncEnumerable so a UI can render tokens as they arrive, embeddings as a vector representation of text, core prompt engineering principles, and why token count is a real cost and latency constraint.",
+            estimatedMinutes: 45,
+            objectives:
+            [
+                "Call the chat completions API with system/user/assistant messages and explain what temperature and max tokens each control",
+                "Explain why IAsyncEnumerable-based streaming lets a UI render tokens as they arrive instead of waiting for the full response",
+                "Explain what an embedding is and why semantically similar text produces vectors that are close together",
+                "Apply basic prompt engineering principles (specificity, giving the model a role, few-shot examples) and explain why token count directly drives cost and latency",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    Calling a large language model from .NET, whether against **Azure OpenAI** or OpenAI directly, is fundamentally an HTTP call to a **chat completions** endpoint, wrapped by an official SDK (`Azure.AI.OpenAI` / `OpenAI`) so you work with typed C# objects instead of raw JSON. The endpoint is **stateless**: it has no memory of any previous call. A conversation is represented as an ordered list of messages, each tagged with a **role**. `system` sets the model's behavior, persona, and constraints before the conversation starts — it's instructions to the model, not something an end user typed. `user` is the actual human or application input. `assistant` is the model's own prior reply, and it matters for multi-turn chat: because the API has no server-side memory, the caller must resend the entire running conversation (system + every prior user/assistant pair) on every single call for the model to have any notion of "earlier in this chat."
+
+                    Two parameters shape *how* the model generates from that message list. **Temperature** controls randomness in token selection: values near 0 make output close to deterministic and repeatable (ideal for classification, extraction, or anything where you want the same input to reliably produce the same output), while higher values (up to around 1-2 depending on the model) inject more variety, useful for brainstorming or creative copy but riskier for anything requiring precision. **Max tokens** is a hard ceiling on how long the generated response is allowed to be — it exists as a safety net against runaway generation, and, unlike almost every other parameter on a typical REST call, it directly bounds real dollars and real wall-clock time, because response length is exactly what you're paying for and waiting on.
+
+                    A normal call (`CompleteChatAsync`) blocks until the entire response has been generated server-side, then returns it all at once. **Streaming**, via `CompleteChatStreamingAsync`, returns an `IAsyncEnumerable<StreamingChatCompletionUpdate>` instead: the SDK yields each partial chunk of text the instant the model produces it, so a caller can `await foreach` over the stream and push tokens to a UI (a console, a SignalR hub, a Server-Sent-Events endpoint) as they arrive, rather than showing a frozen screen for however many seconds the full generation takes. Streaming doesn't reduce total tokens generated, total cost, or even necessarily total generation time — it changes *when* the user starts seeing output, which is what makes a chat UI feel responsive instead of stalled.
+
+                    **Embeddings** are a different kind of model call entirely: instead of generating text, an embedding model converts a piece of text into a fixed-length vector of floating-point numbers (e.g. 1536 of them for `text-embedding-3-small`) that represents that text's *meaning*. Two pieces of text with similar meaning produce vectors that sit close together in that vector space, measurable with cosine similarity or dot product — even if they don't share a single word in common. This is the mechanism behind semantic search and similarity ranking, and it's the exact building block the next lesson's retrieval-augmented-generation (RAG) content depends on: embed a knowledge base once, embed an incoming user query the same way, and find the nearest stored vectors instead of relying on exact keyword matches.
+
+                    Getting good output reliably is a skill in itself — **prompt engineering**. Being *specific* (stating the exact output format, length, and constraints you want, rather than a vague ask) removes ambiguity the model would otherwise fill in unpredictably. Giving the model a *role* via the system message ("You are a senior .NET code reviewer who only responds in bullet points") anchors its tone and priorities for the whole conversation. *Few-shot examples* — showing the model one or two example input/output pairs directly inside the prompt — steer format and style far more reliably than describing the format in prose, without any model retraining; a prompt with zero examples is "zero-shot," and one with a couple is "few-shot."
+
+                    Finally, none of this is free the way a typical internal API call is. Text is broken into **tokens** (roughly 4 characters of English per token, though it varies), and both Azure OpenAI and OpenAI price and rate-limit by token count — *every* token in the prompt (including that resent conversation history) plus every token generated in the response. That means cost grows with every turn of a stateless multi-turn conversation unless you deliberately truncate or summarize older history, and generation latency scales primarily with how many tokens the response contains, because tokens are produced one at a time, sequentially, not all at once. Treating an LLM call like a normal REST call that returns a fixed-size JSON payload for a fixed price is the single biggest mental model error engineers bring to this from prior API work.
+                    """, 1),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Message roles**
+
+                    - `system` — instructions/persona set before the conversation starts, not visible to the user as a "message"
+                    - `user` — the actual human/application input for this turn
+                    - `assistant` — the model's own prior reply; resent on every call because the API is stateless
+
+                    **Generation parameters**
+
+                    - `Temperature` — 0 = near-deterministic/repeatable, higher = more varied/creative
+                    - `MaxOutputTokenCount` — hard cap on response length; bounds both cost and latency
+
+                    **Streaming**
+
+                    - `CompleteChatAsync` — blocks until the full response is generated, then returns it all at once
+                    - `CompleteChatStreamingAsync` — returns `IAsyncEnumerable<StreamingChatCompletionUpdate>`, yielding partial text as it's generated
+                    - Doesn't reduce total tokens/cost — improves *perceived* latency by rendering tokens as they arrive
+
+                    **Embeddings**
+
+                    - Text in, fixed-length `float` vector out — represents meaning, not exact words
+                    - Similar meaning -> vectors close together (cosine similarity / dot product)
+                    - Foundation for semantic search and RAG (embed once, embed the query, find nearest vectors)
+
+                    **Prompt engineering**
+
+                    - Be specific about format/length/constraints instead of leaving them implicit
+                    - Give the model a role via the system message
+                    - Few-shot examples (input/output pairs in the prompt) steer format more reliably than prose
+
+                    **Cost/latency**
+
+                    - Priced per token, both prompt tokens (incl. resent history) and completion tokens
+                    - Latency scales mainly with completion token count — tokens are generated sequentially
+                    """, 2),
+                Block(BlockType.CodeSnippet, "Chat Completions, Streaming, and Embeddings with the Azure OpenAI SDK", BodyFormat.PlainText, """
+                    using Azure.AI.OpenAI;
+                    using Azure.Identity;
+                    using OpenAI.Chat;
+                    using OpenAI.Embeddings;
+
+                    // --- Setting up a client against Azure OpenAI ---
+                    AzureOpenAIClient azureClient = new(
+                        new Uri("https://my-resource.openai.azure.com/"),
+                        new DefaultAzureCredential());
+                    ChatClient chatClient = azureClient.GetChatClient("gpt-4o-deployment-name");
+
+                    // --- System / user / assistant roles + generation parameters ---
+                    List<ChatMessage> messages =
+                    [
+                        new SystemChatMessage("You are a terse senior .NET code reviewer. Answer in at most 3 sentences."),
+                        new UserChatMessage("Why might this LINQ query be allocating more than expected?"),
+                    ];
+
+                    ChatCompletionOptions options = new()
+                    {
+                        Temperature = 0.2f,          // low = more deterministic and repeatable
+                        MaxOutputTokenCount = 300,    // hard cap - protects both cost and latency
+                    };
+
+                    ChatCompletion completion = await chatClient.CompleteChatAsync(messages, options);
+                    Console.WriteLine(completion.Content[0].Text);
+
+                    // --- Streaming: render tokens as they arrive instead of waiting for the whole thing ---
+                    await foreach (StreamingChatCompletionUpdate update in
+                        chatClient.CompleteChatStreamingAsync(messages, options))
+                    {
+                        foreach (ChatMessageContentPart part in update.ContentUpdate)
+                            Console.Write(part.Text); // flush to the UI incrementally, e.g. via SignalR/SSE
+                    }
+
+                    // --- Embeddings: turn text into a fixed-length vector for similarity search ---
+                    EmbeddingClient embeddingClient = azureClient.GetEmbeddingClient("text-embedding-3-small-deployment-name");
+                    OpenAIEmbedding embedding = await embeddingClient.GenerateEmbeddingAsync(
+                        "Dependency injection in ASP.NET Core");
+                    ReadOnlyMemory<float> vector = embedding.ToFloats(); // e.g. 1536 floats - feeds the next lesson's RAG content
+                    """, 3, language: "csharp"),
+                Block(BlockType.Diagram, "Blocking vs. Streaming, and What Actually Drives Cost", BodyFormat.AsciiArt, """
+                    Non-streaming call (CompleteChatAsync):
+                      t=0s ---- model generating the whole answer, nothing rendered yet ---- t=4s
+                                                                                    -> [entire answer appears at once]
+
+                    Streaming call (CompleteChatStreamingAsync -> IAsyncEnumerable<StreamingChatCompletionUpdate>):
+                      t=0s [tok][tok][tok]---[tok][tok]---[tok][tok][tok][tok] ... t=4s
+                            ^ first tokens render almost immediately - the rest trickle in as the UI reads the stream
+
+                    Cost and latency scale with TOTAL tokens moved, in both directions:
+                      cost  ~ (prompt_tokens + completion_tokens) x price-per-1K-tokens
+                      time  ~ dominated by completion_tokens (generated one at a time, sequentially)
+
+                      short prompt,  short answer   [$]        fast
+                      long prompt (full history)    [$$$]      slower to first token
+                      long requested answer         [$$$$$]    slower overall - can't parallelize generation
+                    """, 4),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Keep the system message tight, reusable, and separate from per-request user content — it's the one place you set persona, tone, and hard constraints once instead of repeating them in every user message. Always set `MaxOutputTokenCount` deliberately rather than leaving it at a high default; pick temperature based on the task (near 0 for classification/extraction/parsing, higher for open-ended generation), not a single value for everything.
+
+                    Because the API is stateless, don't let conversation history grow forever — truncate or summarize older turns before resending them, or cost and latency both creep upward on every single message a user sends. Batch and cache embeddings for content that doesn't change often instead of recomputing them on every request; embedding calls are billed the same way chat calls are.
+                    """, 5),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    If asked how you'd take an LLM feature from a demo to production, don't stop at "call the chat completions API" — bring up streaming for perceived latency and token/cost awareness for the growing-history problem. Naming the fact that a stateless API means you resend the whole conversation (and pay for it) every turn signals you understand the actual engineering constraint, not just how to make one API call work in a notebook.
+                    """, 6),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Cramming an entire conversation into one giant `user` message instead of using structured system/user/assistant roles — this throws away the model's built-in understanding of "these are standing instructions" vs. "this is what was just asked." Also common: never setting a max token cap, so an unexpectedly long generation silently costs far more and takes far longer than intended.
+
+                    On the embeddings side, treating vectors from two different embedding models as comparable — they are not; each model defines its own vector space, so a vector from `text-embedding-3-small` cannot be meaningfully compared against one from a different embedding model. And on the UX side: building a chat feature that waits for `CompleteChatAsync` to fully finish before showing anything, when `CompleteChatStreamingAsync` would let the same UI start rendering within a fraction of a second.
+                    """, 7),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    The system message is like a kitchen's standing instructions to a chef, set once before service starts ("always plate this way, keep it under three sentences of description"); user messages are individual customer orders during service; the assistant message is the dish that goes out. Because the API has no memory of its own, it's as if the chef forgets every previous order the instant it's plated — the waiter has to read the entire ticket history back to the chef before every single new order, which is exactly why a growing conversation costs more with every turn.
+
+                    Streaming is food served course by course as each part finishes, instead of making the whole table wait in silence until every dish for every course is fully plated at once. An embedding is like a fingerprint or library card-catalog number assigned to a dish's description — dishes with a similar flavor profile end up filed near each other in the cabinet, letting you find "something like this" without rereading every menu on the shelf.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "What is the purpose of the 'system' role in a chat completions message list?",
+                    "The system message sets the model's behavior, persona, and constraints before the conversation begins. It isn't a normal conversational turn from the user - it's instructions the model follows for the whole exchange, kept separate from actual user input.",
+                    [
+                        new QuizOptionSeed("It sets the model's behavior, persona, and constraints up front, separately from the user's actual input", true),
+                        new QuizOptionSeed("It is where the model's generated reply is returned", false),
+                        new QuizOptionSeed("It marks which messages should be excluded from billing", false),
+                        new QuizOptionSeed("It configures the network transport (HTTP vs. WebSocket) used for the call", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "Why use IAsyncEnumerable-based streaming (CompleteChatStreamingAsync) instead of awaiting the full completion?",
+                    "Streaming yields partial text as the model generates it, letting a UI render tokens as they arrive instead of waiting for the entire response. It doesn't reduce the total tokens generated or the total cost - it changes when the user starts seeing output, improving perceived latency.",
+                    [
+                        new QuizOptionSeed("It lets a UI render partial output as tokens arrive instead of waiting for the entire response, improving perceived latency without changing total tokens or cost", true),
+                        new QuizOptionSeed("It reduces the total number of tokens the model generates for the same request", false),
+                        new QuizOptionSeed("It is required by Azure OpenAI for every chat completions call", false),
+                        new QuizOptionSeed("It moves the request from HTTP to a database connection for lower latency", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("How to use chat completions with Azure OpenAI Service", "https://learn.microsoft.com/en-us/azure/ai-services/openai/how-to/chatgpt", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("Understand embeddings in Azure OpenAI Service", "https://learn.microsoft.com/en-us/azure/ai-services/openai/concepts/understand-embeddings", LinkType.OfficialDocs),
+            ]);
+
+        var lesson1Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson1.Slug,
+        [
+            "Call the chat completions API with a system message plus a user message, and compare output at temperature 0 versus temperature 1 on the same prompt",
+            "Build a small console app that iterates CompleteChatStreamingAsync and writes each token to the console as it arrives, instead of awaiting the full response",
+            "Generate embeddings for two similar sentences and two unrelated sentences, then compute cosine similarity by hand to confirm the similar pair scores higher",
+        ]);
+
+        var lesson2 = BuildLesson(
+            slug: "semantic-kernel-orchestrating-ai-in-dotnet",
+            title: "Semantic Kernel: Orchestrating AI in .NET",
+            summary: "What Semantic Kernel actually is (an orchestration SDK, not just an OpenAI wrapper), the Kernel object as the central orchestrator, native versus semantic functions, function calling as the foundation of tool use, and how it plugs into the same DI container and async/await patterns already used everywhere else in the app.",
+            estimatedMinutes: 45,
+            objectives:
+            [
+                "Explain what Semantic Kernel is and why it's more than a thin wrapper around the chat completions API",
+                "Describe the Kernel object's role as the central orchestrator of AI services, plugins, and function calls",
+                "Distinguish native functions (C# methods the model can invoke) from semantic functions (prompt templates invoked like functions)",
+                "Trace a simple function-calling example where the Kernel decides which registered function to invoke based on a natural-language goal",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    **Semantic Kernel (SK)** is Microsoft's open-source SDK for orchestrating LLM calls inside a real application — not merely a thin client wrapper around a chat completions endpoint (the raw `Azure.AI.OpenAI`/`OpenAI` SDK from the previous lesson already gives you that). SK's actual value is orchestration: composing prompts, exposing app-specific "plugins" the model can call, layering in memory/context, and — for more advanced scenarios — planning which of several available functions to invoke to accomplish a goal stated only in natural language. Conflating SK with "just an OpenAI wrapper" is the single most common way engineers underestimate what it's for.
+
+                    The **`Kernel`** object is the central orchestrator everything routes through. You build one with `Kernel.CreateBuilder()`, register an AI service connector on it (`AddAzureOpenAIChatCompletion(...)`), register any plugins the model should be able to call, then call `.Build()`. Every SK operation — a direct prompt, a registered function invocation, an auto function-calling exchange — happens through that one `Kernel` instance.
+
+                    SK exposes callable capabilities as **plugins**, made up of **functions**, and there are two distinct kinds. A **native function** is an ordinary C# method — marked with `[KernelFunction]`, and described with `[Description]` on both the method and its parameters — that the Kernel can describe to the model, which the model can then choose to invoke. Because it's ordinary code, it can call a repository, hit an HTTP API, touch a database — anything a normal method can do — and, because the entire Kernel invocation pipeline is async end to end, native functions are written as `Task`-returning `async` methods, awaited the same way any well-designed async API is. A **semantic function**, by contrast, is a prompt template itself treated as a callable function (`kernel.CreateFunctionFromPrompt("Summarize: {{$input}}")`) — no custom code runs, it's "prompting-as-a-function," useful for a reusable text transformation without writing a line of C# logic behind it.
+
+                    The reason native functions matter so much is **function calling** (also called tool use): rather than an app author hand-writing if/else branches to decide what a request needs, the model itself — given a natural-language goal plus the `[Description]` metadata of every registered function — decides whether a function applies and which one to call. SK executes that function for you and feeds the return value back to the model, which weaves it into a final natural-language answer. Enabling this is one line of execution settings (`FunctionChoiceBehavior.Auto()`), and it's the exact mechanism at the root of later "agentic" systems: a model choosing, from a set of available tools, which one accomplishes the stated goal.
+
+                    A minimal planner/orchestration example is exactly that auto function-calling loop: a caller states a goal in plain English ("What's the status of order 48213?"), and the Kernel — using the model's judgment plus the registered function descriptions — decides `GetOrderStatusAsync` is the right function, invokes it for real, and produces a final answer built from its return value, without the application ever writing a single line of routing logic for that request.
+
+                    Semantic Kernel is also designed to sit directly on top of concepts already covered elsewhere on this platform rather than replace them. It integrates with the **ASP.NET Core dependency injection container** the same way any other service does — `builder.Services.AddKernel().AddAzureOpenAIChatCompletion(...)` registers `Kernel` so it's constructor-injected into controllers and services exactly like `AppDbContext` or any repository, instead of being constructed ad hoc on every request. And every meaningful SK entry point — `InvokeAsync`, `InvokePromptAsync`, native function methods themselves — is `Task`-returning, so it's awaited with the same `async`/`await` discipline as any other well-designed asynchronous .NET API.
+                    """, 1),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **What Semantic Kernel is**
+
+                    - An orchestration SDK for LLM calls, plugins/functions, and memory in a .NET app — not just an OpenAI client wrapper
+                    - The `Kernel` object is the central orchestrator: built via `Kernel.CreateBuilder()`, holds AI connectors + registered plugins
+
+                    **Native functions**
+
+                    - An ordinary C# method marked `[KernelFunction]`, described with `[Description]` on method + parameters
+                    - Real async C# code underneath — can call a repository, an HTTP API, anything
+                    - The model decides whether/when to call it, based entirely on its `[Description]` text
+
+                    **Semantic functions**
+
+                    - A prompt template treated as a callable function (`kernel.CreateFunctionFromPrompt(...)`)
+                    - No custom code runs - "prompting-as-a-function"
+
+                    **Function calling / tool use**
+
+                    - `FunctionChoiceBehavior.Auto()` — the model picks which registered function (if any) fits a stated goal
+                    - Kernel executes the chosen function, feeds its result back, model produces the final answer
+                    - The foundational mechanism behind later agentic systems
+
+                    **Integration with existing platform concepts**
+
+                    - DI: `builder.Services.AddKernel().AddAzureOpenAIChatCompletion(...)` — Kernel becomes a normal injected service
+                    - async/await: every SK entry point (InvokeAsync, native functions) is Task-returning, awaited like any other async API
+                    """, 2),
+                Block(BlockType.CodeSnippet, "Building a Kernel, Registering a Native Function Plugin, and Auto Function-Calling", BodyFormat.PlainText, """
+                    using System.ComponentModel;
+                    using Microsoft.SemanticKernel;
+                    using Microsoft.SemanticKernel.Connectors.OpenAI;
+
+                    // --- Building the Kernel: the central orchestrator ---
+                    var builder = Kernel.CreateBuilder();
+                    builder.AddAzureOpenAIChatCompletion(
+                        deploymentName: "gpt-4o-deployment-name",
+                        endpoint: "https://my-resource.openai.azure.com/",
+                        apiKey: azureOpenAiApiKey);
+                    builder.Plugins.AddFromType<OrderLookupPlugin>(); // registers a native function plugin
+                    Kernel kernel = builder.Build();
+
+                    // In ASP.NET Core's Program.cs, the same Kernel is registered through DI
+                    // instead - constructor-injected into services exactly like AppDbContext:
+                    //   builder.Services.AddKernel()
+                    //       .AddAzureOpenAIChatCompletion(deploymentName, endpoint, apiKey);
+
+                    // --- A native function: an ordinary async C# method the model can choose to call ---
+                    public class OrderLookupPlugin(IOrderRepository orderRepository)
+                    {
+                        [KernelFunction, Description("Looks up the current status of an order by its order number.")]
+                        public async Task<string> GetOrderStatusAsync(
+                            [Description("The order number to look up")] string orderNumber)
+                        {
+                            // ordinary async C# - could call a repository, an HTTP API, anything
+                            var order = await orderRepository.GetByNumberAsync(orderNumber);
+                            return order is null ? "Order not found" : $"Order {orderNumber} is {order.Status}";
+                        }
+                    }
+
+                    // --- A semantic function: a prompt template treated as a callable function ---
+                    KernelFunction summarize = kernel.CreateFunctionFromPrompt(
+                        "Summarize the following support ticket in one sentence: {{$input}}");
+
+                    // --- Auto function-calling: the Kernel decides, from a natural-language goal,
+                    //     which registered function (if any) to invoke, and calls it for you ---
+                    OpenAIPromptExecutionSettings settings = new()
+                    {
+                        FunctionChoiceBehavior = FunctionChoiceBehavior.Auto(),
+                    };
+                    FunctionResult result = await kernel.InvokePromptAsync(
+                        "What's the status of order 48213?", new KernelArguments(settings));
+                    Console.WriteLine(result); // model chose GetOrderStatusAsync, invoked it, answered using its return value
+                    """, 3, language: "csharp"),
+                Block(BlockType.Diagram, "Function Calling: From a Natural-Language Goal to a Final Answer", BodyFormat.AsciiArt, """
+                     "What's the status of order 48213?"
+                                   |
+                                   v
+                           +----------------+
+                           |     Kernel     |  <- holds: chat completion connector + registered plugins
+                           +----------------+
+                                   |
+                                   v
+                     Kernel + model read every registered function's
+                     [Description] metadata and decide ONE fits the goal
+                                   |
+                                   v
+                     +--------------------------------+
+                     | OrderLookupPlugin              |
+                     | GetOrderStatusAsync(orderNumber)|   <- ordinary async C#, executes for real
+                     +--------------------------------+
+                                   |
+                                   v
+                          "Order 48213 is Shipped"
+                                   |
+                                   v
+                     model weaves the raw result into a natural-language
+                     final answer, returned to the original caller
+                    """, 4),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Keep native functions narrow and single-purpose, and write thorough `[Description]` text on both the function and every parameter — the model has no other information to decide whether or how to call it, so a vague description leads directly to missed or wrong invocations. Register the `Kernel` and its connectors through DI (`AddKernel()`) rather than constructing one per request; connector setup is meant to happen once, not on every call.
+
+                    Treat semantic functions (prompt templates) as content that changes often, and consider keeping their wording somewhere editable without a full redeploy, since tuning prompt wording is a much more frequent activity than changing native function code.
+                    """, 5),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    If asked "what is Semantic Kernel," resist reducing it to "a wrapper around OpenAI." Name the actual differentiators — plugins and function calling, and the fact that it's a first-class .NET library that plugs directly into the same DI container and async/await patterns already used throughout an ASP.NET Core app, rather than a hosted service you call over HTTP. That distinction is exactly why Microsoft ships it as an SDK instead of a product.
+                    """, 6),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Forgetting `[Description]` attributes on native functions or their parameters — the model has literally no other information to decide whether or how to call the function, so it either never gets invoked or gets called with the wrong arguments. Also common: constructing a brand-new `Kernel` via `Kernel.CreateBuilder().Build()` inside a hot path or per-request instead of registering it once through DI, repeating expensive connector setup on every single call.
+
+                    And: writing a native function as a synchronous, blocking method instead of an `async Task`-returning one — inside a pipeline that's async end to end, a blocking native function reintroduces the same synchronous-over-asynchronous problems covered in the async/await material elsewhere on this platform.
+                    """, 7),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    The Kernel is like a competent receptionist at a company switchboard: a caller states a need in plain English, the receptionist reads the directory of departments' short job descriptions (the `[Description]` attributes), picks the one department that matches, and transfers the request there — the real work happens in that department (an actual native function running actual code), not at the front desk. The receptionist then relays the outcome back in plain language.
+
+                    A semantic function is like a reusable form letter template — you fill in placeholders, and no real department does any work, it's just templated wording. And plugging the whole receptionist desk into the building's one shared switchboard, rather than having every caller-facing team install its own private phone line, is exactly what registering the Kernel through the shared DI container achieves.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "What is a Semantic Kernel 'native function'?",
+                    "A native function is an ordinary C# method, marked with [KernelFunction] and described with [Description], that the Kernel can present to the model so the model can choose to invoke it - this is function calling / tool use. It runs real async C# code, unlike a semantic function, which is just a prompt template.",
+                    [
+                        new QuizOptionSeed("An ordinary C# method marked so the Kernel can describe it to the model, which the model can then choose to invoke - i.e. function calling/tool use", true),
+                        new QuizOptionSeed("A prompt template with no C# code behind it", false),
+                        new QuizOptionSeed("A special Azure OpenAI deployment type reserved for embeddings", false),
+                        new QuizOptionSeed("A build step that compiles kernel plugins into native machine code", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "Why is Semantic Kernel more than 'just a wrapper around the chat completions API'?",
+                    "Semantic Kernel orchestrates LLM calls together with app-specific plugins/functions and (optionally) memory and planning, letting the model decide which registered function to call to satisfy a natural-language goal - a raw chat completions client alone doesn't do any of that.",
+                    [
+                        new QuizOptionSeed("It orchestrates LLM calls with plugins/functions and memory, letting the model decide which app-specific function to invoke for a stated goal", true),
+                        new QuizOptionSeed("It replaces the need to ever call a chat completions API at all", false),
+                        new QuizOptionSeed("It is a visual, no-code GUI tool with no C# API surface", false),
+                        new QuizOptionSeed("It only works against OpenAI directly and cannot be used with Azure OpenAI", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Introduction to Semantic Kernel", "https://learn.microsoft.com/en-us/semantic-kernel/overview/", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("Understanding AI plugins in Semantic Kernel", "https://learn.microsoft.com/en-us/semantic-kernel/concepts/plugins/", LinkType.OfficialDocs),
+            ],
+            prerequisites: [lesson1]);
+
+        var lesson2Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson2.Slug,
+        [
+            "Build a Kernel via Kernel.CreateBuilder(), register an Azure OpenAI chat completion connector, and register it in ASP.NET Core's DI container the same way any other service is registered",
+            "Write a native function (a plain async C# method) decorated with [KernelFunction] and [Description], register it as a plugin, and confirm the Kernel can list it",
+            "Enable FunctionChoiceBehavior.Auto() and give the Kernel a natural-language goal that requires calling your registered function, then confirm it picks the right one and returns an answer built from its result",
+        ]);
+
+        var module = BuildModule(topicId, "ai-integration-llm-and-semantic-kernel", "LLM Integration & Semantic Kernel",
+            "Calling LLMs from .NET via Azure OpenAI and the OpenAI SDK - chat completions, streaming, embeddings, prompt engineering, and token/cost awareness - followed by Semantic Kernel as the .NET orchestration layer for plugins, native and semantic functions, and function calling.",
+            90, [lesson1, lesson2], sortOrder: 1);
+
+        return (module, [lesson1Checklist, lesson2Checklist]);
+    }
+    private static (Module, List<ChecklistSeed>) BuildAiIntegrationVectorSearchAndRagModule(int topicId)
+    {
+        var lesson1 = BuildLesson(
+            slug: "vector-databases-and-embeddings",
+            title: "Vector Databases & Embeddings",
+            summary: "Going deeper on the embeddings introduced in the previous module: cosine similarity and why it's the standard way to compare embedding vectors, what a vector database/vector index does differently from a relational or document store at scale, a concrete comparison of Azure AI Search, Pinecone, and pgvector, and the chunking strategy real ingestion pipelines use.",
+            estimatedMinutes: 45,
+            objectives:
+            [
+                "Explain cosine similarity and why it's the standard distance metric for comparing embeddings, as opposed to Euclidean distance",
+                "Explain what a vector database/vector index does differently from a relational or document database — approximate nearest neighbor search at scale",
+                "Compare Azure AI Search's vector search, a dedicated vector database like Pinecone, and pgvector as a Postgres extension, and choose between them for a given system",
+                "Explain why real documents are split into overlapping chunks before embedding, rather than embedding the whole document as a single vector",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    The previous module introduced embeddings as a way of turning text into a vector of floating-point numbers that captures semantic meaning — two pieces of text with similar meaning end up as vectors that are "close" to each other in that high-dimensional space. This lesson goes one level deeper: how do you actually measure "close," and what has to change once you're comparing a query vector against millions of stored vectors instead of a handful?
+
+                    **Cosine similarity** is the standard way to compare two embedding vectors. It's defined as the cosine of the angle between the two vectors — their dot product divided by the product of their magnitudes (`cos(theta) = (A . B) / (||A|| * ||B||)`) — ranging from -1 (exactly opposite directions) through 0 (orthogonal, unrelated) to 1 (exactly the same direction). Crucially, cosine similarity measures *orientation*, not *magnitude*: two vectors pointing the same direction but with wildly different lengths still score a perfect 1.0. That matters specifically for text embeddings because a vector's magnitude often reflects things that have nothing to do with meaning — differences in text length, token frequency, or quirks of a particular embedding model — while its *direction* in the embedding space is what actually encodes semantic content. Euclidean distance, by contrast, measures straight-line distance between two points and is directly sensitive to magnitude: a semantically identical pair of vectors that merely differ in scale would report as "far apart" under Euclidean distance even though cosine similarity correctly reports them as maximally similar.
+
+                    In practice, many embedding models (OpenAI's `text-embedding-3` family among them) output vectors already normalized to unit length. For unit vectors, cosine similarity and Euclidean distance are related by a simple identity (`||A - B||^2 = 2 - 2*cos(theta)` when both vectors have magnitude 1), so they actually produce the *same* nearest-neighbor ranking in that special case — which is why some vector stores let you pick either metric for a normalized embedding model and get equivalent results. Cosine similarity remains the standard, documented convention anyway, precisely because it stays correct regardless of whether normalization holds.
+
+                    A relational database like SQL Server or Postgres, or a document database like Cosmos DB, is built to answer exact-match and range queries efficiently via B-tree-style indexes — `WHERE customer_id = 42` resolves in logarithmic time because the index exploits an ordering. Nearest-neighbor search over embeddings has no such ordering to exploit: "find the 10 stored vectors most similar to this query vector" has no natural sort order across a 1536-dimensional space an index could walk. The only *exact* way to answer it is brute force — compute similarity between the query vector and every single stored vector, then sort. That's fine at a few thousand vectors. It falls over at millions: computing millions of dot products for every single query, at real user-facing latency, doesn't scale — the work is fundamentally O(n) per query, and n keeps growing.
+
+                    A **vector database** (or **vector index**, when it's a feature added to an existing database rather than a dedicated engine) exists specifically to answer this kind of query fast at scale, by trading a small amount of guaranteed correctness for a large amount of speed — **approximate nearest neighbor (ANN)** search. Algorithms like **HNSW** (Hierarchical Navigable Small World graphs) build a multi-layered graph over the stored vectors at insert time, so a query "navigates" toward its closest neighbors by hopping across a handful of graph edges instead of touching every vector — turning an O(n) exact scan into something close to O(log n), at the cost of occasionally missing the single truest nearest neighbor in favor of one extremely close to it. **IVF** (Inverted File index) instead pre-clusters the vector space and only searches the handful of partitions nearest the query. The "approximate" part is a deliberate, tunable trade — recall versus latency and index size — not a shortcoming to work around.
+
+                    Three concrete options sit at different points on the "dedicated tool vs. reuse what you already have" spectrum. **Azure AI Search's vector search** bolts ANN search onto a platform that already does full-text/keyword search, giving you **hybrid search** — a keyword match and a vector similarity score in one query, plus filtering on ordinary indexed fields — for free; it's the natural choice when the documents you're indexing already have other searchable metadata and you don't want a second system to synchronize just for vectors. **Pinecone** is a dedicated, purpose-built vector database — no relational schema, no query language beyond "find nearest neighbors, optionally filtered by metadata" — fully managed and engineered for exactly one job, which tends to make it the simplest, most scalable option when vector search genuinely is the whole workload. **pgvector** is a Postgres extension: it adds a `vector` column type and ANN index types (`ivfflat`, `hnsw`) directly inside ordinary Postgres, so vectors live alongside the rest of your relational data, joinable with plain SQL and covered by the same transactional/backup story you already have — the right call when your data already lives in Postgres, though a dedicated engine usually scales further than pushing a general-purpose relational database past its original design center.
+
+                    None of this matters if you embed the wrong unit of text in the first place. A single embedding vector is a fixed-size summary regardless of how much text went in, so embedding an entire 60-page document as one vector forces its many topics and facts to average down into one point in space — a query about one narrow detail buried in section 12 competes, in that single vector, against everything the other 59 pages talked about too. That's why real ingestion pipelines split documents into much smaller **chunks** (typically a few hundred tokens each) and embed each chunk separately, so a stored vector represents one focused piece of text rather than an entire document's worth of unrelated content. Chunks are also made to **overlap** with their neighbors (e.g., 500-token chunks with 50-100 tokens of overlap) rather than being cut at hard boundaries, because a fact or sentence can straddle exactly where a naive splitter would cut — overlap ensures that passage also appears whole, in context, in at least one chunk. Chunk size is a genuine trade-off: too large drifts back toward the "diluted whole-document" problem chunking exists to solve; too small loses surrounding context a retrieved passage would need to make sense once it's dropped into an LLM prompt on its own.
+                    """, 1),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Comparing vectors**
+
+                    - Cosine similarity = (A . B) / (||A|| * ||B||) — measures orientation between two vectors, ignores magnitude
+                    - Range: -1 (opposite) to 0 (unrelated) to 1 (identical direction)
+                    - Euclidean distance measures straight-line distance — sensitive to magnitude, not the standard for embeddings
+                    - For unit-normalized embeddings, cosine similarity and Euclidean distance rank neighbors identically
+
+                    **Why a vector database, not brute force**
+
+                    - Brute force = compare the query vector to every stored vector = O(n) per query — fine at thousands, too slow at millions
+                    - ANN (approximate nearest neighbor) search trades a little recall for a lot of speed
+                    - HNSW — layered navigable graph, hop toward nearest neighbors instead of scanning everything
+                    - IVF — pre-cluster vectors, only search the nearest partitions
+
+                    **Picking a vector store**
+
+                    - Azure AI Search — hybrid keyword + vector search, filters on existing indexed fields, good when documents already have other searchable metadata
+                    - Pinecone — dedicated, fully managed vector database, simplest when vector search is the entire workload
+                    - pgvector — Postgres extension (`vector` column, `ivfflat`/`hnsw` index), vectors alongside relational data, one less system to operate
+
+                    **Chunking**
+
+                    - Never embed an entire long document as one vector — dilutes many topics into one point
+                    - Split into chunks (roughly a few hundred tokens) and embed each chunk separately
+                    - Overlap consecutive chunks (e.g., 50-100 tokens) so no fact is split in half at a chunk boundary
+                    - Chunk size trade-off: too big -> dilution returns; too small -> lost surrounding context
+                    """, 2),
+                Block(BlockType.CodeSnippet, "Cosine Similarity, Overlapping Chunking, and Querying a Vector Index", BodyFormat.PlainText, """
+                    // --- Cosine similarity, computed by hand ---
+                    static float CosineSimilarity(ReadOnlySpan<float> a, ReadOnlySpan<float> b)
+                    {
+                        float dot = 0f, magA = 0f, magB = 0f;
+                        for (int i = 0; i < a.Length; i++)
+                        {
+                            dot += a[i] * b[i];
+                            magA += a[i] * a[i];
+                            magB += b[i] * b[i];
+                        }
+                        return dot / (MathF.Sqrt(magA) * MathF.Sqrt(magB));
+                    }
+
+                    // Two embeddings for "refund policy" and "how do I get my money back" should
+                    // score close to 1.0 even if their raw magnitudes differ slightly.
+                    float similarity = CosineSimilarity(refundPolicyEmbedding, moneyBackQuestionEmbedding);
+
+                    // --- Overlapping chunking: split a long document before embedding it ---
+                    static IEnumerable<string> ChunkText(string text, int chunkSizeInTokens = 500, int overlapInTokens = 75)
+                    {
+                        // Simplified: treat whitespace-separated words as a stand-in for tokens.
+                        var words = text.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                        for (int start = 0; start < words.Length; start += chunkSizeInTokens - overlapInTokens)
+                        {
+                            yield return string.Join(' ', words.Skip(start).Take(chunkSizeInTokens));
+                            if (start + chunkSizeInTokens >= words.Length) yield break;
+                        }
+                    }
+
+                    // --- Storing chunk embeddings in Azure AI Search (vector field) ---
+                    var searchClient = new SearchClient(endpoint, "knowledge-base", credential);
+
+                    var documents = chunks.Select((chunk, i) => new SearchDocument
+                    {
+                        ["id"] = $"{docId}-chunk-{i}",
+                        ["content"] = chunk,
+                        ["contentVector"] = embeddings[i], // float[], produced by an embedding model
+                        ["sourceDocument"] = docId,
+                    });
+                    await searchClient.UploadDocumentsAsync(documents);
+
+                    // --- Querying: embed the question, then find its nearest chunks ---
+                    float[] queryVector = await embeddingGenerator.EmbedAsync(userQuestion);
+
+                    var vectorQuery = new VectorizedQuery(queryVector) { KNearestNeighborsCount = 5, Fields = { "contentVector" } };
+                    var results = await searchClient.SearchAsync<SearchDocument>(
+                        searchText: null,
+                        new SearchOptions { VectorSearch = new() { Queries = { vectorQuery } } });
+
+                    await foreach (var result in results.Value.GetResultsAsync())
+                        Console.WriteLine($"{result.Document["sourceDocument"]}: {result.Score:F3}");
+                    """, 3, language: "csharp"),
+                Block(BlockType.Diagram, "Brute Force vs. ANN, and Overlapping Chunks", BodyFormat.AsciiArt, """
+                    Brute-force nearest neighbor (exact, O(n) per query)
+                      query vector ---> compare to EVERY stored vector ---> sort ---> top-k
+                                         [v1][v2][v3][v4] ... [v999997][v999998][v999999][v1000000]
+                                         millions of similarity computations, every single query
+
+                    HNSW-based ANN search (approximate, ~O(log n) per query)
+                      query vector ---> enter graph at top layer ---> hop toward nearest neighbors
+                                         layer 2:        [*]-----------------[*]
+                                                           \\                 /
+                                         layer 1:    [*]---[*]---[*]---[*]---[*]
+                                                       \\   /  \\   /  \\   /  \\   /
+                                         layer 0:  [*][*][*][*][*][*][*][*][*][*]   <- all stored vectors
+                                         (only a handful of nodes visited, not all of them)
+
+                    Chunking a document before embedding:
+                      [====================== full document ======================]
+                      [ chunk 1 ]
+                            [ chunk 2 ]   <- overlaps end of chunk 1
+                                  [ chunk 3 ]   <- overlaps end of chunk 2
+                      (a fact split at a chunk boundary still appears whole in at least one chunk)
+                    """, 4),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Normalize embedding vectors to unit length at ingestion time if your embedding model doesn't already guarantee it, and keep the distance metric consistent with what your vector store expects — mixing a cosine-similarity assumption with a store configured for Euclidean distance (or vice versa) silently returns plausible-looking but wrong-ranked results, since it's a configuration mismatch, not an error. When choosing a vector store, start from what you already operate: Azure AI Search when you need hybrid keyword+vector search over data with existing structured fields, pgvector when your data already lives in Postgres and scale is moderate, a dedicated store like Pinecone once vector search is the primary, high-scale workload rather than one feature among several.
+
+                    For chunking, start around 200-500 tokens per chunk with 10-20% overlap as a reasonable default, then tune based on evaluation (covered in the next lesson) rather than guessing — and always store enough metadata alongside each chunk (source document id, section, position) to display where a retrieved chunk came from and to apply filters without a separate lookup.
+                    """, 5),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    When asked why cosine similarity and not Euclidean distance, don't just recite the formula — explain that cosine similarity measures the *direction* of a vector, not its length, and that direction is what encodes meaning in an embedding space, while magnitude often just reflects unrelated factors like text length. If asked to justify a vector database over "just querying a normal database," lead with the actual bottleneck: brute-force nearest-neighbor search is O(n) per query, and that's the specific problem ANN indexes like HNSW exist to solve at scale — naming HNSW or IVF, even briefly, signals you understand the mechanism and not just the marketing term "vector database."
+                    """, 6),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Embedding an entire long document as a single vector and then wondering why retrieval feels vague or misses obviously-relevant documents — the fix is chunking, not a "better" embedding model. Using non-overlapping chunk boundaries and losing facts or sentences that happen to fall right at a cut point is the second-most-common version of the same mistake.
+
+                    Also common: treating "vector database" as one interchangeable category and reaching for a dedicated vector database like Pinecone by default even when the data already lives in a relational store and volume is modest — pgvector or Azure AI Search's vector field is usually the simpler, cheaper answer there, and standing up a whole separate system to synchronize just for vector search is real, ongoing operational cost that isn't always justified. And: mixing distance metrics — computing cosine similarity by hand while the vector index is configured for Euclidean distance (or the reverse) — which silently returns a plausible-looking but incorrectly-ranked result set instead of an obvious error.
+                    """, 7),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    Cosine similarity is like judging whether two people are heading toward the same destination by comparing the *direction* they're walking, not how many steps they've taken — one person might have taken 10 steps and the other 10,000, but if they're both walking due north, they're headed the same place. Euclidean distance instead measures how far apart they currently are standing, which conflates "heading the same direction" with "having covered a similar amount of ground" — two people walking in completely different directions could still happen to be standing close together at this exact moment.
+
+                    A vector database is like a library asked to help patrons find "a book similar in theme to this one" out of a hundred million volumes — no librarian can read every book's full text on the spot for every request. Instead they rely on a smart pre-built index that gets them to a very good answer by checking a handful of shelves instead of the entire library — occasionally missing the single best match in favor of an excellent one nearby, in exchange for actually answering in seconds instead of years.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "Two text embeddings represent semantically identical sentences but have different magnitudes due to differences in text length. Why does cosine similarity still correctly identify them as highly similar, while Euclidean distance might not?",
+                    "Cosine similarity measures the angle/orientation between vectors and ignores magnitude entirely, so two vectors pointing in the same direction score close to 1.0 regardless of length; Euclidean distance measures the straight-line gap between the two points and is directly affected by magnitude differences.",
+                    [
+                        new QuizOptionSeed("Cosine similarity ignores magnitude and measures only the orientation between vectors, while Euclidean distance is directly sensitive to magnitude differences", true),
+                        new QuizOptionSeed("Cosine similarity can only be computed on vectors of exactly the same length in tokens", false),
+                        new QuizOptionSeed("Euclidean distance is always mathematically identical to cosine similarity for any pair of vectors", false),
+                        new QuizOptionSeed("Cosine similarity rounds vectors to integers before comparing them, which removes the magnitude difference", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "A team stores 40 million document embeddings and needs sub-100ms nearest-neighbor queries. Why is a brute-force scan not viable, and what does an ANN algorithm like HNSW do instead?",
+                    "Brute-force comparison requires computing a similarity score against every stored vector for every query - O(n) work that grows with collection size and becomes too slow at millions of vectors. HNSW builds a navigable graph over the vectors so a query can hop toward its nearest neighbors by visiting only a small fraction of the total nodes, trading a small amount of recall for dramatically lower latency.",
+                    [
+                        new QuizOptionSeed("Brute force requires O(n) similarity computations per query; HNSW builds a navigable graph so a query visits only a small fraction of nodes, trading a little recall for much lower latency", true),
+                        new QuizOptionSeed("Brute-force scans are disallowed by cloud providers above a certain vector count", false),
+                        new QuizOptionSeed("HNSW compresses every vector down to a single bit before storing it", false),
+                        new QuizOptionSeed("ANN algorithms guarantee finding the exact same nearest neighbor as brute force every time, with no trade-off", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Vector search in Azure AI Search", "https://learn.microsoft.com/en-us/azure/search/vector-search-overview", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("pgvector: Open-source vector similarity search for Postgres", "https://github.com/pgvector/pgvector", LinkType.FurtherReading),
+            ]);
+
+        var lesson1Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson1.Slug,
+        [
+            "Implement CosineSimilarity by hand in C# and compare its output against a plain Euclidean distance function on two embeddings you generate from an embedding model",
+            "Chunk a real multi-page document into overlapping ~300-token chunks with a small script, and verify by inspection that a fact spanning a chunk boundary still appears whole in at least one chunk",
+            "Stand up a small vector index (pgvector, Azure AI Search, or a local ANN library) with a few hundred chunk embeddings and run a nearest-neighbor query end to end",
+        ]);
+
+        var lesson2 = BuildLesson(
+            slug: "retrieval-augmented-generation-rag-fundamentals",
+            title: "Retrieval-Augmented Generation (RAG) Fundamentals",
+            summary: "Why RAG exists — grounding an LLM's answer in real, current data instead of relying purely on training memory, and avoiding the cost of fine-tuning — the full RAG pipeline end to end from ingestion through retrieval to grounded generation, and how to reason about RAG quality by separating retrieval failures from generation failures.",
+            estimatedMinutes: 45,
+            objectives:
+            [
+                "Explain why RAG exists: grounding answers in real, current data instead of relying purely on what a model memorized during training",
+                "Describe the full RAG pipeline end to end, from document ingestion through chunking, embedding, and storage, to query-time retrieval and grounded generation",
+                "Explain why RAG is typically preferred over fine-tuning for teaching a model new, precise facts",
+                "Distinguish retrieval-quality failures from generation-quality failures when a RAG system produces a wrong answer",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    An LLM's knowledge is frozen at whatever cutoff its training data ended, and everything it "knows" is encoded implicitly inside its weights rather than stored as retrievable facts — ask it about your company's internal refund policy, a document published yesterday, or anything simply absent from its training data, and it either can't answer at all or, worse, confidently produces a plausible-sounding but fabricated answer (a hallucination). **Retrieval-Augmented Generation (RAG)** solves this by giving the model access to real, current, private source material at the moment it answers a question — instead of asking it to answer from memory alone, you first retrieve the specific passages actually relevant to the question and hand them to the model as part of the prompt, so it can ground its answer in text that's genuinely in front of it rather than whatever it happened to memorize during training.
+
+                    The alternative for teaching a model new facts is **fine-tuning** — further training a model's weights on your own data. Fine-tuning is expensive to run, requires a curated training dataset, needs to be redone (at real cost) every time the underlying facts change, and is a poor mechanism for injecting specific, precise facts in the first place, since training nudges a model's general behavior and style rather than reliably teaching it to recite exact figures or policies on demand. RAG sidesteps all of that: updating the knowledge a RAG system draws on is as simple as re-ingesting a changed document into the vector index — no retraining, often measured in seconds — which is exactly why RAG, not fine-tuning, is the default approach for "make the model answer questions about our data" in production systems.
+
+                    The RAG pipeline has two distinct phases: **ingestion** (done ahead of time, once per document or whenever a document changes) and **query time** (done fresh for every user question). Ingestion is the pipeline from the previous lesson: take a source document, split it into overlapping chunks, run each chunk through an embedding model to get a vector, and store each chunk's text alongside its vector in a vector index. Query time then runs the mirror-image operation for the *question* itself: embed the user's question with the same embedding model used at ingestion time, run a nearest-neighbor search against the vector index to retrieve the **top-k** most similar chunks (k is typically somewhere from 3 to 10, tuned per system), and construct a prompt that includes those retrieved chunks as context — typically instructing the model explicitly to answer only using the provided context and to say so if the answer isn't contained in it. The chat completion call from the previous module happens exactly the same way here; the only difference is that the prompt's context now includes real, retrieved passages instead of being empty or hand-written.
+
+                    It's worth being precise about what actually gets sent to the model and what doesn't: only the *text* of the retrieved chunks goes into the prompt — the embedding vectors themselves are purely an internal retrieval mechanism used to find which chunks are relevant, and are never shown to or reasoned about by the LLM directly. End to end: ingest documents -> chunk -> embed each chunk -> store chunk text + vector in the index -> (at query time) embed the question -> retrieve top-k similar chunks -> inject those chunks' text into the prompt as context -> generate an answer grounded in that context.
+
+                    Evaluating a RAG system means separating two genuinely independent failure modes, because "the answer was wrong" has at least two very different root causes that call for completely different fixes. **Retrieval quality** asks: did the vector search actually surface the chunks that contain the answer? **Generation quality** asks: given that the right chunks *were* retrieved, did the model actually use them correctly to produce a good answer? A system can fail at either stage independently, and a bad final answer looks identical from the outside regardless of which one broke — which is exactly why debugging "the chatbot gave a wrong answer" has to start by checking which chunks were actually retrieved for that question, not by immediately blaming or re-prompting the LLM.
+
+                    Concretely: if retrieval surfaces the wrong chunks (because chunks are too coarse or too fine, the embedding model doesn't capture the specific phrasing well, or the relevant document was never ingested at all), the model is being asked to answer from irrelevant context — a well-behaved system should ideally recognize that and say "I don't know" rather than inventing an answer, though many models will confidently answer anyway if not explicitly instructed not to. If retrieval surfaces exactly the right chunks but the model still answers badly — misreading a number, missing a caveat, or ignoring the retrieved context in favor of its own (possibly outdated or wrong) memorized knowledge — that's a generation-quality failure, and the fix lives in prompt design or model choice, not in the retrieval pipeline. Measuring retrieval quality in isolation (does the top-k set actually contain the passage a human would cite as the answer, for a labeled set of test questions) is what lets you tell these two failure modes apart instead of guessing.
+                    """, 1),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Why RAG, not fine-tuning**
+
+                    - Grounds the LLM's answer in real, current, private data instead of only what it memorized during training
+                    - Updating knowledge = re-ingest a changed document into the vector index; no retraining required
+                    - Fine-tuning is expensive, needs curated training data, and is a poor mechanism for injecting precise, specific facts
+                    - Reduces hallucination by giving the model actual source material to answer from, instead of memory alone
+
+                    **The full pipeline**
+
+                    - Ingestion (offline, ahead of time): document -> chunk -> embed each chunk -> store (chunk text + vector) in a vector index
+                    - Query time (per question): embed the question -> retrieve top-k most similar chunks -> inject chunk text into the prompt as context -> generate the answer
+                    - Only chunk TEXT goes into the LLM prompt — embedding vectors are purely an internal retrieval mechanism, never shown to the model
+
+                    **Evaluating RAG quality**
+
+                    - Retrieval quality: did the vector search surface the chunks that actually contain the answer?
+                    - Generation quality: given the right chunks were retrieved, did the model actually use them correctly?
+                    - A bad final answer looks the same from the outside either way — check what was retrieved before blaming the model
+                    - Well-instructed systems should say "I don't know" when retrieved context doesn't contain the answer, rather than inventing one
+                    """, 2),
+                Block(BlockType.CodeSnippet, "A Minimal RAG Query, End to End", BodyFormat.PlainText, """
+                    // --- Ingestion (done once, ahead of time, per document) ---
+                    foreach (var document in documents)
+                    {
+                        var chunks = ChunkText(document.Text, chunkSizeInTokens: 400, overlapInTokens: 60);
+                        foreach (var (chunk, index) in chunks.Select((c, i) => (c, i)))
+                        {
+                            float[] embedding = await embeddingGenerator.EmbedAsync(chunk);
+                            await vectorIndex.UpsertAsync(new IndexedChunk
+                            {
+                                Id = $"{document.Id}-chunk-{index}",
+                                SourceDocumentId = document.Id,
+                                Text = chunk,
+                                Embedding = embedding,
+                            });
+                        }
+                    }
+
+                    // --- Query time: retrieve, augment, generate ---
+                    async Task<string> AnswerQuestionAsync(string question)
+                    {
+                        // 1. Embed the question with the SAME embedding model used at ingestion time
+                        float[] questionEmbedding = await embeddingGenerator.EmbedAsync(question);
+
+                        // 2. Retrieve the top-k most similar chunks
+                        IReadOnlyList<IndexedChunk> topChunks = await vectorIndex.SearchAsync(questionEmbedding, topK: 5);
+
+                        // 3. Inject retrieved chunk TEXT (never the raw vectors) into the prompt as context
+                        string context = string.Join("\n\n---\n\n", topChunks.Select(c => c.Text));
+
+                        var messages = new List<ChatMessage>
+                        {
+                            new(ChatRole.System, "Answer the user's question using ONLY the context below. If the answer is not contained in the context, say you don't know - do not guess."),
+                            new(ChatRole.System, $"Context:\n{context}"),
+                            new(ChatRole.User, question),
+                        };
+
+                        // 4. Generate - the same chat completion call from the previous module,
+                        //    now grounded in real, retrieved source material instead of an empty prompt
+                        ChatCompletion response = await chatClient.CompleteAsync(messages);
+                        return response.Message.Text;
+                    }
+
+                    // --- Measuring retrieval quality separately from generation quality ---
+                    // For a labeled test set of (question, expectedSourceChunkId) pairs:
+                    int retrievalHits = 0;
+                    foreach (var (question, expectedChunkId) in evaluationSet)
+                    {
+                        var retrieved = await vectorIndex.SearchAsync(await embeddingGenerator.EmbedAsync(question), topK: 5);
+                        if (retrieved.Any(c => c.Id == expectedChunkId)) retrievalHits++;
+                    }
+                    double retrievalRecallAtK = (double)retrievalHits / evaluationSet.Count; // isolates retrieval, not generation
+                    """, 3, language: "csharp"),
+                Block(BlockType.Diagram, "The RAG Pipeline, Ingestion and Query Time", BodyFormat.AsciiArt, """
+                    INGESTION (offline, once per document)
+                      document --> chunk (overlapping) --> embed each chunk --> store [text + vector] in vector index
+
+                    QUERY TIME (every question)
+                      user question
+                            |
+                            v
+                      embed question   (same embedding model as ingestion)
+                            |
+                            v
+                      vector index: nearest-neighbor search
+                            |
+                            v
+                      top-k chunks (TEXT only)
+                            |
+                            v
+                      prompt = [system instructions] + [retrieved chunk text] + [user question]
+                            |
+                            v
+                      LLM chat completion  --> answer grounded in retrieved context
+
+                    Two independent failure points:
+                      retrieval step  --> wrong/missing chunks retrieved    = RETRIEVAL failure
+                      generation step --> right chunks retrieved, bad answer = GENERATION failure
+                    """, 4),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Always instruct the model explicitly to answer only from the provided context and to say when it doesn't know, rather than assuming it will naturally refuse to speculate — left unconstrained, most models will happily blend retrieved context with their own memorized knowledge, quietly reintroducing the exact hallucination risk RAG exists to reduce. Build a small labeled evaluation set (question -> which chunk(s) should be retrieved) early, even a few dozen examples, so retrieval quality can be measured directly instead of inferred indirectly from how good final answers look.
+
+                    Reuse the exact same embedding model at query time that you used at ingestion time — embeddings from two different models are not comparable to each other, so mixing them silently returns meaningless similarity scores rather than an obvious error. Tune top-k, chunk size, and overlap based on that evaluation set rather than picking numbers once and assuming they generalize to every document type in the system.
+                    """, 5),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    When asked to describe RAG, give the whole pipeline in order — ingest, chunk, embed, store, then at query time embed the question, retrieve top-k, inject into the prompt, generate — rather than jumping straight to "it retrieves relevant documents." The order, and the fact that ingestion and query time are separate phases, is exactly what interviewers are checking for. When asked to debug a RAG system giving wrong answers, lead with "first I'd check whether the right chunks were even retrieved" before proposing prompt changes — that single sentence demonstrates you understand retrieval and generation are separate failure modes, which is the crux of reasoning well about RAG quality.
+                    """, 6),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Treating every wrong answer as a prompting problem and iterating on prompt wording without ever checking whether the retrieved chunks actually contained the answer in the first place — if retrieval is broken, no amount of prompt tuning fixes it, because the model genuinely never saw the right information.
+
+                    Also common: embedding the query with a different embedding model (or a different version/dimension of the same model) than was used to embed the stored chunks — similarity scores between vectors from two different embedding spaces are meaningless, but the query still returns *some* result, so this failure doesn't throw an error, it just silently returns irrelevant chunks that look like a legitimate result set. And: never instructing the model to say "I don't know" when the retrieved context doesn't actually answer the question, letting it quietly fall back to confidently answering from its own pretrained knowledge (often outdated or simply wrong for private data) whenever retrieval comes up empty or irrelevant — silently defeating the entire point of grounding the answer in retrieved context.
+                    """, 7),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    RAG is like an open-book exam versus a closed-book one. A closed-book exam (asking the LLM to answer purely from what it memorized during training) forces the student to rely entirely on what they crammed months ago — accurate for anything they genuinely studied, but prone to confidently "remembering" things that are actually wrong once a question strays outside that. An open-book exam (RAG) instead hands the student the specific, relevant pages of the textbook right before they answer, so their answer is grounded in material actually in front of them.
+
+                    But handing a student the wrong pages of the textbook (a retrieval failure) is just as damaging as giving them no book at all — and even with the right pages open in front of them, a student who misreads or ignores what's written (a generation failure) still gets the question wrong, which is exactly why the two failure modes have to be diagnosed separately rather than assumed to be the same problem.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "A company wants their support chatbot to answer questions about a policy document that changes every week. Why would RAG typically be preferred over fine-tuning a model on the policy document?",
+                    "RAG only requires re-ingesting the changed document into the vector index - a fast, cheap operation with no retraining - while fine-tuning would need to be redone from scratch, at real time and compute cost, every time the policy changes, and is a poor mechanism for injecting precise facts to begin with.",
+                    [
+                        new QuizOptionSeed("Re-ingesting a changed document into the vector index is fast and cheap, while fine-tuning must be redone at real cost every time the facts change and poorly injects precise facts anyway", true),
+                        new QuizOptionSeed("Fine-tuning cannot be used on any text-based document under any circumstances", false),
+                        new QuizOptionSeed("RAG produces a permanently updated version of the model's weights, exactly like fine-tuning does, just faster", false),
+                        new QuizOptionSeed("Fine-tuning only works with images, not text documents", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "A RAG-based chatbot gives a wrong answer to a user's question. What's the correct first diagnostic step, and why?",
+                    "Check which chunks the retrieval step actually surfaced for that question. A wrong answer can come from either a retrieval failure (the right chunks were never found) or a generation failure (the right chunks were found but the model still answered badly), and these require completely different fixes, so you can't tell which happened without inspecting what was retrieved.",
+                    [
+                        new QuizOptionSeed("Check which chunks were actually retrieved for that question, since a wrong answer could be a retrieval failure or a generation failure and each requires a different fix", true),
+                        new QuizOptionSeed("Immediately rewrite the system prompt, since RAG failures are always a generation problem", false),
+                        new QuizOptionSeed("Immediately retrain the embedding model from scratch, since RAG failures are always a retrieval problem", false),
+                        new QuizOptionSeed("Assume the LLM provider's API is down, since a RAG pipeline cannot fail for any other reason", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Retrieval Augmented Generation (RAG) in Azure AI Search", "https://learn.microsoft.com/en-us/azure/search/retrieval-augmented-generation-overview", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("Retrieval-Augmented Generation (RAG)", "https://www.pinecone.io/learn/retrieval-augmented-generation/", LinkType.FurtherReading),
+            ],
+            prerequisites: [lesson1]);
+
+        var lesson2Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson2.Slug,
+        [
+            "Build a minimal end-to-end RAG query against a handful of your own documents: chunk, embed, store, retrieve top-k, inject into a prompt, and generate an answer",
+            "Deliberately ask a question whose answer is not in your ingested documents, and verify whether the model says it doesn't know or hallucinates an answer - then adjust the system prompt until it correctly declines",
+            "Build a small labeled evaluation set (question -> expected source chunk) and measure retrieval recall@k separately from whether the final generated answer was actually correct",
+        ]);
+
+        var module = BuildModule(topicId, "ai-integration-vector-search-and-rag", "Vector Search & Retrieval-Augmented Generation",
+            "Going deeper on embeddings from the previous module: cosine similarity as the standard way to compare them, what a vector database actually does differently from a relational or document store at scale, a concrete comparison of Azure AI Search, Pinecone, and pgvector, and the chunking strategy real ingestion pipelines use — then the full Retrieval-Augmented Generation pipeline end to end, why it's preferred over fine-tuning, and how to reason about retrieval quality versus generation quality when a RAG system gives a wrong answer.",
+            90, [lesson1, lesson2], sortOrder: 2);
 
         return (module, [lesson1Checklist, lesson2Checklist]);
     }

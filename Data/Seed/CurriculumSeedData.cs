@@ -112,6 +112,16 @@ public static class CurriculumSeedData
                 CreatedUtc = now,
                 UpdatedUtc = now,
             },
+            new Topic
+            {
+                Slug = "ai-integration",
+                Title = "AI Integration",
+                Description = "Building AI-powered features with LLMs, vector search, and agentic protocols.",
+                IconKey = "system",
+                SortOrder = 11,
+                CreatedUtc = now,
+                UpdatedUtc = now,
+            },
         ];
     }
 }
