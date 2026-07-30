@@ -61,6 +61,8 @@ public static class CurriculumContentSeedData
             BuildEstimationAndCollaborationModule(topicIdBySlug["soft-skills"]),
             BuildAiIntegrationLlmAndSemanticKernelModule(topicIdBySlug["ai-integration"]),
             BuildAiIntegrationVectorSearchAndRagModule(topicIdBySlug["ai-integration"]),
+            BuildFrontendJavaScriptAndTypeScriptModule(topicIdBySlug["frontend"]),
+            BuildFrontendReactFundamentalsModule(topicIdBySlug["frontend"]),
         };
 
         return (
@@ -15963,6 +15965,754 @@ public static class CurriculumContentSeedData
 
         var module = BuildModule(topicId, "ai-integration-vector-search-and-rag", "Vector Search & Retrieval-Augmented Generation",
             "Going deeper on embeddings from the previous module: cosine similarity as the standard way to compare them, what a vector database actually does differently from a relational or document store at scale, a concrete comparison of Azure AI Search, Pinecone, and pgvector, and the chunking strategy real ingestion pipelines use — then the full Retrieval-Augmented Generation pipeline end to end, why it's preferred over fine-tuning, and how to reason about retrieval quality versus generation quality when a RAG system gives a wrong answer.",
+            90, [lesson1, lesson2], sortOrder: 2);
+
+        return (module, [lesson1Checklist, lesson2Checklist]);
+    }
+
+    // ============================== Frontend ==============================
+
+    private static (Module, List<ChecklistSeed>) BuildFrontendJavaScriptAndTypeScriptModule(int topicId)
+    {
+        var lesson1 = BuildLesson(
+            slug: "modern-javascript-essentials",
+            title: "Modern JavaScript Essentials",
+            summary: "let/const block scoping versus var's legacy function-scoping and hoisting, arrow functions and how `this` binding differs from regular functions, destructuring and the spread/rest operators, template literals, ES modules versus CommonJS, and the event loop - the call stack, microtask/task queues, Promises, and async/await as syntax sugar over Promises, contrasted with C#'s thread-pool-based async/await.",
+            estimatedMinutes: 45,
+            objectives:
+            [
+                "Explain why let/const block scoping replaced var's function-scoping and hoisting, and identify the closure-in-a-loop bug var caused",
+                "Explain how an arrow function's `this` binding differs from a regular function's, and when that difference actually matters",
+                "Destructure arrays and objects and use the spread/rest operators to write more direct JavaScript",
+                "Explain the event loop (call stack, microtask queue, task queue), that async/await is sugar over Promises, and how JavaScript's single-threaded model differs from C#'s thread-pool-based async/await",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    JavaScript originally had exactly one way to declare a variable: `var`. `var` is **function-scoped**, not block-scoped - a `var` declared inside an `if` block or a `for` loop is visible throughout the entire enclosing function, not just inside that block, which routinely surprised engineers coming from block-scoped languages like C#. `var` declarations are also **hoisted**: the declaration (though not the assignment) is conceptually moved to the top of its enclosing function, so referencing a `var` before its line of code runs doesn't throw, it silently reads `undefined`. The canonical real-world footgun was a `for` loop capturing a loop variable in a closure (e.g. inside a `setTimeout` callback scheduled for later): because there was only one function-scoped `i` shared by every iteration, every callback saw the final value of `i` after the loop had already finished, not the value at the time each callback was created. `let` and `const`, added in ES2015, fixed this by being **block-scoped** - each `{ }` block gets its own binding - and by creating a fresh binding on every loop iteration, so a closure captured inside a loop body sees the value from that specific iteration. `let`/`const` also aren't accessible before their declaration line executes (referencing them earlier throws due to the "temporal dead zone" instead of silently returning `undefined`), surfacing use-before-declaration bugs immediately instead of masking them. `const` additionally prevents reassigning the binding itself - it does not make an object or array immutable; `const obj = {}` still allows `obj.name = "x"`, it only forbids `obj = {}` a second time.
+
+                    Arrow functions (`(x) => x * 2`) are more than shorthand for anonymous functions - they fundamentally change how `this` is resolved. A regular `function` gets its own `this`, determined entirely by *how it's called* (as a method, `obj.method()`, `this` is `obj`; called plain, `this` is `undefined` in strict mode or the global object otherwise) - this is why a regular function used as a callback (passed to `setTimeout` or an event handler) frequently loses the `this` you expected, a constant source of bugs before arrow functions existed. An arrow function has **no `this` of its own** at all - it lexically captures `this` from the enclosing scope at the point it's defined, exactly like any other variable a closure captures. That makes arrow functions the natural choice for callbacks nested inside a method where you want `this` to keep referring to the surrounding object, without the older workarounds of `const self = this;` or `.bind(this)`. The tradeoff: an arrow function assigned directly as an object's own method won't see that object as `this`, and arrow functions can't be used as constructors.
+
+                    Destructuring lets you unpack values out of arrays or properties out of objects directly into named bindings in one expression, instead of accessing them positionally or via repeated property lookups. Array destructuring (`const [first, second] = items;`) is positional; object destructuring (`const { name, age } = user;`) is by property name, and can rename (`const { name: userName } = user;`) or supply defaults (`const { role = "guest" } = user;`) inline. The **spread** operator (`...`) expands an iterable or object's own properties into a new array/object literal or a function call's argument list - `[...arr1, ...arr2]` concatenates, `{ ...defaults, ...overrides }` shallow-merges objects with later keys winning, and `Math.max(...numbers)` spreads an array into individual arguments. The **rest** pattern uses the identical `...` syntax in the opposite direction - gathering remaining elements/properties into a new array/object - in a destructuring target (`const [head, ...tail] = items;`) or a function parameter list (`function sum(...nums) { }`), collecting any number of trailing arguments into a real array, unlike the old `arguments` object it replaces.
+
+                    Template literals, delimited with backticks instead of quotes, allow embedded expressions via `${ }` - string interpolation without ungainly `+` concatenation - and they can span multiple lines literally, with embedded newlines preserved as-is, something plain quoted strings can't do without explicit escape sequences. They're also the basis for tagged templates (a function placed immediately before the backticks receives the literal's string pieces and interpolated values separately), which is how libraries like styled-components parse CSS-in-JS.
+
+                    Modern JavaScript has a standardized, static module system: **ES modules**, using `export` (`export function helper() {}`, `export default class Widget {}`) and `import` (`import { helper } from "./utils.js";`). Because ES module imports/exports are declared at the top level and resolved statically before any code runs, tools can determine the entire dependency graph without executing anything, which is what enables **tree-shaking** - bundlers can strip exports that are never imported anywhere. This differs from Node's older, still widely-used **CommonJS** system (`const utils = require("./utils.js");`, `module.exports = Widget;`), where `require` is a normal function call that can appear anywhere at runtime - conditionally, inside an `if`, even dynamically computed - which is flexible but means the module graph can only truly be known by actually running the code, a fundamentally dynamic system. Node supports both today, and browsers natively support ES modules, but the two are not directly interchangeable - interop between them is a genuine, still-current source of tooling friction.
+
+                    JavaScript runs on a **single thread** with one **call stack** - only one piece of JavaScript code executes at any instant. Anything that would otherwise block that thread (a timer, a network request) is instead handed off to the runtime environment, and when it completes, the corresponding callback is queued rather than run immediately, because the call stack has to be empty first. There are two queues, and the distinction matters: the **microtask queue** holds Promise callbacks (`.then`/`.catch`/`.finally` continuations and `await` continuations), while the **task queue** (macrotask queue) holds things like `setTimeout` callbacks, I/O callbacks, and UI events. After every task finishes and the call stack empties, the **entire microtask queue drains completely** - every microtask queued so far, plus any new ones those microtasks queue - before the event loop moves on to even one task from the task queue. That ordering is exactly why a `Promise.resolve().then(...)` scheduled after a `setTimeout(fn, 0)` still runs before that timeout's callback, even though the timeout was scheduled first. A **Promise** represents a value that will exist eventually (or an error that will occur eventually), in one of three states: pending, fulfilled, or rejected. `async`/`await` is **syntax sugar over Promises**, not a different mechanism: an `async function` always returns a Promise, and `await` pauses that function's execution - without blocking the single JS thread, control returns to the event loop - until the awaited Promise settles, then resumes with its value or throws its rejection. This looks nearly identical to C#'s `async`/`await` by deliberate design, but the underlying concurrency model is fundamentally different. C#'s `async`/`await` is built on a **real thread pool**: awaiting an I/O-bound `Task` frees the current thread to do other work, continuations can genuinely resume on a different pooled thread, and true CPU-bound parallelism across cores is possible via `Task.Run`/`Parallel`. JavaScript has **no thread pool for your code** - there is exactly one thread running your JS, ever (ignoring Web Workers, which are separate isolated contexts, not a shared pool) - so `async`/`await` in JS is purely about not blocking that one thread while waiting, never about running callback logic on multiple cores at once.
+                    """, 1),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **var vs let/const**
+
+                    - `var` - function-scoped, hoisted (reads as `undefined` before its line), no temporal dead zone
+                    - `let`/`const` - block-scoped, fresh binding per block/loop iteration, temporal dead zone (error if used before declaration)
+                    - `const` - the binding can't be reassigned; does NOT make objects/arrays immutable
+
+                    **Arrow functions vs regular functions**
+
+                    - Regular `function` - `this` is determined by the call site (`obj.method()`, plain call, etc.)
+                    - Arrow function - no own `this`; lexically captures `this` from the enclosing scope
+                    - Arrow functions can't be constructors or object methods that rely on the object as `this`
+
+                    **Destructuring & spread/rest**
+
+                    - Array destructuring - positional: `const [a, b] = arr;`
+                    - Object destructuring - by name, with renaming/defaults: `const { x: y = 1 } = obj;`
+                    - Spread (`...`) - expands: `[...a, ...b]`, `{ ...a, ...b }`, `fn(...args)`
+                    - Rest (`...`) - gathers: `const [head, ...tail] = arr;`, `function f(...args) {}`
+
+                    **Template literals**
+
+                    - Backtick strings with `${expr}` interpolation and real multi-line strings
+                    - Tagged templates - a function processes the literal's pieces/values separately
+
+                    **ES modules vs CommonJS**
+
+                    - ESM - `export`/`import`, statically analyzable -> enables tree-shaking
+                    - CommonJS - `require`/`module.exports`, dynamic (`require` is a normal function call)
+                    - Node supports both; browsers natively support ESM via `<script type="module">`
+
+                    **Event loop**
+
+                    - One thread, one call stack
+                    - Microtask queue (Promise `.then`/`await` continuations) fully drains before each next task
+                    - Task/macrotask queue - `setTimeout`, I/O, UI events
+                    - `async`/`await` is syntax sugar over Promises - pauses the function, doesn't block the thread
+                    - JS: single thread, no thread pool. C#: real thread pool, true multi-core parallelism possible
+                    """, 2),
+                Block(BlockType.CodeSnippet, "Scoping, this-binding, Destructuring, Modules, and the Event Loop", BodyFormat.PlainText, """
+                    // --- var's function-scoping/hoisting footgun vs let's block scoping ---
+                    function demoVarFootgun() {
+                      for (var i = 0; i < 3; i++) {
+                        setTimeout(() => console.log("var i:", i), 0); // logs 3, 3, 3 - one shared `i`
+                      }
+                      for (let j = 0; j < 3; j++) {
+                        setTimeout(() => console.log("let j:", j), 0); // logs 0, 1, 2 - fresh `j` per iteration
+                      }
+                    }
+
+                    // --- Arrow functions and `this` ---
+                    class Counter {
+                      count = 0;
+
+                      incrementWithRegularFunction() {
+                        setTimeout(function () {
+                          // `this` here is NOT the Counter instance - lost because of how the callback is called
+                          // this.count++; // would fail or reference the wrong `this`
+                        }, 100);
+                      }
+
+                      incrementWithArrow() {
+                        setTimeout(() => {
+                          this.count++; // arrow function has no own `this` - lexically captures Counter's `this`
+                        }, 100);
+                      }
+                    }
+
+                    // --- Destructuring, spread, and rest ---
+                    const [first, second, ...restOfItems] = ["a", "b", "c", "d"];
+                    const { name, role = "guest", ...otherFields } = { name: "Priya", age: 31 };
+                    const merged = { ...{ theme: "dark" }, ...{ theme: "light", locale: "en-US" } }; // theme: "light" wins
+
+                    // --- Template literals ---
+                    const summary = `${name} has role "${role}" and ${restOfItems.length} extra items.`;
+
+                    // --- ES modules (top-level, statically analyzable) ---
+                    // export function formatCurrency(amount) { return `$${amount.toFixed(2)}`; }
+                    // import { formatCurrency } from "./format.js";
+
+                    // --- CommonJS equivalent (dynamic - require is a normal function call) ---
+                    // module.exports = { formatCurrency };
+                    // const { formatCurrency } = require("./format.js");
+
+                    // --- Event loop: synchronous -> microtasks (Promises) -> macrotasks (setTimeout) ---
+                    console.log("1: synchronous");
+                    setTimeout(() => console.log("4: macrotask (setTimeout)"), 0);
+                    Promise.resolve().then(() => console.log("3: microtask (Promise.then)"));
+                    console.log("2: synchronous");
+                    // Actual output order: 1, 2, 3, 4 - all microtasks drain before the next macrotask
+
+                    // --- async/await is sugar over Promises ---
+                    async function fetchUserSummary(userId) {
+                      const response = await fetch(`/api/users/${userId}`); // pauses here; the thread is free meanwhile
+                      const user = await response.json();
+                      return `${user.name} (${user.email})`;
+                    }
+                    """, 3, language: "javascript"),
+                Block(BlockType.Diagram, "The Event Loop: Call Stack, Microtasks, and Macrotasks", BodyFormat.AsciiArt, """
+                    Call Stack (single thread - one thing runs at a time)
+                       |
+                       v
+                    [synchronous code runs first, top to bottom]
+                       |
+                       v
+                    Call stack empties
+                       |
+                       v
+                    +-------------------------------+
+                    | Microtask queue (drain FULLY)  |  <- Promise .then/.catch/.finally, await continuations
+                    +-------------------------------+
+                       |  every microtask, plus any NEW ones those microtasks queue, runs first
+                       v
+                    +-------------------------------+
+                    | Task / macrotask queue         |  <- setTimeout, setInterval, I/O, UI events
+                    | (run ONE, then re-check        |
+                    |  microtasks before the next)   |
+                    +-------------------------------+
+
+                    Promise.resolve().then(cb)  -> cb runs in the MICROTASK queue
+                    setTimeout(cb, 0)           -> cb runs in the MACROTASK queue
+                    => the .then callback always runs before the setTimeout callback,
+                       even though setTimeout was scheduled first with a 0ms delay
+                    """, 4),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Default to `const` for everything, switching to `let` only for bindings you genuinely need to reassign - never reach for `var` in new code; its function-scoping and hoisting are legacy behavior kept only for backward compatibility. Prefer arrow functions for callbacks and anything nested inside a method that needs the surrounding `this` (event handlers, `setTimeout` callbacks, array method callbacks like `.map`/`.filter`), and reserve regular `function` declarations for real methods and anything that needs its own dynamic `this` or needs to be used as a constructor.
+
+                    Use object/array destructuring at function boundaries to make the shape of what a function expects self-documenting, and prefer named exports over a single default export for anything with more than one thing to expose, since named exports are what makes tree-shaking and IDE auto-import/rename actually effective.
+                    """, 5),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    A very common interview question is "what does this code log" for a loop with `setTimeout` inside a `var` loop versus a `let` loop - be ready to explain not just the observed output but *why*: `var` shares one function-scoped binding across every iteration, so every deferred callback sees whatever `i` ended up being after the loop finished, while `let` creates a fresh binding per iteration. An equally common one is "is JavaScript single-threaded, and if so how does async code work at all" - the correct shape of the answer is the event loop: one call stack, work handed off to the runtime, callbacks queued (microtasks before macrotasks) and run only when the stack is empty, not "JavaScript uses threads like Java or C#." Explicitly contrasting that with C#'s real thread-pool-backed `async`/`await` signals you understand concurrency models generally, not just one language's syntax.
+                    """, 6),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Assuming `const` makes an object or array immutable - it only locks the binding itself; `const user = { name: "A" }; user.name = "B";` is perfectly legal and a frequent source of confusion for anyone assuming `const` means "frozen." Real immutability requires `Object.freeze()` (shallow) or a deliberate immutable-update pattern.
+
+                    Another common one: using a regular `function` as a callback where the surrounding `this` was expected to carry through, then being confused when `this` turns out to be `undefined` or the wrong object - this is exactly the bug arrow functions were designed to eliminate. And assuming `setTimeout(fn, 0)` runs "immediately" or before other pending work - it still goes through the macrotask queue and always runs after the current synchronous code and the *entire* microtask queue have finished, no matter how small the delay.
+                    """, 7),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    `var`'s function scoping is like a whiteboard shared by an entire office floor - anyone on any team can read or overwrite the same note, no matter which meeting room they're actually sitting in; `let`/`const` giving each block its own binding is like each meeting room getting its own private whiteboard that gets erased when the meeting ends. Hoisting is like a memo that's technically been distributed to everyone's inbox the moment the workday starts, even though nobody's actually written anything on it yet - ask before it's filled in and you get a blank page (`undefined`), not "no such memo."
+
+                    The event loop is a single chef in a kitchen (one thread) who never actually multitasks mid-dish - when a dish needs to sit in the oven (a network call, a timer), the chef sets a timer and moves on to the next ticket, only returning to finish that dish once it's ready. The microtask queue is the chef's own "finish this immediately when you get a free second" sticky notes, always handled before pulling the next ticket (macrotask) from the rack - exactly why a sticky note left just now gets handled before an order that's been sitting on the rack longer.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "Why does a for (var i = 0; ...) { setTimeout(() => console.log(i)); } loop typically log the loop's final value on every iteration, while the same loop written with let logs each iteration's own value?",
+                    "var is function-scoped, so every iteration shares the same single binding, and by the time the deferred callbacks run, that shared i already holds its final post-loop value. let creates a fresh, block-scoped binding for each iteration, which each closure captures independently.",
+                    [
+                        new QuizOptionSeed("var is function-scoped, so every iteration shares one binding, while let creates a fresh block-scoped binding per iteration that each closure captures independently", true),
+                        new QuizOptionSeed("let runs faster than var, so its callbacks fire before the loop finishes", false),
+                        new QuizOptionSeed("setTimeout behaves differently depending on which keyword declared the loop variable", false),
+                        new QuizOptionSeed("var can only be used inside functions declared with the function keyword, not in loops", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "After the current synchronous code finishes and the call stack is empty, what does the JavaScript event loop do next?",
+                    "It fully drains the microtask queue - including any new microtasks queued by ones already running - before running even a single callback from the task/macrotask queue. This is why a Promise.then callback always runs before a setTimeout callback, even one scheduled with a 0ms delay.",
+                    [
+                        new QuizOptionSeed("It fully drains the microtask queue (e.g. Promise .then continuations) before running even one callback from the task/macrotask queue (e.g. setTimeout)", true),
+                        new QuizOptionSeed("It picks whichever queued callback was registered with the shortest delay, regardless of which queue it's in", false),
+                        new QuizOptionSeed("It runs one microtask and one macrotask alternately, one at a time", false),
+                        new QuizOptionSeed("It spawns a new OS thread to run the next queued callback in parallel", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("let - JavaScript | MDN", "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/let", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("The event loop - JavaScript | MDN", "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Execution_model", LinkType.OfficialDocs),
+            ]);
+
+        var lesson1Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson1.Slug,
+        [
+            "Write a for loop using var with a setTimeout callback inside it, then rewrite it with let, and confirm for yourself the different logged output",
+            "Convert a regular function used as an event/array callback to an arrow function and observe how `this` behaves differently",
+            "Write a small script with a synchronous console.log, a setTimeout(fn, 0), and a Promise.resolve().then(fn), and predict the log order before running it",
+        ]);
+
+        var lesson2 = BuildLesson(
+            slug: "typescript-static-typing-for-javascript",
+            title: "TypeScript: Static Typing for JavaScript",
+            summary: "Why TypeScript exists and what problem it solves, that TypeScript is not a separate language that runs directly - it compiles down to plain JavaScript with all types erased - basic types and inference, interfaces versus type aliases, generics (and how they compare to C#'s reified generics), and structural typing versus C#'s nominal typing.",
+            estimatedMinutes: 45,
+            objectives:
+            [
+                "Explain what problem TypeScript solves - catching entire categories of bugs at compile time that plain JavaScript only surfaces at runtime, if at all",
+                "Explain that TypeScript compiles down to plain JavaScript and that there is no 'TypeScript runtime' - types are erased before code ever executes",
+                "Use basic types, type inference, interfaces, and type aliases, and explain when an interface is preferable to a type alias",
+                "Write a generic TypeScript function, and contrast TypeScript's generics and structural typing with C#'s generics and nominal typing",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    JavaScript is **dynamically typed**: a variable's type is determined at runtime by whatever value currently happens to be assigned to it, and nothing checks, before the code runs, whether a function is being called with the right kind of argument, whether an object actually has the property being accessed, or whether a value that's supposed to be a number is actually a string. A typo in a property name (`user.naem`), passing an object where an array was expected, or a function that can return `undefined` under some code path - these compile and run in plain JavaScript, and either throw at runtime whenever that exact line finally executes in production, or silently produce the wrong result with no error at all. **TypeScript** exists to catch that entire category of bug earlier, at edit/build time, by adding an optional static type system on top of JavaScript: you (or type inference) declare what shape a variable, parameter, or return value should have, and a type checker verifies every usage against that shape before a single line ever executes, flagging mismatches as compile errors instead of runtime surprises a user or a test discovers later.
+
+                    TypeScript is **not a separate language that runs directly** - there is no such thing as a browser or Node.js process executing `.ts` files, and no "TypeScript runtime" anywhere in the stack. TypeScript is a strict **superset** of JavaScript: every valid JavaScript program is already valid TypeScript, and the TypeScript compiler (`tsc`, or a transpiler like Babel/esbuild/swc configured to strip types) reads `.ts`/`.tsx` source, checks it against the type system, and then **emits plain `.js`** with every type annotation, interface, and generic parameter stripped out entirely - this is called **type erasure**. The JavaScript engine only ever sees and executes that emitted, type-free JavaScript; it has no awareness types were ever there. A direct consequence: a "TypeScript error" is always a compile-time (or editor-time, via the language server) event, never something that can throw at runtime the way a JavaScript `TypeError` can.
+
+                    TypeScript's basic types cover the same ground JavaScript's runtime values do - `string`, `number`, `boolean`, arrays (`string[]` or `Array<string>`), tuples (`[string, number]` - a fixed-length array where each position has its own type), and union types (`string | number` - a value that could be either), plus special types `any` (opts a value out of type checking entirely - use sparingly) and `unknown` (a safer "could be anything" that forces a check/narrowing before you can use it). Critically, you rarely have to annotate everything by hand: TypeScript's **inference** figures out most types on its own from context - `const count = 3;` is inferred as `number` without writing `: number`, and a function's return type is inferred from its `return` statements unless annotated explicitly. Annotations matter most at boundaries - function parameters (which can't be inferred from a call site the compiler hasn't seen yet) and exported/public API surfaces, where an explicit, deliberate type is worth the extra text.
+
+                    Both `interface` and `type` can describe an object's shape, and for plain object shapes they're often interchangeable. The real differences: an `interface` supports **declaration merging** - defining the same interface name twice merges the members into one - which is exactly how library type definitions can be extended by consumers, and interfaces extend one another with `extends` in a way that mirrors familiar inheritance-style thinking. A `type` alias cannot be reopened once declared, but is strictly more flexible in what it can name - it can alias a union (`type Id = string | number;`), an intersection (`type Employee = Person & { salary: number };`), a tuple, or a function signature, none of which `interface` can express directly. The practical convention: prefer `interface` for object shapes representing a public API a consumer might reasonably want to extend, and reach for `type` when you need a union, an intersection, or anything besides a plain object shape.
+
+                    TypeScript **generics** let a function, interface, or type be parameterized over a type the caller supplies, exactly like C#'s `List<T>` or a generic method `T Max<T>(T a, T b)` - `function identity<T>(value: T): T { return value; }` works for any `T`, with the actual type filled in (or inferred) at the call site, giving reusability and type safety without duplicating the function per type. The concept transfers directly from C#, but two real differences matter. First, **erasure**: TypeScript generics exist only at compile time and vanish completely in the emitted JavaScript - there's no object at runtime carrying its type parameter around - while C# generics are **reified**, meaning the runtime genuinely knows a `List<string>` is different from a `List<int>`, and reflection can inspect that at runtime; TypeScript has nothing equivalent to inspect, because by runtime the type information simply doesn't exist anymore. Second, **variance**: C# lets you explicitly mark an interface's type parameter `in`/`out` to declare it contravariant/covariant, strictly enforced by the compiler; TypeScript's structural type system makes compatibility checks based on shape rather than a formal variance declaration, which is more permissive in places a C# developer might expect a hard compile error.
+
+                    The most genuinely surprising difference for someone coming from C# is **structural typing**. TypeScript doesn't ask "did this class explicitly declare it implements some interface?" - it asks "does this value's *shape*, which properties it has and what types they are, satisfy what the interface requires?" A plain object literal with a `name: string` and `age: number`, with zero mention of any interface anywhere, is perfectly assignable to a variable typed as an interface requiring those fields; two entirely unrelated interfaces with identical member lists are considered the same type as far as assignability goes. This is often called **duck typing at the type level**. C#, by contrast, is **nominally typed**: a class is only compatible with an interface if it explicitly declares it (or the interface is otherwise formally implemented) - having every matching method and property is not enough on its own; the declared relationship is what the compiler checks. In TypeScript, a function expecting a `{ name: string }` parameter happily accepts any object with a compatible `name` field, including ones with *extra* properties and no formal relationship to any declared type at all - something with no equivalent in C#'s type system.
+                    """, 1),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Why TypeScript**
+
+                    - JS is dynamically typed - typos, wrong argument types, missing null checks surface only at runtime (or not at all)
+                    - TS adds an optional static type system checked before code runs, catching that whole category of bug at compile/edit time
+
+                    **TS is not a runtime**
+
+                    - `tsc` (or Babel/esbuild/swc) compiles `.ts` -> plain `.js`; types are fully erased in the emitted output
+                    - No browser or Node process ever executes TypeScript directly - there's no such thing as a "TypeScript runtime error"
+
+                    **Basic types & inference**
+
+                    - `string`, `number`, `boolean`, `string[]`/`Array<string>`, tuples `[string, number]`, unions `string | number`
+                    - `any` opts out of checking entirely; `unknown` forces a check/narrowing before use
+                    - Inference fills in most types automatically; annotate function parameters and public API boundaries explicitly
+
+                    **Interfaces vs type aliases**
+
+                    - `interface` - supports declaration merging and `extends`; prefer for object shapes/public APIs meant to be extended
+                    - `type` - can't be reopened, but can alias unions, intersections, tuples, function signatures; use for anything beyond a plain object shape
+
+                    **Generics**
+
+                    - `function identity<T>(value: T): T` - the same concept as C#'s `List<T>`/generic methods
+                    - TS: generics erased at compile time, no runtime reification. C#: generics are reified, inspectable via reflection
+                    - TS variance falls out of structural compatibility; C# variance is explicit (`in`/`out`) and strictly enforced
+
+                    **Structural vs nominal typing**
+
+                    - TS - an object is assignable if its *shape* matches, no `implements` declaration required (structural typing / "duck typing")
+                    - C# - a class must explicitly declare it implements an interface to be assignable to it (nominal typing)
+                    """, 2),
+                Block(BlockType.CodeSnippet, "Types, Inference, Interfaces vs Type Aliases, Generics, and Structural Typing", BodyFormat.PlainText, """
+                    // --- Basic types and inference ---
+                    let username: string = "priya"; // explicit annotation
+                    let retryCount = 3; // inferred as `number` - no annotation needed
+                    let id: string | number = "user_42"; // union type - could be either
+
+                    const rawInput: unknown = JSON.parse('{"role":"admin"}');
+                    // rawInput.role would be a compile error - `unknown` forces a check first
+                    if (typeof rawInput === "object" && rawInput !== null && "role" in rawInput) {
+                      console.log((rawInput as { role: string }).role); // narrowed, now safe to use
+                    }
+
+                    // --- interface vs type alias ---
+                    interface User {
+                      name: string;
+                      age: number;
+                    }
+                    interface User { // declaration merging - only interfaces can do this
+                      isActive: boolean;
+                    }
+
+                    type Id = string | number; // a union - `interface` cannot express this directly
+                    type Employee = User & { salary: number }; // an intersection
+
+                    // --- Generics: same idea as C#'s List<T> / generic methods ---
+                    function firstElement<T>(items: T[]): T | undefined {
+                      return items[0];
+                    }
+                    const firstName = firstElement<string>(["Priya", "Sam"]); // string | undefined
+
+                    // --- Structural typing: shape matters, not a declared "implements" ---
+                    function greet(person: { name: string }): string {
+                      return `Hello, ${person.name}!`;
+                    }
+                    const merged: User = { name: "Priya", age: 31, isActive: true }; // merged interface from above
+                    greet(merged); // fine - `merged` has a compatible `name` field
+                    greet({ name: "Anonymous", extra: "ignored" }); // also fine - extra fields don't break the match
+
+                    // No class anywhere declares "implements Greetable" - TypeScript never asked for one.
+                    // In C#, greet's parameter would need a type that formally implements an interface
+                    // exposing Name - a plain anonymous object could never satisfy it.
+                    """, 3, language: "typescript"),
+                Block(BlockType.Diagram, "From TypeScript Source to Running JavaScript: Where Types Live and Die", BodyFormat.AsciiArt, """
+                    your source code                     compiler                       what actually runs
+                    +----------------------+      +-----------------------+      +--------------------------+
+                    | app.ts                |      | tsc (type-checks,      |      | app.js                   |
+                    | interface User {...}  | ---> | then EMITS plain JS,   | ---> | (no interfaces, no       |
+                    | function f<T>(x: T)   |      | stripping every type)  |      |  generics, no type       |
+                    | { ... }               |      |                        |      |  annotations left at all)|
+                    +----------------------+      +-----------------------+      +--------------------------+
+                                                           |
+                                                           v
+                                             compile-time TYPE ERROR here
+                                             (caught before app.js is even produced -
+                                              never becomes a runtime exception)
+
+                    Browser / Node only ever load and execute app.js.
+                    There is no "TypeScript runtime" anywhere in this picture.
+                    """, 4),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Turn on strict mode (`"strict": true` in `tsconfig.json`) from the start of a project rather than adding it later - it bundles the checks (like disallowing implicit `any` and enforcing null/undefined checks) that catch the most real bugs, and retrofitting it onto a codebase that grew up without it is far more painful than starting with it on. Let inference do the work for local variables and rely on explicit annotations at boundaries - function parameters, return types on exported/public functions, and object shapes crossing an API - since that's where the compiler has no call-site context to infer from and where a clear contract matters most.
+
+                    Reach for `unknown` instead of `any` for genuinely unknown external data (parsed JSON, an API response) - `any` silently disables checking for anything it touches, while `unknown` forces you to narrow the type before using it, keeping the safety net intact.
+                    """, 5),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    When asked "what is TypeScript," resist answering "a new language" - the precise framing is "a typed superset of JavaScript that compiles down to plain JavaScript, with all type information erased before runtime." That single sentence signals you understand both what problem it solves and that it introduces zero new runtime behavior of its own. If asked to compare it to a statically typed language you already know, lead with structural versus nominal typing - it's the difference most likely to trip up someone who's only reasoned about one of the two type systems, and naming it directly shows real comparative understanding rather than surface familiarity with TypeScript syntax alone.
+                    """, 6),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Reaching for `any` the moment a type gets slightly inconvenient to express - this quietly disables checking for that value and everything downstream that touches it, defeating the entire reason to use TypeScript in the first place; `unknown` combined with a narrowing check is almost always the safer choice for genuinely uncertain data. Another frequent one: assuming a class needs to declare it implements a TypeScript interface for objects of that class to satisfy it, out of habit from C#'s nominal typing - in TypeScript, any object whose shape matches is already compatible, with or without a declared implementation.
+
+                    And on the tooling side: expecting a TypeScript type error to be catchable at runtime the way a real exception can be - it can't, because by the time code actually executes, every type annotation has already been stripped out and the type checker isn't running anymore.
+                    """, 7),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    TypeScript is like an architect's blueprint reviewed and checked for structural soundness before a single brick is laid - the review process (the type checker) only ever happens on paper, and once construction starts, the finished building (the emitted JavaScript) has no blueprint annotations nailed to its walls; nobody inspects rooms against blueprint labels at runtime, because there's nothing left to check by then. An interface is like a job posting anyone can apply to as long as their resume genuinely matches the listed requirements, no matter which company they've worked for or what titles they've formally held - that's structural typing. C#'s nominal typing is closer to a private members-only club: you must have been formally inducted to get in, no matter how qualified you actually are - having the right skills alone doesn't grant entry without the formal membership.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "Which statement correctly describes how TypeScript relates to JavaScript at runtime?",
+                    "TypeScript is compiled (or transpiled) down to plain JavaScript, with all type annotations, interfaces, and generic parameters erased in the emitted output. Browsers and Node.js only ever execute that plain JavaScript - there is no separate 'TypeScript runtime.'",
+                    [
+                        new QuizOptionSeed("TypeScript compiles down to plain JavaScript, with all type annotations, interfaces, and generic parameters erased - there is no separate 'TypeScript runtime' that executes .ts files directly", true),
+                        new QuizOptionSeed("Browsers and Node.js execute .ts files directly, using type information to optimize execution", false),
+                        new QuizOptionSeed("TypeScript type errors can be caught at runtime with try/catch, just like JavaScript exceptions", false),
+                        new QuizOptionSeed("TypeScript replaces the JavaScript engine with a statically typed virtual machine", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "A TypeScript function expects a parameter typed { name: string }. An object literal with a name field and several unrelated extra properties, with no class or interface implementation declared anywhere, is passed in and the code compiles without error. Why?",
+                    "TypeScript uses structural typing: a value is assignable to a type if its shape satisfies the required members, regardless of whether it's formally declared to implement that type. This differs from C#'s nominal typing, which requires an explicit declared relationship.",
+                    [
+                        new QuizOptionSeed("TypeScript uses structural typing - a value is assignable if its shape satisfies the required members, regardless of whether it's formally declared to implement anything", true),
+                        new QuizOptionSeed("TypeScript ignores type checking for object literals specifically", false),
+                        new QuizOptionSeed("The extra properties automatically get stripped off before the type check runs", false),
+                        new QuizOptionSeed("TypeScript inferred an implicit interface implementation from the variable's name", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Everyday Types - TypeScript", "https://www.typescriptlang.org/docs/handbook/2/everyday-types.html", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("Generics - TypeScript", "https://www.typescriptlang.org/docs/handbook/2/generics.html", LinkType.OfficialDocs),
+            ],
+            prerequisites: [lesson1]);
+
+        var lesson2Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson2.Slug,
+        [
+            "Write a small TypeScript file with an interface, compile it with tsc, and inspect the emitted .js output to confirm the interface and all type annotations are completely gone",
+            "Declare two unrelated interfaces with identical members, and confirm a value typed as one is assignable to a variable typed as the other, to see structural typing in action",
+            "Write a generic function (e.g. a firstElement<T>(items: T[])) and call it with at least two different element types to confirm it works without duplication",
+        ]);
+
+        var module = BuildModule(topicId, "frontend-javascript-and-typescript-fundamentals", "JavaScript & TypeScript Fundamentals",
+            "Modern JavaScript essentials - let/const block scoping vs var's legacy function-scoping and hoisting, arrow functions and `this`, destructuring/spread/rest, template literals, ES modules vs CommonJS, and the event loop/Promises/async-await - followed by TypeScript's static type system: why it exists, that it compiles down to plain JavaScript with no separate runtime, basic types and inference, interfaces vs type aliases, generics, and structural typing.",
+            90, [lesson1, lesson2], sortOrder: 1);
+
+        return (module, [lesson1Checklist, lesson2Checklist]);
+    }
+    private static (Module, List<ChecklistSeed>) BuildFrontendReactFundamentalsModule(int topicId)
+    {
+        var lesson1 = BuildLesson(
+            slug: "react-components-props-and-hooks",
+            title: "React Components, Props & Hooks",
+            summary: "The component model and JSX under the hood, one-way data flow through props, rendering lists correctly with keys, and the useState/useEffect hooks -- including the parallel between an effect's cleanup function and IDisposable/using.",
+            estimatedMinutes: 45,
+            objectives:
+            [
+                "Explain that JSX compiles to React.createElement calls, not literal HTML, and describe a React app as a tree of composable functions",
+                "Write a functional component that accepts props and treats them as read-only -- one-way data flow",
+                "Render a list correctly with a stable key prop and explain why using the array index as a key is a common but subtly buggy shortcut",
+                "Use useState and useEffect correctly, including the dependency array and a cleanup function, and connect that cleanup to the same problem IDisposable/using solves in C#",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    A React application is a **tree of composable functions**: each component is just a function that takes some input (`props`) and returns a description of UI, and a screen is built by nesting these functions inside one another, the same way you'd compose small methods into a larger one.
+
+                    What those functions return is written in **JSX** -- `<div className="card">{title}</div>` -- but JSX is not HTML. It's syntactic sugar that a compiler (Babel, or the TypeScript compiler) transforms into ordinary function calls: that line becomes `React.createElement("div", { className: "card" }, title)`. The angle-bracket syntax never touches the real DOM directly; it produces a plain JavaScript object describing what *should* appear, and React itself is responsible for turning that description into actual DOM nodes and updating them efficiently when it changes.
+
+                    A **functional component** takes a single `props` object as its argument and returns JSX. Props are **read-only from the child's perspective** -- a component must never reassign a prop it receives (`props.title = "x"` is a bug, not a technique). Data only flows one direction: down from parent to child via props. This is called **one-way data flow**, and it means the only way a child can ever influence its parent is if the parent handed it a *callback function* as a prop, which the child calls -- the child never reaches back up and mutates the parent's data directly.
+
+                    Rendering an array of data with `.map()` requires a `key` prop on each top-level element it produces, so React can match items across re-renders and reuse the right component instance and DOM node for the right logical item. Using the array **index** as the key is an extremely common shortcut -- it's what auto-complete suggests, and it works fine for a list that never reorders, filters, or has items inserted/removed. It quietly breaks the moment the list *does* change shape: React matches by key, not by the item's actual identity, so after a reorder, the local state and DOM previously associated with "the item at index 2" can end up attached to a completely different logical item now sitting at that same index.
+
+                    The two most foundational hooks are `useState` and `useEffect`. `useState(initialValue)` returns a `[value, setter]` pair. The `value` belongs to that specific render -- it's a snapshot, not a mutable variable -- and calling the setter does **not** mutate anything in place. It schedules React to re-render the component with the new value on the next render pass. That's why `count = count + 1` would silently do nothing visible, while `setCount(count + 1)` triggers a fresh render in which `count` is genuinely the updated value.
+
+                    `useEffect` runs a **side effect** after render: talking to something outside React's own rendering model -- a subscription, a timer, a manual event listener, logging. Its second argument, the **dependency array**, controls when it reruns: omitted entirely, it runs after every render; `[]` means it runs once, after the first render; `[someValue]` means it reruns whenever `someValue` changes between renders. If the effect sets something up, it can `return` a **cleanup function**, which React calls right before the effect runs again (if a dependency changed) and when the component unmounts -- undoing exactly what that effect set up.
+
+                    That cleanup function is solving a structurally identical problem to `IDisposable`/`using` on the C# side of this platform: something is acquired (a subscription, a timer, a database connection, a WebSocket), and it needs a matching release, or it leaks. The mechanics differ -- React calls the returned function at a well-defined point in its own render lifecycle, rather than the CLR calling `Dispose()` at the end of a `using` block -- but the shape of the problem, "clean up when you're done, no matter how you got there," is the same one you already know how to reason about.
+                    """, 1),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    A component tree is like an assembly line's org chart: each station is a small, self-contained function that takes a labeled bin of parts and outputs one sub-assembly, and those sub-assemblies compose into bigger and bigger assemblies further up the line -- nobody at any one station needs to understand the whole finished product to do their job correctly.
+
+                    Props being read-only is like a sealed work order handed down the line: the worker at each station can read what's printed on the ticket, but can't cross it out and write something different before passing it along. If the ticket genuinely needs updating, only the person who originally issued it (the parent) can print a new one.
+
+                    The `key` prop is like a coat-check tag. A tag tied to *seat number* works fine as long as nobody moves seats -- but the instant guests reshuffle, "seat 2's coat" no longer means the same guest, and the wrong coat comes back to the wrong person. A tag tied to the guest's actual name (a stable id) keeps returning the right coat no matter how the seating changes -- which is exactly the difference between keying a list by array index versus by a real data id.
+
+                    `useEffect` cleanup versus `IDisposable` is like closing out a tab at a restaurant: opening a tab is the effect acquiring something (a subscription, a timer), and however you leave -- ordering something new before you go (the effect re-running because a dependency changed) or actually leaving for good (the component unmounting) -- the tab gets closed properly first. That's the same guarantee a C# `using` block gives you around `Dispose()`, just enforced by a different runtime.
+                    """, 2),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **JSX**
+
+                    - `<div className="card">{title}</div>` compiles to `React.createElement("div", { className: "card" }, title)`
+                    - `{ }` embeds any JS *expression* inline inside JSX (not statements like `if`/`for`)
+                    - A component must return exactly one root element, or a fragment: `<>...</>`
+
+                    **Props**
+
+                    - Passed like HTML attributes: `<TaskCard title={task.title} done={task.done} />`
+                    - Read via destructuring: `function TaskCard({ title, done }) { ... }`
+                    - Treated as immutable -- never reassign a prop inside the component that received it
+
+                    **Rendering lists**
+
+                    - `items.map(item => <Row key={item.id} {...item} />)`
+                    - Key must be stable and unique among siblings -- prefer a real id, not the array index
+                    - Index-as-key is only safe for a list that never reorders, filters, or inserts/removes items
+
+                    **useState**
+
+                    - `const [count, setCount] = useState(0);`
+                    - `setCount(count + 1)` schedules a re-render -- it does not mutate `count` in place
+                    - Functional update form avoids stale values: `setCount(c => c + 1)`
+
+                    **useEffect**
+
+                    - `useEffect(() => { ...; return () => { /* cleanup */ }; }, [dep]);`
+                    - No array -> runs after every render. `[]` -> runs once, after mount. `[dep]` -> reruns when `dep` changes
+                    - The cleanup function runs before the next effect run and on unmount -- same job as `IDisposable.Dispose()`/`using`
+                    """, 3),
+                Block(BlockType.CodeSnippet, "Props, a Keyed List, and useState/useEffect Together", BodyFormat.PlainText, """
+                    function TaskList({ tasks }) {
+                      const [filter, setFilter] = useState("all");
+
+                      // useEffect: a side effect (a timer) with a matching cleanup function.
+                      useEffect(() => {
+                        const intervalId = setInterval(() => {
+                          console.log("still mounted, tasks:", tasks.length);
+                        }, 5000);
+
+                        // Cleanup: runs before this effect re-runs and when TaskList unmounts.
+                        // Same job as `using (var timer = ...)` in C# -- release what you acquired.
+                        return () => clearInterval(intervalId);
+                      }, [tasks.length]);
+
+                      const visible = filter === "all"
+                        ? tasks
+                        : tasks.filter(t => t.done === (filter === "done"));
+
+                      return (
+                        <div className="task-list">
+                          <button onClick={() => setFilter("all")}>All</button>
+                          <button onClick={() => setFilter("done")}>Done</button>
+
+                          <ul>
+                            {/* task.id, not the array index -- stays correct even if tasks reorder */}
+                            {visible.map(task => (
+                              <TaskRow key={task.id} title={task.title} done={task.done} />
+                            ))}
+                          </ul>
+                        </div>
+                      );
+                    }
+
+                    // A functional component: props in, JSX out. `props` is read-only here --
+                    // TaskRow can never reassign `title` or `done`, only read them.
+                    function TaskRow({ title, done }) {
+                      return (
+                        <li style={{ textDecoration: done ? "line-through" : "none" }}>
+                          {title}
+                        </li>
+                      );
+                    }
+                    """, 4, language: "jsx"),
+                Block(BlockType.Diagram, "One-Way Data Flow", BodyFormat.StructuredSteps, """
+                    [{"label":"Parent holds state via useState"},{"label":"Parent passes a value down as a prop"},{"label":"Child renders the read-only prop, never reassigns it"},{"label":"Child calls a callback prop it was given, in response to an event"},{"label":"Parent's setter runs -> re-render -> new props flow back down"}]
+                    """, 5),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Always key list items with a stable, unique id from your actual data (a database id, a UUID) -- never the array index -- unless the list is genuinely static and can never reorder, filter, or have items inserted/removed.
+
+                    Keep components pure with respect to their props: derive local UI state from them, but never write back into a props object. Keep a `useEffect`'s dependency array honest -- include every reactive value the effect actually reads (the `eslint-plugin-react-hooks` lint rule catches this automatically); removing a dependency just to "stop it re-running so often" hides a bug instead of fixing one. Any effect that subscribes to or opens something should return a cleanup function, so the teardown isn't left to chance -- the same discipline a `using` block enforces in C#.
+                    """, 6),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    If asked what calling a `useState` setter actually does, don't say "it updates the variable" -- say it **schedules a re-render** with the new value; the variable in the current render is a snapshot and is never mutated in place. If asked about `useEffect` cleanup, explicitly draw the parallel to `IDisposable`: "the effect acquires something -- a subscription, a timer -- and the returned function releases it, the same shape as `Dispose()` running inside a `using` block, just triggered by React's render lifecycle instead of the CLR." Naming that parallel signals you're pattern-matching a lifecycle problem across two different runtimes, not just memorizing syntax per language.
+                    """, 7),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Using the array index as `key` for a list that can reorder, get filtered, or have items inserted/removed in the middle -- React reuses component state and DOM per key, so after a reorder the wrong row can end up holding the wrong local state (an open input's cursor position, an "expanded" flag) because the index no longer identifies the same logical item.
+
+                    Mutating state directly (`tasks.push(newTask)` then calling `setTasks(tasks)`) instead of creating a new array/object (`setTasks([...tasks, newTask])`) -- React compares references to decide whether a re-render is needed, so an in-place mutation can silently fail to trigger one at all.
+
+                    Also common: forgetting the dependency array on a `useEffect` that should only run once, or omitting a value the effect actually reads -- and forgetting to return a cleanup function from an effect that subscribes to something, so it silently accumulates duplicate subscriptions or timers on every re-run.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "You render a list of comments with `<CommentRow key={index} ... />`, where index is the array index from .map(). What's the risk once the underlying list can have comments inserted, removed, or reordered?",
+                    "React uses the key to match each list item across renders and reuse its component instance (including local state and DOM) for the same key. Once the array reorders, the index no longer identifies the same logical comment, so React can attach one comment's previous state (like an open reply box) to a completely different comment.",
+                    [
+                        new QuizOptionSeed("React re-renders the entire list from scratch every time, so there's no actual risk", false),
+                        new QuizOptionSeed("React can misattach state/DOM belonging to one comment to a different comment after a reorder, since the index no longer maps to the same logical item", true),
+                        new QuizOptionSeed("The app fails to compile because array indices can't be used as keys", false),
+                        new QuizOptionSeed("It only ever affects performance, never correctness", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "A useEffect subscribes to something and returns a cleanup function. When does React actually call that cleanup function?",
+                    "React calls the cleanup function before re-running the effect (if one of its dependencies changed) and when the component unmounts. It's structurally the same 'release what you acquired' problem that IDisposable/using solves in C#, just triggered by React's render lifecycle instead of a using block.",
+                    [
+                        new QuizOptionSeed("Only when the browser tab is closed", false),
+                        new QuizOptionSeed("Before the effect re-runs due to a changed dependency, and when the component unmounts", true),
+                        new QuizOptionSeed("Never automatically -- you must call it yourself elsewhere in the component", false),
+                        new QuizOptionSeed("Immediately after the effect function runs, on every single render", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("State: A Component's Memory", "https://react.dev/learn/state-a-components-memory", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("Synchronizing with Effects", "https://react.dev/learn/synchronizing-with-effects", LinkType.OfficialDocs),
+            ]);
+
+        var lesson1Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson1.Slug,
+        [
+            "Build a component that renders a list keyed by a stable id from your data, then deliberately switch the key to the array index and reproduce the bug by reordering or filtering the list",
+            "Write a useEffect with a cleanup function for a timer or subscription, and confirm in the console that it runs both on unmount and before the effect re-runs",
+            "Explain out loud, in your own words, why calling a useState setter schedules a re-render instead of mutating a variable in place",
+        ]);
+
+        var lesson2 = BuildLesson(
+            slug: "fetching-data-routing-and-calling-your-api",
+            title: "Fetching Data, Routing & Talking to an ASP.NET Core API",
+            summary: "Calling a REST API with fetch, modeling loading/error/success state around an async request, React Router basics for a single-page app, and precisely how CORS -- and the ASP.NET Core CORS middleware -- let a React dev server talk to a Minimal API.",
+            estimatedMinutes: 45,
+            objectives:
+            [
+                "Fetch data from a REST API inside a useEffect and model loading/error/success state around that async request",
+                "Set up client-side routing with React Router: Routes/Route, useParams, and useNavigate",
+                "Explain precisely why a browser blocks a request from http://localhost:3000 to http://localhost:5081 by default, and why that enforcement happens in the browser, not the server",
+                "Explain what the ASP.NET Core AddCors/UseCors middleware actually does to allow a cross-origin request through",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    The browser's built-in `fetch` function calls a REST API and returns a Promise -- the same Promise you already know from module 1 -- that resolves to a `Response` object once the response headers arrive (not once the full body is read). You then call `response.json()`, itself another Promise, to parse the body. `axios` is a widely used third-party alternative with some ergonomic differences (it JSON-parses by default and rejects automatically on non-2xx statuses), but the underlying REST-call concepts are identical either way.
+
+                    Critically: **`fetch`'s promise only rejects on a network-level failure** -- DNS failure, connection refused, request aborted. A `404` or `500` HTTP response is still a perfectly normal, resolved `Response` object as far as the Promise is concerned. You must explicitly check `response.ok` (or `response.status`) yourself, or an error response will silently flow through your code as if the request had "succeeded."
+
+                    Because a fetch is asynchronous, a component that calls one needs to represent, at minimum, three states while the request is in flight: **loading** (request started, nothing to show yet), **error** (the request failed, or resolved but wasn't `ok`), and **success** (data arrived). This is typically modeled with a few `useState` calls (`data`, `error`, `loading`) set inside a `useEffect` that fires the request, using `try`/`catch`/`finally` around the `await` so all three states end up correct regardless of outcome -- the exact same async/await error-handling shape from module 1, just wired to component state instead of a plain variable.
+
+                    For a real single-page app, "pages" aren't separate HTML documents -- **React Router** intercepts navigation and swaps which component tree renders based on the current URL, without a full page reload. `<BrowserRouter>` wraps the whole app; `<Routes>` picks exactly one `<Route>` whose `path` matches the current URL and renders its `element`; `useParams()` reads dynamic segments out of the current URL (the `:id` in a route defined as `/tasks/:id`); `useNavigate()` returns a function to change the URL programmatically (after a successful form submission, say), rather than requiring the user to click a rendered `<Link>`.
+
+                    Now the precise mechanics of **CORS**. The browser enforces a **same-origin policy**: by default, JavaScript running on one origin (scheme + host + port -- e.g. `http://localhost:3000`, the React dev server) is not allowed to *read the response* of a request it makes to a different origin (e.g. `http://localhost:5081`, an ASP.NET Core API) -- even though the request is usually still sent, and the server still processes it and sends a response. Same host, different port, is still a different origin. Cross-Origin Resource Sharing (CORS) is the mechanism that lets a server opt back in: the server includes response headers -- most importantly `Access-Control-Allow-Origin` -- explicitly naming which origins are permitted to read its responses. The **browser**, not the server, is what actually reads that header and decides whether to hand the response body to your calling JavaScript, or block it and log a CORS error in the console instead. This is exactly what the task means by "CORS is enforced by the browser, not the server": the server always runs the endpoint and (usually) always sends a real response -- CORS failing just means the browser refuses to expose that already-received response to your script.
+
+                    On the ASP.NET Core side, this is what `builder.Services.AddCors(...)` and `app.UseCors(...)` actually do. `AddCors` registers a named policy describing which origins, HTTP methods, and headers are allowed. `UseCors("PolicyName")` -- added into the same middleware pipeline from the `building-first-minimal-api` lesson -- is what attaches the correct `Access-Control-Allow-*` headers to outgoing responses, and it's also what answers the browser's automatic **preflight** `OPTIONS` request (sent ahead of "non-simple" requests, such as ones with a `Content-Type: application/json` body) before the browser proceeds to send the real request at all. The `/api/tasks/{id:int}` minimal API endpoint built in `building-first-minimal-api` is exactly the kind of endpoint a React component here calls with `fetch` -- nothing about that endpoint's own code changes; only the middleware pipeline around it needs `UseCors` for a React dev server on a different port to be allowed to read its responses.
+                    """, 1),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    `fetch` not rejecting on a 404 is like calling a shop and being told "sorry, we don't carry that item." The phone call itself succeeded -- you got a clear answer -- it's just bad news you have to notice yourself; the call doesn't "fail" just because the answer wasn't what you wanted.
+
+                    CORS is like a courier delivering a parcel to an office building. The courier (the browser) hands your request to the building (the server), and the building actually processes it and prepares a reply -- that part always happens. But right at the door on the way back out, the courier checks the parcel for a shipping label listing which recipients are allowed to receive it (`Access-Control-Allow-Origin`). No label naming you? The courier simply doesn't hand you the parcel, even though the building already finished making it. The building never refused to do the work -- the courier at the door is the one enforcing who's allowed to receive the result, and that's exactly the browser's role in CORS.
+
+                    React Router is like a receptionist directing visitors by which elevator button they pressed, inside a building they never actually leave -- rather than making them walk outside and enter a whole new building (a full page reload) every time they want a different room.
+                    """, 2),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **fetch & request state**
+
+                    ```
+                    const [data, setData] = useState(null);
+                    const [error, setError] = useState(null);
+                    const [loading, setLoading] = useState(true);
+                    ```
+
+                    - `fetch(url)` resolves even on 404/500 -- always check `response.ok` yourself
+                    - `axios` is a common alternative -- rejects automatically on non-2xx, JSON-parses by default
+
+                    **React Router**
+
+                    - `<BrowserRouter><Routes><Route path="/tasks/:id" element={<TaskDetail />} /></Routes></BrowserRouter>`
+                    - `useParams()` -- read `:id` (etc.) out of the current URL
+                    - `useNavigate()` -- returns a function to change the URL programmatically
+
+                    **CORS**
+
+                    - Enforced by the **browser**, not the server -- the server still runs the endpoint and responds
+                    - `Access-Control-Allow-Origin` response header -- tells the browser which origins may read the response
+                    - ASP.NET Core:
+                      ```
+                      builder.Services.AddCors(options => options.AddPolicy("dev", policy =>
+                          policy.WithOrigins("http://localhost:3000").AllowAnyHeader().AllowAnyMethod()));
+                      ...
+                      app.UseCors("dev"); // must run early in the pipeline, before the endpoints that need it
+                      ```
+                    """, 3),
+                Block(BlockType.CodeSnippet, "Fetch + Loading/Error/Success + useParams/useNavigate", BodyFormat.PlainText, """
+                    import { useEffect, useState } from "react";
+                    import { useParams, useNavigate } from "react-router-dom";
+
+                    function TaskDetail() {
+                      const { id } = useParams();           // reads the :id segment from the current URL
+                      const navigate = useNavigate();
+
+                      const [task, setTask] = useState(null);
+                      const [error, setError] = useState(null);
+                      const [loading, setLoading] = useState(true);
+
+                      useEffect(() => {
+                        let ignore = false; // guards against setting state after this effect is cleaned up
+
+                        async function loadTask() {
+                          setLoading(true);
+                          setError(null);
+                          try {
+                            // Calls the exact ASP.NET Core minimal API endpoint from the
+                            // "building-first-minimal-api" lesson: app.MapGet("/api/tasks/{id:int}", ...)
+                            const response = await fetch(`http://localhost:5081/api/tasks/${id}`);
+
+                            // fetch() only rejects on a network failure -- a 404/500 still
+                            // resolves here, so response.ok must be checked explicitly.
+                            if (!response.ok) {
+                              throw new Error(`Request failed: ${response.status}`);
+                            }
+
+                            const data = await response.json();
+                            if (!ignore) setTask(data);
+                          } catch (err) {
+                            if (!ignore) setError(err.message);
+                          } finally {
+                            if (!ignore) setLoading(false);
+                          }
+                        }
+
+                        loadTask();
+                        return () => { ignore = true; }; // cleanup: ignore a late response after unmount
+                      }, [id]);
+
+                      if (loading) return <p>Loading task...</p>;
+                      if (error) return <p>Something went wrong: {error}</p>;
+
+                      return (
+                        <div>
+                          <h2>{task.title}</h2>
+                          <button onClick={() => navigate("/tasks")}>Back to all tasks</button>
+                        </div>
+                      );
+                    }
+                    """, 4, language: "jsx"),
+                Block(BlockType.Diagram, "CORS: Who's Actually Blocking the Response", BodyFormat.AsciiArt, """
+                    React dev server origin: http://localhost:3000
+                    ASP.NET Core API origin: http://localhost:5081     <- different port = different origin
+
+                    Browser                                  ASP.NET Core API
+                       |--- (preflight) OPTIONS -------------->|
+                       |<-- Access-Control-Allow-Origin: -------|   <- added by app.UseCors("dev")
+                       |     http://localhost:3000              |
+                       |                                        |
+                       | preflight allows this origin?          |
+                       |    yes -> send the real request        |
+                       |--- GET /api/tasks/1 ------------------>|
+                       |<-- 200 OK + task JSON ------------------|   <- server ALREADY ran this and responded
+                       |                                        |
+                       | browser checks Access-Control-Allow-Origin
+                       | on THIS response too, then either:
+                       |   - hands the JSON to your fetch() code, or
+                       |   - blocks it from JS and logs a CORS error
+                       |     (the server's response already happened either way)
+                    """, 5),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Always check `response.ok` (or the status code) before trusting a fetch result -- never assume "the promise resolved" means "the request succeeded." Guard against setting state after a component unmounts or its effect re-runs (an `ignore` flag or `AbortController`), which matters most for a route param that can change quickly, like `useParams()`'s `id` here.
+
+                    Scope CORS policies to exactly the origins you actually need (`WithOrigins("http://localhost:3000")`), not a blanket `AllowAnyOrigin()`, and keep the allowed-origin list environment-specific -- a local dev URL in development, the real deployed frontend URL in production -- rather than hardcoded once. Call `app.UseCors(...)` in the correct place in the middleware pipeline (generally after routing, before the endpoints that need it) -- like any ASP.NET Core middleware, its position in `Program.cs` determines whether it actually runs before the response is finalized.
+                    """, 6),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    If asked "why did this fetch call get blocked by CORS," the strongest answer names precisely who's doing the blocking: the browser's same-origin policy, enforced client-side, *after* the server already processed the request and sent a response. `AddCors`/`UseCors` don't change the server's willingness to answer -- they change which `Access-Control-Allow-Origin` value the server includes, which the browser then reads to decide whether your JS is allowed to see that response. It's also worth stating plainly that `fetch()` rejects only on network failure, so a demo that "handles errors" needs an explicit `response.ok` check, not just a try/catch around the call.
+                    """, 7),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Assuming a caught exception from `try { await fetch(...) } catch` means "the server returned an error" -- it actually means the network call itself failed. An HTTP 404 or 500 still lands as a normal resolved response inside the `try` block and needs an explicit `response.ok` check to be treated as a failure.
+
+                    Treating a CORS error in the browser console as a backend bug to fix with server-side error handling -- it's neither an exception nor a bug in the endpoint's logic; the endpoint likely already ran and returned 200. The fix is entirely `AddCors`/`UseCors` configuration, not the handler code.
+
+                    Forgetting `app.UseCors(...)` in the middleware pipeline, or placing it in the wrong order relative to routing/authorization/endpoint mapping, so the right headers never get attached even though a policy was registered with `AddCors`. Also common: wiring up React Router but never rendering a loading state, so navigating to a route with a slow fetch shows a blank flash before data arrives.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "A React component wraps `await fetch(url)` in a try/catch to 'handle errors.' The API returns a 404. What actually happens?",
+                    "fetch()'s promise only rejects on a network-level failure (DNS failure, connection refused, and similar). An HTTP 404 or 500 is still a resolved Response object, so it lands in the try block, not the catch block, unless the code explicitly checks response.ok (or status) and throws itself.",
+                    [
+                        new QuizOptionSeed("The catch block runs automatically, because 404 is an HTTP error", false),
+                        new QuizOptionSeed("fetch resolves normally with a Response whose ok is false; the catch block only runs if response.ok is checked and an error is thrown manually, or the network itself fails", true),
+                        new QuizOptionSeed("The browser automatically redirects the page to a 404 page", false),
+                        new QuizOptionSeed("The fetch call throws a compile-time error", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "A request from the React dev server (http://localhost:3000) to an ASP.NET Core API (http://localhost:5081) is blocked with a CORS error in the browser console, even though the Network tab shows the server returned 200 OK with the correct JSON. What does this tell you?",
+                    "CORS is enforced by the browser, not the server -- the server already ran the endpoint and responded. The browser is withholding that already-received response from the page's JavaScript because it didn't include an Access-Control-Allow-Origin header permitting http://localhost:3000. The fix is AddCors/UseCors on the server, but the failure itself happens client-side, after the real work is already done.",
+                    [
+                        new QuizOptionSeed("The ASP.NET Core endpoint threw an exception before returning any data", false),
+                        new QuizOptionSeed("The server already processed the request and responded, but the browser is withholding that response from the page's JS because of a missing/mismatched Access-Control-Allow-Origin header", true),
+                        new QuizOptionSeed("The request never actually reached the server", false),
+                        new QuizOptionSeed("CORS errors mean the JSON body returned was malformed", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("CORS (Cross-Origin Resource Sharing)", "https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("Using the Fetch API", "https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API/Using_Fetch", LinkType.OfficialDocs),
+            ],
+            prerequisites: [lesson1]);
+
+        var lesson2Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson2.Slug,
+        [
+            "Build a component that fetches from a real (or mock) endpoint inside a useEffect, tracking loading/error/success state, and confirm it checks response.ok rather than relying on try/catch alone",
+            "Add react-router-dom's Routes/Route to render a details view for one item, read its id via useParams, and navigate to it programmatically with useNavigate",
+            "On the ASP.NET Core side, add AddCors/UseCors allowing http://localhost:3000, confirm a request from the React dev server succeeds, then remove UseCors and confirm the Network tab still shows a 200 response even though the browser now blocks it from your JS",
+        ]);
+
+        var module = BuildModule(topicId, "react-fundamentals-and-calling-your-api", "React Fundamentals & Calling Your API",
+            "The React component model, JSX, props and one-way data flow, list rendering with keys, and the useState/useEffect hooks -- followed by calling a REST API with fetch, handling loading/error/success states, React Router basics, and precisely how CORS and the ASP.NET Core CORS middleware let a React dev server talk to a Minimal API.",
             90, [lesson1, lesson2], sortOrder: 2);
 
         return (module, [lesson1Checklist, lesson2Checklist]);

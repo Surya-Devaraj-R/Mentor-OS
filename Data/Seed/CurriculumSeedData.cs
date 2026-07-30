@@ -122,6 +122,16 @@ public static class CurriculumSeedData
                 CreatedUtc = now,
                 UpdatedUtc = now,
             },
+            new Topic
+            {
+                Slug = "frontend",
+                Title = "Frontend",
+                Description = "JavaScript, TypeScript, and React for building modern web frontends that talk to your API.",
+                IconKey = "course",
+                SortOrder = 12,
+                CreatedUtc = now,
+                UpdatedUtc = now,
+            },
         ];
     }
 }
