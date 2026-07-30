@@ -30,9 +30,11 @@ public static class CurriculumContentSeedData
             BuildCSharpIteratorsAndLinqInternalsModule(topicIdBySlug["csharp"]),
             BuildCSharpDesignPatternsModule(topicIdBySlug["csharp"]),
             BuildCSharpDependencyInjectionAndModernSyntaxModule(topicIdBySlug["csharp"]),
+            BuildCSharpFileIoAndRegexModule(topicIdBySlug["csharp"]),
             BuildDotNetModule(topicIdBySlug["dotnet"]),
             BuildDotNetProductionReadinessModule(topicIdBySlug["dotnet"]),
             BuildDotNetScalingAndResilienceModule(topicIdBySlug["dotnet"]),
+            BuildDotNetIdentityAndMessagingModule(topicIdBySlug["dotnet"]),
             BuildDsaModule(topicIdBySlug["dsa"]),
             BuildDsaGraphsModule(topicIdBySlug["dsa"]),
             BuildDsaLinkedListsAndHeapsModule(topicIdBySlug["dsa"]),
@@ -4257,6 +4259,377 @@ public static class CurriculumContentSeedData
         return (module, [lesson1Checklist, lesson2Checklist]);
     }
 
+    private static (Module, List<ChecklistSeed>) BuildCSharpFileIoAndRegexModule(int topicId)
+    {
+        var lesson1 = BuildLesson(
+            slug: "file-io-and-streams-in-csharp",
+            title: "File I/O & Streams",
+            summary: "The Stream abstraction that unifies files, sockets, and memory buffers, FileStream/StreamReader/StreamWriter vs. the convenience File.* static methods, sync vs. async file I/O, and why buffering is what keeps file reads from being catastrophically slow.",
+            estimatedMinutes: 45,
+            objectives:
+            [
+                "Explain why Stream is the common base class behind FileStream, NetworkStream, and MemoryStream, and what that shared abstraction buys calling code",
+                "Choose between the low-level Stream API (FileStream/StreamReader/StreamWriter) and the convenience File.* static methods for a given task",
+                "Use async file I/O (ReadAsync/WriteAsync, File.ReadAllTextAsync) and explain why async specifically matters for I/O-bound work",
+                "Explain buffering and why reading a file byte-by-byte without it is catastrophically slow",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    A **`Stream`** is .NET's abstract base class for "a sequence of bytes that can be read and/or written, in order." It doesn't care where those bytes actually live — `FileStream` reads/writes bytes on disk, `NetworkStream` reads/writes bytes over a TCP socket, `MemoryStream` reads/writes bytes in an in-memory buffer, `GZipStream` reads/writes bytes through a compression/decompression layer wrapped around *another* stream. Because they all share the same base contract (`Read`, `Write`, `Seek`, `Flush`, `Dispose`), code written against `Stream` works unmodified regardless of the concrete source: `await inputStream.CopyToAsync(outputStream)` genuinely doesn't know or care whether `inputStream` is a file, an HTTP request body, or a byte array in memory. This is exactly why ASP.NET Core exposes an uploaded file's contents as a `Stream`, and why you can pipe that same stream straight into a `FileStream` on disk without ever loading the whole thing into a `byte[]` first.
+
+                    `StreamReader`/`StreamWriter` sit one layer above a raw `Stream`: they add *text encoding* on top of raw bytes, decoding bytes into `char`/`string` (or encoding the reverse way) using a given `Encoding` (UTF-8 by default). A `FileStream` alone only knows about bytes; wrap it in a `StreamReader` and you get `ReadLine()`/`ReadToEnd()` returning decoded text. `File.ReadAllText(path)` / `File.WriteAllText(path, contents)` (and their line-oriented and byte-oriented siblings, `File.ReadAllLines`/`File.ReadAllBytes`/`File.WriteAllBytes`) are convenience static methods that open a stream, do the read or write, and close it again, all in one call — genuinely simpler for "give me this whole file's contents as a string" or "write this string out as a whole file." Reach for the lower-level `FileStream`/`StreamReader`/`StreamWriter` API instead when the file is too large to comfortably hold entirely in memory at once, when you need to process data incrementally as it arrives (an upload, a socket), or when you need to compose streams together (write compressed output by wrapping a `FileStream` in a `GZipStream`, for instance) — none of which the one-shot `File.*` methods support.
+
+                    Every stream type covered here — `FileStream`, `StreamReader`, `StreamWriter`, `NetworkStream` — implements `IDisposable`, because each one holds an unmanaged OS resource (a file handle, a socket) that needs to be released deterministically rather than left for an eventual, non-deterministic finalizer run. The `memory-management-and-garbage-collection` lesson already covers *why* `IDisposable` and `using` exist and what happens if you skip them; the short version here is simply that every stream type in this lesson is exactly the kind of resource that lesson is about, and every single example below wraps one in `using`.
+
+                    File I/O can be done synchronously (`Read`, `Write`, `File.ReadAllText`) or asynchronously (`ReadAsync`, `WriteAsync`, `File.ReadAllTextAsync`). This distinction matters more for file and network I/O than for almost any other kind of work, because disk and network access are fundamentally **I/O-bound**: the calling thread would otherwise just sit there blocked, doing nothing useful, while the OS waits on a physical disk or a round-trip over a network. `await`-ing an async I/O call frees that thread to go do other work (like serving a different incoming HTTP request) while the I/O completes in the background, then resumes exactly where it left off once the data is ready. In a single-user console script this barely matters; in an ASP.NET Core server handling many concurrent requests off a limited thread pool, using synchronous file I/O on that pool is a direct throughput and scalability bottleneck — which is exactly why every `File.*` static method has a matching `*Async` counterpart, and why `Stream` itself exposes `ReadAsync`/`WriteAsync`/`CopyToAsync` as first-class members, not an afterthought.
+
+                    **Buffering** is what makes any of this fast in practice. Every `Read`/`Write` call on a raw OS file handle has real overhead — a context switch into the kernel, potentially an actual disk access. `FileStream` (and the `File.*` convenience methods built on top of it) reads and writes through an internal in-memory buffer by default: instead of issuing one expensive OS call per byte, it issues one OS call to fill (or flush) a buffer of several kilobytes at a time, and then serves subsequent reads/writes out of that buffer in memory until it runs dry and needs refilling. Calling `Stream.ReadByte()` in a loop bypasses none of this danger — each call still goes through the same `Read` machinery — but doing so via a raw unbuffered stream misconfigured to skip buffering, or architecting your own file-copy loop one byte at a time in a way that defeats it, turns what should be a handful of large, cheap operations into potentially millions of tiny, individually expensive ones. `StreamReader.ReadLine()`/`ReadToEnd()` and the `File.*` static methods all buffer for you automatically — it's specifically hand-rolled, overly "manual" file-processing loops that are at risk of accidentally throwing this away.
+                    """, 1),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **The Stream family**
+
+                    - `Stream` (abstract base) — `FileStream` (disk), `NetworkStream` (sockets), `MemoryStream` (in-memory buffer), `GZipStream` (compresses/decompresses another stream)
+                    - `StreamReader` / `StreamWriter` — wrap a `Stream`, add text encoding (bytes <-> char/string), default encoding is UTF-8
+
+                    **Convenience API vs. low-level API**
+
+                    - `File.ReadAllText` / `WriteAllText` / `ReadAllLines` / `ReadAllBytes` / `WriteAllBytes` — whole file, one call, simplest option
+                    - `FileStream` + `StreamReader`/`StreamWriter` — large files, incremental/streaming processing, composing with other streams (e.g. `GZipStream`)
+
+                    **Async counterparts**
+
+                    - `File.ReadAllTextAsync` / `WriteAllTextAsync` / `ReadAllLinesAsync`
+                    - `Stream.ReadAsync` / `WriteAsync` / `CopyToAsync`
+                    - Prefer these by default in any I/O-bound server code path — they free the calling thread instead of blocking it
+
+                    **Cleanup**
+
+                    - Every type here is `IDisposable` — always `using`/`await using` (see memory-management-and-garbage-collection for the why)
+
+                    **Buffering**
+
+                    - `FileStream`/`File.*`/`StreamReader` buffer internally by default (several KB per OS call)
+                    - Byte-by-byte processing that defeats buffering turns one cheap OS call into millions of expensive ones
+                    """, 2),
+                Block(BlockType.CodeSnippet, "Convenience API vs. Streams, Async I/O, and Buffering", BodyFormat.PlainText, """
+                    // --- Convenience API: File.* static methods (best for simple, whole-file work) ---
+                    string contents = File.ReadAllText("config.json");
+                    File.WriteAllText("output.txt", "Hello, MentorOS!");
+                    string[] lines = File.ReadAllLines("data.csv");
+
+                    // --- Low-level Stream API: reach for this for large/incremental/composed I/O ---
+                    using (FileStream fs = new("large-export.csv", FileMode.Open, FileAccess.Read))
+                    using (StreamReader reader = new(fs))
+                    {
+                        string? line;
+                        while ((line = reader.ReadLine()) is not null)
+                        {
+                            ProcessLine(line); // processed one line at a time, never loading the whole file
+                        }
+                    } // fs and reader are both disposed here, even if ProcessLine throws
+
+                    using (StreamWriter writer = new("log.txt", append: true))
+                    {
+                        writer.WriteLine($"{DateTime.UtcNow:O} - request handled");
+                    }
+
+                    // --- Async I/O: the default for I/O-bound work in a server app ---
+                    async Task CopyUploadAsync(Stream uploadBody, string destinationPath)
+                    {
+                        await using FileStream destination = new(destinationPath, FileMode.Create, FileAccess.Write);
+                        await uploadBody.CopyToAsync(destination); // frees the thread while waiting on disk I/O
+                    }
+
+                    async Task<string> ReadConfigAsync(string path) =>
+                        await File.ReadAllTextAsync(path); // the async counterpart of File.ReadAllText
+
+                    // --- Buffering: why the calls above are fast, and a byte-by-byte loop is not ---
+                    // CATASTROPHICALLY SLOW: one call into ReadByte() per single byte of the file
+                    using (FileStream unbuffered = new("data.bin", FileMode.Open))
+                    {
+                        int b;
+                        while ((b = unbuffered.ReadByte()) != -1)
+                        {
+                            // thousands (or millions) of tiny, individually expensive reads
+                        }
+                    }
+
+                    // FAST: StreamReader/File.* read through an internal buffer (several KB per
+                    // underlying OS call) by default, turning that same work into a handful of
+                    // large reads instead of one call per byte.
+                    using (StreamReader buffered = new("data.bin"))
+                    {
+                        string all = buffered.ReadToEnd();
+                    }
+                    """, 3, language: "csharp"),
+                Block(BlockType.Diagram, "The Stream Hierarchy and the Text-Encoding Layer", BodyFormat.AsciiArt, """
+                                             Stream (abstract base: Read/Write/Seek/Flush/Dispose)
+                                                              |
+                        -----------------------------------------------------------------------
+                        |                    |                       |                        |
+                    FileStream          NetworkStream            MemoryStream              GZipStream
+                    (disk files)         (TCP sockets)         (in-memory buffer)     (wraps ANOTHER stream,
+                                                                                        compresses/decompresses)
+
+                    Text encoding sits ONE layer above raw bytes:
+
+                      FileStream (raw bytes on disk)
+                            |  wrapped by
+                            v
+                      StreamReader (decodes bytes -> chars, using an Encoding, UTF-8 by default)
+                            |
+                            v
+                      your string / ReadLine() result
+
+                    Buffering, underneath it all:
+
+                      [ OS file handle ] <--one call reads several KB--> [ internal buffer ] <--served byte/char at a time--> caller
+                                                (expensive, done rarely)              (cheap, done constantly)
+                    """, 4),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Default to the `File.*` convenience methods (`ReadAllText`, `WriteAllBytes`, etc.) for anything that comfortably fits in memory and is read or written as a single whole unit — they're less code, harder to get wrong, and already buffered and correctly disposed internally. Reach for `FileStream`/`StreamReader`/`StreamWriter` directly only when you actually need what they offer over the convenience API: files too large to load entirely into memory, incremental/streaming processing, or composing streams together (wrapping a `FileStream` in a `GZipStream`, for instance).
+
+                    Prefer the async overloads (`ReadAllTextAsync`, `ReadAsync`, `CopyToAsync`) by default for any file or network I/O that happens inside a request-handling path in a server application — this is precisely the I/O-bound work async/await exists for, and it's what keeps the thread pool free to serve other concurrent requests instead of sitting blocked on disk or network latency.
+                    """, 5),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    When asked "why does Stream exist as a base class," don't just recite the subclass list — explain what the shared abstraction buys you: code written once against `Stream` (like a generic file-copy or upload-processing routine) works unmodified whether the actual source is a disk file, a network socket, or an in-memory buffer, because the caller never needs to know or branch on which concrete stream it received. And when asked why async matters for file I/O specifically, tie it back to I/O-bound vs. CPU-bound work: the calling thread isn't computing anything while waiting on a disk or network round-trip, so blocking it synchronously wastes a thread-pool thread that could otherwise serve a different request in the meantime.
+                    """, 6),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Forgetting to wrap a `FileStream`/`StreamReader`/`StreamWriter` in `using` — exactly the `IDisposable` mistake the memory-management-and-garbage-collection lesson warns about, and one of the most common places it actually happens in real code, since it's easy to forget that these convenience-feeling types still hold real OS handles underneath.
+
+                    Also common: writing a manual byte-by-byte or character-by-character file-processing loop (instead of `ReadLine()`/`ReadToEnd()`/`File.ReadAllText`) that ends up defeating buffering — this profiles fine on a tiny test file and becomes dramatically, sometimes catastrophically, slower against a multi-megabyte production file. And: using synchronous file I/O (`File.ReadAllText`, `stream.Read`) inside an ASP.NET Core request-handling path instead of the async counterpart, needlessly tying up a thread-pool thread for the entire duration of a disk or network wait.
+                    """, 7),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    `Stream` is like the universal shape of a pipe: water can come from a tap, a well, or a tanker truck, but any pipe fitting built to the standard connector works with all three without caring which one is actually supplying the water. `StreamReader`/`StreamWriter` are a filter screwed onto that pipe that translates raw flow into a specific, readable form.
+
+                    Buffering is the difference between filling a bathtub by carrying it one thimble of water at a time from the tap (technically it works, but absurdly slow and mostly wasted motion) versus just turning the tap on and letting a steady stream fill it (a handful of large, efficient transfers instead of thousands of tiny, expensive trips).
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "Why do FileStream, NetworkStream, and MemoryStream all derive from the same Stream base class?",
+                    "Stream defines a common Read/Write/Seek/Dispose contract, so code written once against Stream (like a generic copy routine using CopyToAsync) works unmodified regardless of whether the actual bytes come from a disk file, a network socket, or an in-memory buffer.",
+                    [
+                        new QuizOptionSeed("So that code written against the Stream abstraction works the same way regardless of whether the underlying source is a file, a socket, or memory", true),
+                        new QuizOptionSeed("Because all three are guaranteed to be equally fast in every scenario", false),
+                        new QuizOptionSeed("Because Stream automatically encrypts any bytes written through it", false),
+                        new QuizOptionSeed("Because only one Stream subclass can be instantiated per application", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "Why does reading a large file one byte at a time with an unbuffered loop perform so much worse than using StreamReader.ReadLine() or File.ReadAllText?",
+                    "Every unbuffered read incurs real overhead (a call into the OS, potentially an actual disk access). Buffered APIs fill an internal in-memory buffer of several kilobytes per underlying OS call and serve subsequent reads from that buffer, turning what would be millions of expensive single-byte operations into a handful of large, cheap ones.",
+                    [
+                        new QuizOptionSeed("Buffered APIs read a chunk of several kilobytes per underlying OS call and serve reads from that in-memory buffer, instead of one expensive OS call per byte", true),
+                        new QuizOptionSeed("Unbuffered reads use a different, slower text encoding than buffered ones", false),
+                        new QuizOptionSeed("StreamReader.ReadLine() runs on a background thread automatically, while byte-by-byte reads never do", false),
+                        new QuizOptionSeed("File.ReadAllText compresses the file's contents in memory before returning them", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("File and stream I/O", "https://learn.microsoft.com/en-us/dotnet/standard/io/", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("Asynchronous file I/O", "https://learn.microsoft.com/en-us/dotnet/standard/io/asynchronous-file-i-o", LinkType.OfficialDocs),
+            ]);
+
+        var lesson1Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson1.Slug,
+        [
+            "Rewrite a loop that reads a file via FileStream.ReadByte() one byte at a time to instead use StreamReader, and compare run time on a multi-megabyte file",
+            "Convert a synchronous File.ReadAllText/File.WriteAllText call in your own code to its async counterpart (ReadAllTextAsync/WriteAllTextAsync), confirming the calling method becomes async all the way up its own call chain",
+            "Write a method that copies one file to another using FileStream + CopyToAsync, wrapped in using declarations, and verify both streams are disposed even when the source file doesn't exist",
+        ]);
+
+        var lesson2 = BuildLesson(
+            slug: "regular-expressions-in-csharp",
+            title: "Regular Expressions in C#",
+            summary: "The Regex class and common pattern syntax (metacharacters, quantifiers, character classes, capturing/non-capturing/named groups), Match/Matches/IsMatch/Replace, compiling regex for hot-path performance via RegexOptions.Compiled and [GeneratedRegex], and the catastrophic backtracking (ReDoS) pitfall.",
+            estimatedMinutes: 45,
+            objectives:
+            [
+                "Use Regex.IsMatch/Match/Matches/Replace correctly and choose the right one for a given task",
+                "Read and write regex patterns using common metacharacters, quantifiers, character classes, and anchors",
+                "Distinguish capturing, non-capturing, and named groups, and extract values from named groups",
+                "Recognize catastrophic backtracking (ReDoS) and know how RegexOptions.Compiled/[GeneratedRegex] and safer patterns address performance and safety",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    The **`Regex`** class (`System.Text.RegularExpressions`) matches a pattern — a small, specialized language for describing shapes of text — against a string. Four members cover almost every use case: `Regex.IsMatch(input, pattern)` answers a yes/no question ("does this string match at all?"), `Regex.Match(input, pattern)` returns the *first* match as a `Match` object (with `.Success`, `.Value`, `.Groups`), `Regex.Matches(input, pattern)` returns *every* match in the string as a collection, and `Regex.Replace(input, pattern, replacement)` substitutes each match with replacement text (which can itself reference captured groups).
+
+                    A pattern is built from **metacharacters** with special meaning: `.` matches any character, `\d`/`\w`/`\s` match a digit/word-character/whitespace character respectively (`\D`/`\W`/`\S` are their negations), `^`/`$` anchor a match to the start/end of the string (or line, with `RegexOptions.Multiline`), and `\b` matches a word boundary. **Quantifiers** control repetition: `*` (zero or more), `+` (one or more), `?` (zero or one), and `{n,m}` (between n and m times). A **character class** — `[abc]`, `[a-z]`, `[^0-9]` — matches any single character from (or, with `^`, excluded from) the given set.
+
+                    **Groups** let you carve a match into labeled sub-pieces. A **capturing group**, `(\d{3})`, is numbered and its matched text is retrievable afterward via `match.Groups[1].Value` (or, for `Replace`, referenced in the replacement string as `$1`). A **non-capturing group**, `(?:\d{3})`, groups a sub-pattern purely for applying a quantifier or alternation to it (say, `(?:abc)+`) without allocating a retrievable capture — cheaper, and clearer when you don't actually need the sub-match's text back. A **named group**, `(?<areaCode>\d{3})`, behaves like a capturing group but is retrieved by name, `match.Groups["areaCode"].Value`, instead of by a fragile numeric position that shifts if you add or remove another group earlier in the pattern.
+
+                    Constructing a `new Regex(pattern)` (or calling the static `Regex.IsMatch`/`Match`/etc. helpers, which build and cache one internally) compiles the pattern into an internal representation the *first* time it's used, at a real, non-trivial one-time cost. For a pattern executed once, that's the whole story. For a pattern executed repeatedly on a hot path — validating every incoming request field, say — that startup cost can be paid once, up front, instead of repeatedly, by passing `RegexOptions.Compiled` to the `Regex` constructor, which further compiles the pattern down to actual IL at construction time rather than interpreting it on every match, trading a slower first use for faster every subsequent one. C# 11 added the **`[GeneratedRegex]`** attribute: applied to a `partial` method returning `Regex` (e.g. `[GeneratedRegex(@"^\d{3}-\d{4}$")] private static partial Regex PhoneNumberRegex();`), a source generator emits the compiled matching logic directly at *compile* time rather than runtime, with no reflection and no first-use compilation delay at all — the recommended default for any regex on a genuinely hot path in a modern (C# 11+) codebase.
+
+                    Regex matching engines like .NET's are, by default, **backtracking** engines: faced with ambiguity about how to satisfy a pattern, they try one possibility, and if the rest of the match later fails, they backtrack and try another. This is usually invisible and fast — but a pattern with **nested or overlapping quantifiers**, like `^(a+)+$`, can create an *exponential* number of ways to partition the same input string among the inner and outer `+`. Matched against a long run of `a` characters followed by one character that breaks the match (`"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab!"`, say — note there's no trailing `b` for the pattern to actually match, since it's anchored with `$`), the engine tries an exponentially growing number of ways to split those `a`s between the two `+` quantifiers before finally giving up — taking seconds, then minutes, then effectively forever as the input grows by just a few more characters each time. This is **catastrophic backtracking**, and when the input driving it comes from an untrusted source (user-submitted text run through a validation regex, for instance), it becomes a genuine denial-of-service vector known as **ReDoS** (Regular Expression Denial of Service) — a single crafted string can pin a CPU core indefinitely on what looks like an entirely ordinary validation check.
+                    """, 1),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Static Regex methods**
+
+                    - `Regex.IsMatch(input, pattern)` — yes/no
+                    - `Regex.Match(input, pattern)` — first match (`.Success`, `.Value`, `.Groups`)
+                    - `Regex.Matches(input, pattern)` — every match
+                    - `Regex.Replace(input, pattern, replacement)` — substitute matches (`$1`/`${name}` in replacement text)
+
+                    **Common syntax**
+
+                    - `.` any char, `\d`/`\w`/`\s` digit/word/whitespace (`\D`/`\W`/`\S` = negated)
+                    - `^` / `$` start/end anchor, `\b` word boundary
+                    - `*` / `+` / `?` / `{n,m}` — zero-or-more / one-or-more / optional / n-to-m repetitions
+                    - `[abc]` / `[a-z]` / `[^0-9]` — character class (or negated class)
+
+                    **Groups**
+
+                    - `(...)` capturing — retrieve via `Groups[1]`
+                    - `(?:...)` non-capturing — groups for quantifier/alternation only, no capture retrieval
+                    - `(?<name>...)` named — retrieve via `Groups["name"]`, immune to position shifts
+
+                    **Performance**
+
+                    - `new Regex(pattern)` compiles once on first use — fine for one-off use
+                    - `RegexOptions.Compiled` — extra IL compilation at construction, pays off on hot paths
+                    - `[GeneratedRegex(pattern)]` (C# 11+, on a `partial` method) — compiled at BUILD time, no runtime cost at all, prefer this on hot paths
+
+                    **ReDoS / catastrophic backtracking**
+
+                    - Nested/overlapping quantifiers, e.g. `(a+)+`, `(a|a)*` — exponential backtracking on adversarial input
+                    - Never run an untrusted, unbounded regex pattern OR feed untrusted input into an ambiguous pattern without a timeout
+                    """, 2),
+                Block(BlockType.CodeSnippet, "Matching, Groups, Compiled Regex, and Catastrophic Backtracking", BodyFormat.PlainText, """
+                    using System.Text.RegularExpressions;
+
+                    // --- IsMatch / Match / Matches / Replace ---
+                    bool looksLikeZip = Regex.IsMatch("94107", @"^\d{5}$"); // true
+
+                    Match m = Regex.Match("Order #4821 shipped", @"#(\d+)");
+                    if (m.Success)
+                    {
+                        Console.WriteLine(m.Groups[1].Value); // "4821" - the captured group, not the whole match
+                    }
+
+                    foreach (Match hit in Regex.Matches("cat, bat, hat", @"\bat\b|[a-z]at"))
+                    {
+                        Console.WriteLine(hit.Value); // "cat", "bat", "hat"
+                    }
+
+                    string masked = Regex.Replace("Call 415-555-1234 now", @"\d{3}-\d{3}-\d{4}", "***-***-****");
+
+                    // --- Named groups: retrieve by name, not fragile numeric position ---
+                    Match phone = Regex.Match("415-555-1234", @"^(?<area>\d{3})-(?<exchange>\d{3})-(?<number>\d{4})$");
+                    string area = phone.Groups["area"].Value;       // "415"
+                    string number = phone.Groups["number"].Value;   // "1234"
+
+                    // --- Non-capturing group: grouped for the quantifier, no capture allocated ---
+                    bool isRepeatedWord = Regex.IsMatch("go go go", @"^(?:go\s*)+$");
+
+                    // --- Compiled regex for a hot path (older/interpreted-runtime approach) ---
+                    private static readonly Regex CompiledZipRegex =
+                        new(@"^\d{5}(-\d{4})?$", RegexOptions.Compiled);
+
+                    // --- C# 11 source-generated regex: compiled at BUILD time, zero runtime cost ---
+                    public static partial class Validators
+                    {
+                        [GeneratedRegex(@"^\d{5}(-\d{4})?$")]
+                        private static partial Regex ZipRegex();
+
+                        public static bool IsValidZip(string s) => ZipRegex().IsMatch(s);
+                    }
+
+                    // --- CATASTROPHIC BACKTRACKING (ReDoS) - illustrative, do not run against real input ---
+                    // Nested quantifiers: the inner (a+) and outer (...)+ can split the same run of
+                    // a's exponentially many different ways before concluding there's no match.
+                    string evilInput = new string('a', 40) + "!"; // 40 a's, then a character that can't match
+                    bool neverFinishesInPractice = Regex.IsMatch(evilInput, @"^(a+)+$");
+
+                    // SAFE rewrite: a single quantifier says the same thing with no ambiguity to backtrack over
+                    bool sameResultSafely = Regex.IsMatch(evilInput, @"^a+$");
+                    """, 3, language: "csharp"),
+                Block(BlockType.Diagram, "Anatomy of a Pattern, and Backtracking Gone Exponential", BodyFormat.AsciiArt, """
+                    Pattern:   ^(?<area>\d{3})-(?<exchange>\d{3})-(?<number>\d{4})$
+                    Input:      415-555-1234
+
+                        ^  (?<area>\d{3})  -   (?<exchange>\d{3})  -   (?<number>\d{4})  $
+                        |       415        |         555          |        1234        |
+                     start   group "area"  literal  group "exchange" literal group "number"  end
+
+                    match.Groups["area"].Value     -> "415"
+                    match.Groups["exchange"].Value -> "555"
+                    match.Groups["number"].Value   -> "1234"
+
+                    Catastrophic backtracking on ^(a+)+$ against "aaaa!" (no trailing match possible):
+
+                      outer group tries splitting "aaaa" among its repetitions, and for EACH split,
+                      the inner (a+) also tries every way to divide its own share:
+
+                        (aaaa)          (aaa)(a)          (aa)(aa)          (aa)(a)(a)          (a)(a)(a)(a)  ...
+                         1 way            2 ways            2 ways            3 ways              4 ways     ...
+
+                      -> the number of combinations grows exponentially with input length, and the
+                         engine tries all of them before finally reporting "no match" for the trailing "!"
+                    """, 4),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Prefer named groups (`(?<name>...)`) over positional capturing groups whenever the extracted value is referenced anywhere else in the code — they survive a pattern being edited to add or remove an earlier group, where a numeric `Groups[2]` would silently start pointing at the wrong thing. Use non-capturing groups (`(?:...)`) for anything grouped purely for a quantifier or alternation, to avoid paying for captures you never read.
+
+                    Cache and reuse a `Regex` instance (a `static readonly` field, or a `[GeneratedRegex]`-attributed partial method) instead of constructing one from a literal pattern string inside a loop or a frequently-called method. Reach for `[GeneratedRegex]` by default for any regex on a genuinely hot path in a C# 11+ codebase; fall back to `RegexOptions.Compiled` only when targeting an older language version. For patterns applied to untrusted, attacker-influenced input, avoid nested/overlapping quantifiers entirely, and pass an explicit `matchTimeout` to the `Regex` constructor as a defense-in-depth backstop against ReDoS, even after the pattern itself has been reviewed for ambiguity.
+                    """, 5),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    Be ready to name catastrophic backtracking / ReDoS specifically and explain the mechanism, not just that "some regexes can be slow": .NET's regex engine backtracks, and nested or overlapping quantifiers over the same character class create exponentially many equivalent ways to partition matching input, all of which get tried before the engine reports failure. Mentioning that this becomes an actual denial-of-service vector when the pattern runs against attacker-supplied input — not just a performance quirk — signals you understand the security angle interviewers are often specifically probing for. When asked about compiled regex, contrast `RegexOptions.Compiled` (extra IL compilation cost paid once at runtime construction) against `[GeneratedRegex]` (compiled entirely at build time, no runtime cost at all), knowing the newer source-generator approach exists is a good modern-C# signal.
+                    """, 6),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Constructing a `new Regex(pattern)` from a literal pattern string inside a hot loop or a frequently-called method instead of caching one instance (`static readonly`, or `[GeneratedRegex]`) — this repeats the pattern-compilation cost on every single call instead of paying it once.
+
+                    Also common: reaching for regex to parse a genuinely structured, nested format — HTML, JSON, a full URL — instead of a real parser built for that format. Regex operates on flat text patterns and has no real concept of nested structure, so patterns that try to handle it become fragile and unreadable fast, breaking on inputs a real parser handles correctly by construction. And: writing an ambiguous, nested-quantifier pattern (`(a+)+`, `(.*)*`, `(\w+\s?)*` and similar shapes) against input that could ever come from outside your own trusted code, without ever testing it against a long adversarial input or adding a `matchTimeout` — exactly the setup that turns an ordinary validation regex into a ReDoS vulnerability.
+                    """, 7),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    A regex pattern is like giving someone very precise directions through a building with several possible routes ("go through door A, then whichever of the two side halls loops back to the lobby, then out door B"). A normal pattern has only a few real routes to check, so the person (the backtracking engine) tries them in an eyeblink. A pattern with nested, overlapping quantifiers is like directions with dozens of doors that all loop back into each other in multiple redundant ways — even though there's still only one real destination, the number of *distinct paths* worth checking before giving up explodes combinatorially, and the person ends up wandering the building for hours checking equivalent dead ends that all lead to the same place.
+
+                    `[GeneratedRegex]` is like having those directions engraved on a plaque in advance, once, by someone who already worked out the fastest route — versus `RegexOptions.Compiled`, which is more like a local guide who studies the map thoroughly the first time you ask, then answers instantly every time after; and no compilation option at all is like re-reading and re-interpreting the same hand-written directions from scratch on every single visit.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "What is the practical difference between a capturing group (\\d{3}) and a non-capturing group (?:\\d{3})?",
+                    "A capturing group's matched text is retrievable afterward via Groups (by number or, if named, by name). A non-capturing group only groups its sub-pattern for applying a quantifier or alternation — it doesn't allocate a retrievable captured value at all.",
+                    [
+                        new QuizOptionSeed("A capturing group's match is retrievable via Groups afterward; a non-capturing group only groups for a quantifier/alternation without producing a retrievable capture", true),
+                        new QuizOptionSeed("Non-capturing groups match faster because they support a wider set of metacharacters", false),
+                        new QuizOptionSeed("Capturing groups can only appear once per pattern, while non-capturing groups can repeat", false),
+                        new QuizOptionSeed("There is no functional difference — they are purely a stylistic choice", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "Why does a pattern like ^(a+)+$ take catastrophically long to fail against a long run of 'a' characters followed by a character that can't match?",
+                    "The nested quantifiers (an inner + inside an outer (...)+ ) create exponentially many equivalent ways to partition the same run of matching characters between them. The backtracking engine tries all of these equivalent partitions before finally concluding the overall match fails, so runtime grows exponentially with input length.",
+                    [
+                        new QuizOptionSeed("The nested quantifiers create exponentially many equivalent ways to partition the matching characters, and the engine tries them all before reporting failure", true),
+                        new QuizOptionSeed("The .NET regex engine has a hard-coded bug specifically in how it handles the letter 'a'", false),
+                        new QuizOptionSeed("RegexOptions.Compiled was not specified, which is the only cause of slow regex matching", false),
+                        new QuizOptionSeed("The pattern is invalid syntax and should throw an exception rather than run at all", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Regular Expression Language - Quick Reference", "https://learn.microsoft.com/en-us/dotnet/standard/base-types/regular-expression-language-quick-reference", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("Best practices for regular expressions in .NET", "https://learn.microsoft.com/en-us/dotnet/standard/base-types/best-practices-for-regular-expressions", LinkType.OfficialDocs),
+            ],
+            prerequisites: [lesson1]);
+
+        var lesson2Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson2.Slug,
+        [
+            "Write a named-group regex to parse a log line or phone number into labeled parts and extract each part via Match.Groups[\"name\"].Value",
+            "Rewrite a hot-path Regex.IsMatch call to use [GeneratedRegex] (or RegexOptions.Compiled if targeting an older C# version) and confirm behavior is unchanged",
+            "Reproduce catastrophic backtracking locally with a pattern like ^(a+)+$ against a long non-matching string of a's, observe how runtime explodes as the string grows, then fix the pattern (or add a matchTimeout) to avoid it",
+        ]);
+
+        var module = BuildModule(topicId, "csharp-file-io-and-regex", "File I/O, Streams & Regular Expressions",
+            "The Stream abstraction unifying files, sockets, and memory buffers, sync vs. async file I/O and why buffering matters, plus pattern matching with Regex: groups, compiled/source-generated regex for hot paths, and the catastrophic backtracking (ReDoS) pitfall.",
+            90, [lesson1, lesson2], sortOrder: 12);
+
+        return (module, [lesson1Checklist, lesson2Checklist]);
+    }
+
     // ============================== .NET ==============================
 
     private static (Module, List<ChecklistSeed>) BuildDotNetModule(int topicId)
@@ -5466,6 +5839,367 @@ public static class CurriculumContentSeedData
         var module = BuildModule(topicId, "aspnet-core-scaling-and-resilience", "Scaling & Resilience in ASP.NET Core",
             "Going deeper on EF Core relationship modeling and query performance, then hardening services for production with background workers, caching, health checks, and graceful shutdown.",
             90, [lesson1, lesson2], sortOrder: 3);
+
+        return (module, [lesson1Checklist, lesson2Checklist]);
+    }
+
+    private static (Module, List<ChecklistSeed>) BuildDotNetIdentityAndMessagingModule(int topicId)
+    {
+        var lesson1 = BuildLesson(
+            slug: "aspnet-core-identity-and-oauth2-flows",
+            title: "ASP.NET Core Identity & OAuth2 Flows",
+            summary: "What ASP.NET Core Identity actually manages as a full user-management framework, the OAuth2 authorization code flow step by step, and how 'Sign in with Google/Microsoft' plugs in via the OAuth2/OpenID Connect handlers.",
+            estimatedMinutes: 45,
+            objectives:
+            [
+                "Explain what ASP.NET Core Identity provides beyond raw JWT issuance: a user store, password hashing, roles, claims, and account confirmation/lockout",
+                "Walk through the OAuth2 authorization code flow step by step and explain what problem it solves compared to handing a third party your password",
+                "Wire up an external authentication provider (Google/Microsoft) using ASP.NET Core's OAuth2/OpenID Connect handlers and explain the resulting ClaimsPrincipal",
+                "Decide when a project needs full ASP.NET Core Identity versus just the hand-rolled JWT issuance covered previously",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    The previous lesson covered issuing and validating JWT bearer tokens, `[Authorize]`, and role/policy-based authorization — but that all assumed a user's credentials were already checked *somewhere* and just needed a token minted for them. It never addressed how a user actually registers, resets a forgotten password, gets locked out after too many failed attempts, or links a Google account to their profile. **ASP.NET Core Identity** is that missing layer: a full user-management framework, not just a token format. `UserManager<TUser>` is the business-logic surface for creating users, hashing passwords (via `IPasswordHasher`, using a per-user salt baked into the stored hash), managing roles and claims, generating tokens for email confirmation and password resets, and enforcing lockout after repeated failed logins. `SignInManager<TUser>` handles the sign-in ceremony itself — `PasswordSignInAsync` checks the password and lockout state and, on success, establishes the user's session. `IdentityDbContext<TUser>` (via EF Core) backs all of it with real tables: `AspNetUsers`, `AspNetRoles`, `AspNetUserClaims`, and `AspNetUserLogins` — that last one is specifically where a linked external login (provider name + provider key) lives.
+
+                    **OAuth2** exists to solve a specific problem: before it, "let this app access your Google Contacts" meant literally typing your Google password into a third-party site — full-trust, unscoped, and only revocable by changing your actual password everywhere. OAuth2 introduces *delegated, scoped, revocable* access without the third party (the **client**) ever seeing the **resource owner**'s (the user's) password. The **authorization code flow** is the standard way this happens for a server-based client: the client redirects the browser to the **authorization server**'s `/authorize` endpoint with a client ID, redirect URI, and requested scopes; the user authenticates directly with the authorization server (Google, not the client app) and consents to those scopes; the authorization server redirects back to the client with a short-lived, single-use **authorization code**; the client's *backend* then exchanges that code — plus its client secret — for an access token at the authorization server's `/token` endpoint, entirely server-to-server, never exposed to the browser or the redirect URL.
+
+                    OAuth2 alone is only an authorization framework — it grants access to a resource, it doesn't standardize proving *who* the user is. **OpenID Connect (OIDC)** layers identity on top of that same authorization code flow: alongside the access token, the authorization server also returns an **ID token** — a JWT with standardized claims asserting the user's identity — which is what "Sign in with Google" actually depends on. In ASP.NET Core, `AddAuthentication().AddGoogle(options => { ... })` wires up Google's OAuth2/OIDC handler, which performs that entire redirect-and-code-exchange dance internally and hands your app back an *external* `ClaimsPrincipal`. Your app still has to decide what to do with it — typically linking it to (or creating) a local `AspNetUsers` row via `AspNetUserLogins`, then signing the user into your own app's scheme. External login augments Identity; it doesn't replace it.
+                    """, 1),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    If a JWT (from the previous lesson) is a wristband checked at each checkpoint, ASP.NET Core Identity is the entire box office operation behind issuing that wristband in the first place: the staff who verify your ID at the door, the ledger of everyone who's ever bought a ticket, the lost-ticket reissue desk, and the "you've tried the wrong PIN five times, come back in ten minutes" security guard. A raw JWT setup assumes all of that already happened somewhere; Identity is the somewhere.
+
+                    The OAuth2 authorization code flow is like a hotel valet system: you don't hand the valet your house key and your car key together (your actual password) — you hand over a valet key that only starts the engine and opens the trunk (a scoped access token), and the valet company (the client app) never learns your real key at all. The valet stand radios the front desk to confirm the key is genuine (the server-to-server code-for-token exchange) rather than you shouting the confirmation across the parking lot for anyone to overhear (which is exactly what returning a token directly through the browser would look like).
+                    """, 2),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **ASP.NET Core Identity setup**
+
+                    - `builder.Services.AddIdentity<AppUser, IdentityRole>(options => { ... }).AddEntityFrameworkStores<AppIdentityDbContext>().AddDefaultTokenProviders();`
+                    - `UserManager<TUser>` — `CreateAsync`, `AddToRoleAsync`, `AddClaimAsync`, `GeneratePasswordResetTokenAsync`
+                    - `SignInManager<TUser>` — `PasswordSignInAsync`, `ExternalLoginSignInAsync`, `GetExternalLoginInfoAsync`
+                    - Tables it owns: `AspNetUsers`, `AspNetRoles`, `AspNetUserClaims`, `AspNetUserLogins`, `AspNetUserTokens`
+
+                    **OAuth2 authorization code flow**
+
+                    - Roles: Resource Owner (user), Client (your app), Authorization Server (issues tokens), Resource Server (the API)
+                    - `/authorize` — user-facing redirect, returns a short-lived authorization code
+                    - `/token` — server-to-server exchange of code (+ client secret / PKCE verifier) for tokens
+                    - OIDC adds an **ID token** (identity) on top of OAuth2's **access token** (authorization)
+
+                    **External providers in ASP.NET Core**
+
+                    - `builder.Services.AddAuthentication().AddGoogle(o => { o.ClientId = ...; o.ClientSecret = ...; });` (Microsoft Account handler is `AddMicrosoftAccount`)
+                    - `Results.Challenge(props, ["Google"])` — kicks off the redirect to the provider
+                    - `signInManager.ExternalLoginSignInAsync(provider, providerKey, ...)` — sign in if already linked; otherwise link via `AddLoginAsync`
+                    """, 3),
+                Block(BlockType.CodeSnippet, "ASP.NET Core Identity + Google External Login", BodyFormat.PlainText, """
+                    // Program.cs -- Identity backed by EF Core, plus Google as an external
+                    // OAuth2/OIDC provider. This is a different (and lower-level-agnostic)
+                    // concern than the raw JWT issuance covered in the previous lesson.
+                    builder.Services.AddDbContext<AppIdentityDbContext>(options =>
+                        options.UseSqlite(builder.Configuration.GetConnectionString("Identity")));
+
+                    builder.Services.AddIdentity<AppUser, IdentityRole>(options =>
+                        {
+                            options.Password.RequiredLength = 12;
+                            options.Lockout.MaxFailedAccessAttempts = 5;
+                            options.SignIn.RequireConfirmedEmail = true;
+                        })
+                        .AddEntityFrameworkStores<AppIdentityDbContext>()
+                        .AddDefaultTokenProviders(); // powers email-confirmation & password-reset tokens
+
+                    builder.Services.AddAuthentication()
+                        .AddGoogle(options =>
+                        {
+                            options.ClientId = builder.Configuration["Authentication:Google:ClientId"]!;
+                            options.ClientSecret = builder.Configuration["Authentication:Google:ClientSecret"]!;
+                            // The Google handler performs the entire OAuth2/OIDC authorization
+                            // code exchange for you and hands back an external ClaimsPrincipal.
+                        });
+
+                    // Registering a new local account -- UserManager owns hashing + policy checks
+                    public class AccountService(UserManager<AppUser> userManager, SignInManager<AppUser> signInManager)
+                    {
+                        public async Task<IdentityResult> RegisterAsync(string email, string password)
+                        {
+                            var user = new AppUser { UserName = email, Email = email };
+                            var result = await userManager.CreateAsync(user, password);
+                            if (result.Succeeded)
+                                await userManager.AddToRoleAsync(user, "Member");
+
+                            return result;
+                        }
+
+                        public async Task<SignInResult> LoginAsync(string email, string password) =>
+                            await signInManager.PasswordSignInAsync(email, password, isPersistent: false, lockoutOnFailure: true);
+                    }
+
+                    // Minimal API endpoints driving the external login handshake
+                    app.MapGet("/login/google", (SignInManager<AppUser> signInManager) =>
+                    {
+                        var props = signInManager.ConfigureExternalAuthenticationProperties("Google", "/login/google/callback");
+                        return Results.Challenge(props, ["Google"]); // kicks off the OAuth2 redirect to Google
+                    });
+
+                    app.MapGet("/login/google/callback", async (SignInManager<AppUser> signInManager, UserManager<AppUser> userManager) =>
+                    {
+                        var info = await signInManager.GetExternalLoginInfoAsync(); // external ClaimsPrincipal Google returned
+                        if (info is null)
+                            return Results.Redirect("/login?error=external_login_failed");
+
+                        // AspNetUserLogins, keyed by (LoginProvider, ProviderKey), links this Google
+                        // identity to a local AppUser row -- an external login still needs a local
+                        // account behind it.
+                        var signInResult = await signInManager.ExternalLoginSignInAsync(
+                            info.LoginProvider, info.ProviderKey, isPersistent: false);
+
+                        if (!signInResult.Succeeded)
+                        {
+                            var email = info.Principal.FindFirstValue(ClaimTypes.Email)!;
+                            var user = new AppUser { UserName = email, Email = email, EmailConfirmed = true };
+                            await userManager.CreateAsync(user);
+                            await userManager.AddLoginAsync(user, info); // records the AspNetUserLogins link
+                            await signInManager.SignInAsync(user, isPersistent: false);
+                        }
+
+                        return Results.Redirect("/");
+                    });
+                    """, 4, language: "csharp"),
+                Block(BlockType.Diagram, "OAuth2 Authorization Code Flow (with OpenID Connect)", BodyFormat.StructuredSteps, """
+                    [{"label":"User clicks \"Sign in with Google\" in the client app"},{"label":"Client redirects the browser to Google's /authorize endpoint","note":"client_id, redirect_uri, scopes, PKCE code_challenge"},{"label":"User authenticates directly with Google and consents to the requested scopes","note":"the client app never sees the password"},{"label":"Google redirects back to the client's redirect_uri with a short-lived authorization code"},{"label":"Client's backend exchanges the code (+ client_secret / PKCE verifier) at Google's /token endpoint","note":"server-to-server, never exposed to the browser"},{"label":"Google returns an access token and an OpenID Connect ID token","note":"the ID token is a JWT asserting who the user is"},{"label":"ASP.NET Core builds an external ClaimsPrincipal from the returned tokens"},{"label":"App links or creates a local AppUser via AspNetUserLogins and signs in with its own scheme"}]
+                    """, 5),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Always use PKCE (Proof Key for Code Exchange) on the authorization code flow, even for a confidential server-based client — it's now the recommended default, not just a mobile/SPA workaround, and it closes an authorization-code-interception attack the plain flow is otherwise vulnerable to. Never commit a client secret to source control; load it from a secrets manager or environment configuration, and treat leaking it with the same severity as leaking a database password.
+
+                    Use ASP.NET Core Identity's built-in password hashing and account lockout rather than hand-rolling either — `PasswordHasher<TUser>` already implements a reviewed, salted, iterated hash, and reimplementing it is a common source of real vulnerabilities. Treat an external login's claims as *input to link or create your own local user*, not as unconditional truth about permissions in your system — map them into your own roles/claims deliberately instead of trusting whatever the provider happened to send.
+                    """, 6),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    If asked "why not just use JWT bearer auth for everything," name the actual gap: validating a bearer token (previous lesson) assumes a user's credentials were already checked somewhere and just needs a token minted — it says nothing about registration, password resets, lockout, or linking an external account. ASP.NET Core Identity is that missing user-management layer, and the two compose rather than compete: a real app often uses `UserManager`/`SignInManager` to validate credentials, then mints a JWT (from the previous lesson's `TokenService`) as the resulting access token.
+
+                    For the OAuth2 authorization code flow, narrate it in order and land on the one detail interviewers listen for: the code-for-token exchange happens server-to-server, using a client secret that's never exposed to the browser — that's precisely why the older *implicit* flow (which returned a token directly through the redirect URL) is now deprecated, and why PKCE exists to protect the code-exchange step for clients that can't fully keep a secret confidential.
+                    """, 7),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Conflating an OpenID Connect **ID token** with an OAuth2 **access token** — an ID token proves who the user is to your own app (authentication) and was never meant to be sent to a resource server as a bearer credential (authorization); using one where the other belongs is a frequent source of subtle auth bugs. Using the deprecated implicit flow (or otherwise returning a token straight through a redirect URL) instead of the authorization code flow, which unnecessarily exposes tokens to browser history, referrer headers, and any script running on the page.
+
+                    Also common: forgetting that a successful external login (`ExternalLoginSignInAsync` returning success) and *your own app's* sign-in are two different steps — a first-time Google login has no matching `AspNetUserLogins` row yet, so skipping the "create or link a local account" branch leaves the user stuck in a redirect loop with no local identity ever established.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "What does ASP.NET Core Identity provide that the raw JWT bearer authentication from the previous lesson does not?",
+                    "JWT bearer authentication only validates a token that was already issued somewhere. Identity is the full user-management framework behind that -- a user store, password hashing, roles, claims, account confirmation, and lockout -- that has to exist before any token can be minted for a real user.",
+                    [
+                        new QuizOptionSeed("A full user-management framework -- user store, password hashing, roles, claims, and account confirmation/lockout -- which JWT bearer validation alone does not provide", true),
+                        new QuizOptionSeed("A faster way to validate an already-issued JWT's signature", false),
+                        new QuizOptionSeed("It replaces the need for HTTPS between the client and the API", false),
+                        new QuizOptionSeed("It is only used for role-based [Authorize] checks, nothing else", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "Why does the OAuth2 authorization code flow exchange the authorization code for a token on the backend (server-to-server) instead of returning the token directly through the browser redirect?",
+                    "Keeping the code-for-token exchange server-to-server means the client secret (and the resulting tokens) are never exposed to the browser, browser history, or a referrer header -- exactly the exposure the older, now-deprecated implicit flow suffered from by returning tokens straight through the redirect URL.",
+                    [
+                        new QuizOptionSeed("So the client secret and the resulting tokens are never exposed to the browser, browser history, or referrer headers", true),
+                        new QuizOptionSeed("Because browsers are not allowed to make POST requests to an authorization server", false),
+                        new QuizOptionSeed("Because the authorization code itself is the same thing as an access token", false),
+                        new QuizOptionSeed("So that PKCE becomes unnecessary for any client type", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Introduction to Identity on ASP.NET Core", "https://learn.microsoft.com/en-us/aspnet/core/security/authentication/identity", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("Social/external login setup in ASP.NET Core", "https://learn.microsoft.com/en-us/aspnet/core/security/authentication/social/", LinkType.OfficialDocs),
+            ]);
+
+        var lesson1Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson1.Slug,
+        [
+            "Register a user with UserManager<TUser> and log them in with SignInManager<TUser>, without hand-rolling password hashing or lockout",
+            "Wire up Google (or Microsoft) as an external login provider and walk through what happens on both a first-time and a returning external sign-in",
+            "Narrate the OAuth2 authorization code flow out loud step by step, explicitly naming which step happens server-to-server and why that step matters",
+        ]);
+
+        var lesson2 = BuildLesson(
+            slug: "message-queues-and-background-job-schedulers",
+            title: "Message Queues & Background Job Schedulers",
+            summary: "Why a real message broker (RabbitMQ, Azure Service Bus) is a fundamentally different tool from the in-process BackgroundService, and how to write and schedule fire-and-forget, delayed, and recurring jobs with a persistent scheduler like Hangfire.",
+            estimatedMinutes: 45,
+            objectives:
+            [
+                "Explain why a distributed message queue is a fundamentally different tool from the in-process BackgroundService covered previously -- durability across restarts, cross-process consumption, delivery guarantees, and backpressure",
+                "Write .NET producer and consumer code against a real broker, using either a raw client (RabbitMQ.Client) or a higher-level abstraction like MassTransit",
+                "Schedule fire-and-forget, delayed, and recurring/cron jobs with a persistent job store using Hangfire, including its dashboard and automatic retry semantics",
+                "Choose correctly among BackgroundService, a message queue, and a persistent job scheduler for a given requirement",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    The system-design lesson **"Message Queues & Asynchronous Communication"** already covers the conceptual/architectural side of messaging — point-to-point versus pub/sub, at-least-once/at-most-once/exactly-once delivery, and why consumers must be idempotent. This lesson doesn't re-explain any of that; it's about actually writing the .NET code, and about a distinction the earlier BackgroundService lesson couldn't make on its own: a `BackgroundService`'s `ExecuteAsync` loop, and any "queue" of pending work it manages (an in-memory `Channel<T>`, a `List<T>`), lives entirely inside that one process's memory. The moment that process restarts — a deploy, a crash, a scale-to-zero — whatever was in flight is simply gone, and only that exact process instance could ever have drained it. A real broker is different in *kind*, not just degree: a published message is durably persisted by the broker itself, independent of whether any consumer happens to be running right now; a completely separate service — a different deployment, even a different language — can be the one that eventually consumes it; and the broker enforces real delivery guarantees (redelivery of an unacknowledged message, dead-lettering after repeated failures) and backpressure (a slow consumer just means the queue grows, not that the producer blocks or the process falls over).
+
+                    There are two common ways to write .NET code against a broker like RabbitMQ. The raw **RabbitMQ.Client** library (`IConnection`/`IModel`, manual `QueueDeclare`/`BasicPublish`/`BasicConsume`/`BasicAck`) gives full control, but every service that touches the broker ends up re-implementing retry, serialization, and routing conventions by hand. **MassTransit** (or NServiceBus) sits on top of RabbitMQ, Azure Service Bus, or Amazon SQS and gives you a consistent `Publish<T>()`/`Consume<T>()` API with automatic retry policies and message-type-based routing regardless of which broker is underneath — most teams reach for something like MassTransit once more than one or two message types are involved. Azure Service Bus's own SDK (`ServiceBusClient`/`ServiceBusSender`/`ServiceBusProcessor`) is a fully-managed alternative with the same durability guarantees, without operating a RabbitMQ cluster yourself.
+
+                    **Hangfire** is a different tool again — it's a persistent *job scheduler*, not a message broker. It stores job state (fire-and-forget, delayed, and recurring/cron jobs) in a durable backing store (SQL Server, PostgreSQL, or Redis), and any running Hangfire server process — yours, or a scaled-out replica — polls that store and picks up due work. That's why a recurring job's schedule, or a delayed job's due time, survives an app restart in a way a `BackgroundService`'s in-memory `PeriodicTimer` never could. Hangfire also ships a dashboard (job history, failures, retry counts) and configurable automatic retries with backoff out of the box — exactly the kind of functionality a hand-rolled `BackgroundService` loop would otherwise have to build from scratch.
+                    """, 1),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    A message broker is like a shipping company's sorting warehouse: packages sit safely on a shelf even if the delivery truck (a consumer process) breaks down overnight or the depot temporarily closes, and a completely different truck — even from a different depot — can pick them up later without anything being lost. A `BackgroundService` managing its own in-memory to-do list, by contrast, is like an employee scribbling tasks on their own private notepad at their desk — the moment they're sent home for the day (the process restarts), the notepad and everything on it is gone, and nobody else can pick up where they left off.
+
+                    Hangfire is like a company's central scheduling department with a shared, durable calendar and a roster of on-call staff: it hands a due task to whichever staff member (Hangfire server) is available right now, automatically re-assigns it if that person no-shows (a failed run), and keeps a written log of every appointment, kept or missed, that anyone can review later (the dashboard). A `BackgroundService`'s `PeriodicTimer` is one person running their own private stopwatch — reliable enough while they're at their desk, but with no backup, no log, and no memory of the schedule if they ever leave the room.
+                    """, 2),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **RabbitMQ.Client (raw)**
+
+                    - `channel.QueueDeclare(queue: "name", durable: true, exclusive: false, autoDelete: false);`
+                    - `channel.BasicPublish(exchange: "", routingKey: "name", basicProperties: props, body: body);` (set `props.Persistent = true`)
+                    - `channel.BasicConsume(queue: "name", autoAck: false, consumer: consumer);` then `channel.BasicAck(ea.DeliveryTag, false);` after real work succeeds
+
+                    **MassTransit (broker-agnostic abstraction)**
+
+                    - `services.AddMassTransit(x => { x.AddConsumer<TConsumer>(); x.UsingRabbitMq((ctx, cfg) => cfg.ConfigureEndpoints(ctx)); });`
+                    - `IConsumer<TMessage>` with `Task Consume(ConsumeContext<TMessage> context)`
+                    - `IPublishEndpoint.Publish(message)` / `ISendEndpoint.Send(message)`
+
+                    **Hangfire (persistent job scheduler)**
+
+                    - `services.AddHangfire(cfg => cfg.UseSqlServerStorage(connectionString)); services.AddHangfireServer();`
+                    - `app.UseHangfireDashboard("/jobs");` — history, failures, retry counts
+                    - `BackgroundJob.Enqueue<T>(x => x.Method());` — fire-and-forget
+                    - `BackgroundJob.Schedule<T>(x => x.Method(), TimeSpan.FromHours(24));` — delayed
+                    - `RecurringJob.AddOrUpdate<T>("id", x => x.Method(), Cron.Daily);` — recurring, cron-based
+                    """, 3),
+                Block(BlockType.CodeSnippet, "RabbitMQ Producer/Consumer, MassTransit, and Hangfire Jobs", BodyFormat.PlainText, """
+                    // Raw RabbitMQ.Client: producer publishes a durable message to a durable queue.
+                    var factory = new ConnectionFactory { HostName = "rabbitmq.internal" };
+                    using var connection = factory.CreateConnection();
+                    using var channel = connection.CreateModel();
+
+                    channel.QueueDeclare(queue: "order-emails", durable: true, exclusive: false, autoDelete: false);
+
+                    var body = JsonSerializer.SerializeToUtf8Bytes(new OrderPlacedMessage(orderId, customerEmail));
+                    var props = channel.CreateBasicProperties();
+                    props.Persistent = true; // survives a broker restart, not just a consumer restart
+
+                    channel.BasicPublish(exchange: "", routingKey: "order-emails", basicProperties: props, body: body);
+
+                    // A SEPARATE process/service -- possibly a different deployment entirely --
+                    // consumes from the same durable queue. If this process crashes mid-message,
+                    // RabbitMQ redelivers it to whichever consumer instance is next available.
+                    var consumerChannel = connection.CreateModel();
+                    var consumer = new EventingBasicConsumer(consumerChannel);
+
+                    consumer.Received += async (model, ea) =>
+                    {
+                        var message = JsonSerializer.Deserialize<OrderPlacedMessage>(ea.Body.Span)!;
+                        await emailSender.SendOrderConfirmationAsync(message.OrderId, message.CustomerEmail);
+                        consumerChannel.BasicAck(ea.DeliveryTag, multiple: false); // ack only after real work succeeds
+                    };
+
+                    consumerChannel.BasicConsume(queue: "order-emails", autoAck: false, consumer: consumer);
+
+                    // MassTransit: same idea, broker-agnostic API on top of RabbitMQ/Azure Service Bus/SQS
+                    builder.Services.AddMassTransit(x =>
+                    {
+                        x.AddConsumer<OrderPlacedConsumer>();
+                        x.UsingRabbitMq((context, cfg) =>
+                        {
+                            cfg.Host("rabbitmq.internal");
+                            cfg.ConfigureEndpoints(context);
+                        });
+                    });
+
+                    public class OrderPlacedConsumer(IEmailSender emailSender) : IConsumer<OrderPlacedMessage>
+                    {
+                        public async Task Consume(ConsumeContext<OrderPlacedMessage> context) =>
+                            await emailSender.SendOrderConfirmationAsync(context.Message.OrderId, context.Message.CustomerEmail);
+                    }
+
+                    // Hangfire: a PERSISTENT job scheduler, not a message broker -- job state lives
+                    // in SQL/Redis, so it survives an app restart in a way BackgroundService can't.
+                    builder.Services.AddHangfire(config => config.UseSqlServerStorage(
+                        builder.Configuration.GetConnectionString("Hangfire")));
+                    builder.Services.AddHangfireServer();
+
+                    var app = builder.Build();
+                    app.UseHangfireDashboard("/jobs"); // built-in UI: history, failures, retry counts
+
+                    // Fire-and-forget: enqueued now, picked up by any running Hangfire server
+                    BackgroundJob.Enqueue<IEmailSender>(sender => sender.SendWelcomeEmailAsync(newUser.Id));
+
+                    // Delayed: due in 24 hours, survives a restart between now and then
+                    BackgroundJob.Schedule<IEmailSender>(
+                        sender => sender.SendTrialEndingReminderAsync(newUser.Id), TimeSpan.FromHours(24));
+
+                    // Recurring/cron -- compare this to the ArchiveStaleBooksService BackgroundService
+                    // from the previous lesson: same underlying task, but Hangfire persists the schedule,
+                    // retries a failed run automatically, and shows every past run in the dashboard.
+                    RecurringJob.AddOrUpdate<IArchiveService>(
+                        "archive-stale-books",
+                        svc => svc.ArchiveStaleBooksAsync(),
+                        Cron.Daily);
+                    """, 4, language: "csharp"),
+                Block(BlockType.Diagram, "BackgroundService vs. a Real Message Queue", BodyFormat.AsciiArt, """
+                    BackgroundService (previous lesson)              Message Queue (this lesson)
+
+                    [ single process ]                    [Producer]  ->  [Broker: RabbitMQ/ASB]  ->  [Consumer]
+                      ExecuteAsync loop                    (own deploy)   (persists to disk,           (own deploy,
+                      in-memory state only                                survives either side           can scale
+                      dies with the process                               restarting)                    independently)
+
+                    Process restarts -> in-flight work is GONE       Either side restarts -> broker still has the
+                                                                      message, redelivers once a consumer returns
+                    """, 5),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Reach for a message queue specifically when work needs to survive the producer's process going away, or needs to be picked up by a genuinely separate consumer service — not as a blanket replacement for `BackgroundService`'s simple in-process periodic work, which remains the right, much simpler choice for single-process housekeeping. Configure Hangfire (or Quartz.NET) with a real persistent store (SQL Server, PostgreSQL, Redis) rather than an in-memory storage provider outside of local development — the in-memory provider throws away every job's state on restart, defeating the entire reason to prefer it over a `BackgroundService` in the first place.
+
+                    Acknowledge broker messages only after the real work succeeds (`BasicAck` *after* processing, never before), and make both queue consumers and Hangfire recurring jobs idempotent — a redelivered message or a retried job run is a normal, expected occurrence under at-least-once semantics, not a bug to work around later.
+                    """, 6),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    If asked "why not just use a BackgroundService for this," answer with the specific capability gap rather than a vague "queues are more scalable": a `BackgroundService`'s state and to-do list live only inside one running process, so a crash or a deploy loses whatever wasn't finished, and only that one process could ever have done the work. A broker persists the message independent of any consumer's uptime, and a fully separate service can consume it — that's what actually buys durability and independent scaling, not the word "queue" by itself.
+
+                    For Hangfire specifically, be ready to name its three job types — fire-and-forget, delayed, and recurring/cron — and to point out that its persistent store plus dashboard is what lets a job survive a restart and gives visibility into failures, capabilities a hand-rolled `BackgroundService` loop doesn't have unless you build them yourself.
+                    """, 7),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Building a hand-rolled "queue" out of a `BackgroundService` and an in-memory `Channel<T>` or `List<T>` for work that genuinely needs to survive a restart or be processed by a separate service — it works fine until the first deploy or crash silently drops whatever was queued, at which point the team ends up re-implementing (badly) the exact durability RabbitMQ or Azure Service Bus already provide for free. The opposite mistake is just as common: standing up a full broker and consumer service, or a Hangfire deployment with its own SQL Server storage database, for a simple task that only ever needs to run inside one process on a timer — that's needless operational overhead a single `BackgroundService` with a `PeriodicTimer` already handled.
+
+                    Also common with Hangfire: writing a recurring job's handler as if it will only ever run exactly once per schedule tick, when a retry after a transient failure (or a missed tick catching up) means the same logical run can execute more than once — the handler needs the same idempotency discipline as any at-least-once queue consumer.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "A BackgroundService drains an in-memory list of pending notifications every 30 seconds. During a rolling deploy, the process recycles and several pending notifications are silently lost. What does switching to a real message queue (RabbitMQ/Azure Service Bus) fix that BackgroundService fundamentally cannot?",
+                    "A broker persists a published message independent of any single process's uptime, so a producer or consumer restart doesn't lose in-flight work -- a BackgroundService's in-memory state, by contrast, only ever exists inside that one running process.",
+                    [
+                        new QuizOptionSeed("The broker persists published messages independent of any single process's uptime, so a restart doesn't lose in-flight work", true),
+                        new QuizOptionSeed("Message queues process each message faster than a BackgroundService's loop can", false),
+                        new QuizOptionSeed("BackgroundService is only able to run once at startup, never continuously", false),
+                        new QuizOptionSeed("A message queue removes the need for any consumer code to run at all", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "Why does a Hangfire recurring job survive an application restart in a way a BackgroundService's PeriodicTimer loop does not?",
+                    "Hangfire persists job schedule and state to a durable store (SQL Server, PostgreSQL, or Redis) that any running Hangfire server polls, so a due job is picked up regardless of which process (or restart) is currently running. A BackgroundService's timer and any in-memory tracking exist only inside that one process's memory and reset the moment it restarts.",
+                    [
+                        new QuizOptionSeed("Hangfire persists job schedule/state to a durable store that any running Hangfire server polls, while BackgroundService's state lives only in that one process's memory", true),
+                        new QuizOptionSeed("BackgroundService is deprecated in modern .NET and no longer runs reliably", false),
+                        new QuizOptionSeed("Hangfire executes jobs entirely inside the database engine, without any application code running", false),
+                        new QuizOptionSeed("PeriodicTimer requires a licensed dependency to survive a process restart", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Asynchronous messaging options in Azure", "https://learn.microsoft.com/en-us/azure/architecture/guide/technology-choices/messaging", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("Get started with Azure Service Bus queues (.NET)", "https://learn.microsoft.com/en-us/azure/service-bus-messaging/service-bus-dotnet-get-started-with-queues", LinkType.OfficialDocs),
+            ],
+            prerequisites: [lesson1]);
+
+        var lesson2Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson2.Slug,
+        [
+            "Publish and consume a durable message through RabbitMQ (or Azure Service Bus), with manual acknowledgment after the real work succeeds",
+            "Schedule a fire-and-forget job, a delayed job, and a recurring cron job with Hangfire against a real persistent store, and open its dashboard",
+            "Explain out loud, using your own example, when a message queue or Hangfire is the right call versus when a plain BackgroundService is simpler and sufficient",
+        ]);
+
+        var module = BuildModule(topicId, "aspnet-core-identity-and-messaging", "Identity, OAuth2 & Distributed Messaging",
+            "Going beyond raw JWT issuance into ASP.NET Core Identity's full user-management framework and the OAuth2/OpenID Connect flows behind 'Sign in with' buttons, then reaching past BackgroundService into real message brokers and persistent job schedulers.",
+            90, [lesson1, lesson2], sortOrder: 4);
 
         return (module, [lesson1Checklist, lesson2Checklist]);
     }
