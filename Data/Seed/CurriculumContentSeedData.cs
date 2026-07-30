@@ -27,6 +27,9 @@ public static class CurriculumContentSeedData
             BuildCSharpValueSemanticsAndMemoryModule(topicIdBySlug["csharp"]),
             BuildCSharpConcurrencyAndMultithreadingModule(topicIdBySlug["csharp"]),
             BuildCSharpReflectionAndAdvancedGenericsModule(topicIdBySlug["csharp"]),
+            BuildCSharpIteratorsAndLinqInternalsModule(topicIdBySlug["csharp"]),
+            BuildCSharpDesignPatternsModule(topicIdBySlug["csharp"]),
+            BuildCSharpDependencyInjectionAndModernSyntaxModule(topicIdBySlug["csharp"]),
             BuildDotNetModule(topicIdBySlug["dotnet"]),
             BuildDotNetProductionReadinessModule(topicIdBySlug["dotnet"]),
             BuildDotNetScalingAndResilienceModule(topicIdBySlug["dotnet"]),
@@ -3003,6 +3006,1253 @@ public static class CurriculumContentSeedData
         var module = BuildModule(topicId, "csharp-reflection-and-advanced-generics", "Reflection & Advanced Generics",
             "Runtime type inspection and custom attributes, plus a deep dive into generic variance (out/in) and the full range of type constraints, beyond the basic generics covered in Collections & Generics.",
             90, [lesson1, lesson2], sortOrder: 8);
+
+        return (module, [lesson1Checklist, lesson2Checklist]);
+    }
+
+    private static (Module, List<ChecklistSeed>) BuildCSharpIteratorsAndLinqInternalsModule(int topicId)
+    {
+        var lesson1 = BuildLesson(
+            slug: "iterators-and-yield-return",
+            title: "Iterators & yield return",
+            summary: "What IEnumerable/IEnumerator actually are, how yield return compiles into a hidden state machine, and lazy vs. eager sequence production.",
+            estimatedMinutes: 40,
+            objectives:
+            [
+                "Explain what IEnumerable<T>/IEnumerator<T> are and how foreach desugars to calls against them",
+                "Describe how the compiler transforms a yield return method into a hidden state machine class",
+                "Write a custom iterator method that produces values lazily, including a safely-consumed infinite sequence",
+                "Use yield break to end a sequence early, and explain how an eager List<T> return differs from a lazy yield return one",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    `IEnumerable<T>` is the interface behind every `foreach` loop: it exposes one method, `GetEnumerator()`, which returns an `IEnumerator<T>` — the object that actually does the work, via `MoveNext()` (advance, return `false` when exhausted) and `Current` (the value at the current position). `foreach (var x in sequence) { ... }` is compiler sugar for calling `GetEnumerator()` once, then looping `while (enumerator.MoveNext()) { var x = enumerator.Current; ... }` inside a `try`/`finally` that disposes the enumerator.
+
+                    Writing an `IEnumerator<T>` by hand — a class tracking its own position, implementing `MoveNext`/`Current`/`Reset`/`Dispose` — is tedious for anything non-trivial. `yield return` is the compiler's way of writing that class for you. When a method's body contains `yield return` (or `yield break`), the compiler doesn't compile it as an ordinary method at all — it compiles it into a hidden nested class (typically named something like `<MethodName>d__0`) implementing `IEnumerator<T>`/`IEnumerable<T>`, with every local variable and parameter turned into a field on that class so its value survives between calls. Each call to `MoveNext()` resumes execution exactly where the previous call left off — right after the last `yield return` — runs until it hits the next `yield return`, `yield break`, or falls off the end of the method, and only then returns.
+
+                    This is what makes iterator methods **lazily/deferred evaluated**: calling `Fibonacci()` doesn't run a single line of the method body — it just constructs the hidden state machine object. Nothing actually executes until something calls `MoveNext()`, typically via `foreach` or a LINQ operator. That's also what makes a genuinely infinite sequence (`while (true) { yield return ...; }`) safe to write: the loop only ever advances once per `MoveNext()` call, so it's the *consumer* — `Take(10)`, `First()`, a `break` inside `foreach` — that decides when to stop asking for more, not the iterator itself.
+
+                    `yield break` ends the sequence immediately, the iterator-method equivalent of `return;` in an ordinary method — the next `MoveNext()` call (and every one after it) simply returns `false`.
+
+                    Contrast this with an **eager** method that returns `List<int>`: every element is computed and placed in memory before the method returns at all, whether or not the caller ends up using all of them. A **lazy** `yield return` method computes nothing until asked, computes exactly one element per request, and never needs to hold the whole sequence in memory at once — which is also the only reason an infinite sequence is even representable as a method return value.
+                    """, 1),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **IEnumerable\\<T> / IEnumerator\\<T>**
+
+                    - `IEnumerable<T>` — has `GetEnumerator()`; the thing `foreach` asks for
+                    - `IEnumerator<T>` — has `MoveNext()` and `Current`; the thing that does the work
+                    - `foreach (var x in seq)` desugars to: get enumerator, loop `MoveNext()`, read `Current` each time
+
+                    **yield keywords**
+
+                    - `yield return value;` — produce one value, pause here until the next `MoveNext()`
+                    - `yield break;` — end the sequence now, like an early `return` with no value
+
+                    **Iterator method rules**
+
+                    - Return type must be `IEnumerable<T>`, `IEnumerator<T>`, or the non-generic versions
+                    - Can't have `ref`/`out`/`in` parameters
+                    - Can't `yield return` inside a `catch` block, or a `try` that has a `catch` (a `try`/`finally` with no `catch` is fine)
+
+                    **Eager vs. lazy**
+
+                    - Eager (`List<T>` return) — all work happens before the method returns
+                    - Lazy (`yield return`) — work happens one item at a time, only when the caller asks for the next one
+                    """, 2),
+                Block(BlockType.CodeSnippet, "A Hand-Written Iterator, an Infinite Sequence, and yield break", BodyFormat.PlainText, """
+                    // A custom iterator method - the compiler turns this into a hidden
+                    // state machine class implementing IEnumerator<int> behind the scenes.
+                    public static IEnumerable<int> Fibonacci()
+                    {
+                        int previous = 0, current = 1;
+
+                        while (true) // infinite - safe only because callers control how much they take
+                        {
+                            yield return previous;
+                            (previous, current) = (current, previous + current);
+                        }
+                    }
+
+                    // Nothing above has executed yet when this line runs -
+                    // Fibonacci() just constructs the state machine object.
+                    var firstTen = Fibonacci().Take(10).ToList(); // NOW it runs, one MoveNext() per value
+
+                    // yield break ends a sequence early, like a return with no value.
+                    public static IEnumerable<int> TakeUntilNegative(IEnumerable<int> source)
+                    {
+                        foreach (var value in source)
+                        {
+                            if (value < 0)
+                            {
+                                yield break; // stop here - MoveNext() will return false from now on
+                            }
+                            yield return value;
+                        }
+                    }
+
+                    // Eager (List<T>) vs. lazy (yield return) - both "look" similar to call...
+                    public static List<int> EagerSquares(int count)
+                    {
+                        var results = new List<int>();
+                        for (var i = 0; i < count; i++) results.Add(i * i); // ALL work happens right here
+                        return results;
+                    }
+
+                    public static IEnumerable<int> LazySquares(int count)
+                    {
+                        for (var i = 0; i < count; i++) yield return i * i; // work happens ONE AT A TIME, on demand
+                    }
+                    """, 3, language: "csharp"),
+                Block(BlockType.Diagram, "What yield return Actually Compiles Into", BodyFormat.StructuredSteps, """
+                    [{"label":"You write a method with yield return","note":"e.g. IEnumerable<int> Fibonacci() { ... yield return previous; ... }"},{"label":"Compiler generates a hidden nested class","note":"implements IEnumerator<T> and IEnumerable<T>, captures locals as private fields"},{"label":"Calling the method just constructs that class","note":"no loop body has run yet - this is why it's lazy"},{"label":"foreach calls GetEnumerator(), then MoveNext()/Current repeatedly","note":"each MoveNext() resumes execution right after the last yield return"},{"label":"Method body runs until the next yield return, yield break, or the end","note":"MoveNext() returns false once there's nothing left to produce"}]
+                    """, 4),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Reach for `yield return` when a sequence might be large, might be infinite, or when the caller frequently only needs the first few items (`Take(n)`, `First()`) — the lazy version does zero wasted work in exactly the cases where an eager `List<T>` would do the most.
+
+                    Prefer an eager `List<T>`/`ToList()` return when the caller is going to enumerate the result more than once, needs `Count` without a full scan, or needs a stable snapshot that won't be affected by the source mutating after the method returns — this tradeoff is exactly what deferred LINQ queries face too, since `yield return` is the mechanism LINQ's own operators are built on (more on that next lesson).
+                    """, 5),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    A strong answer to "what does yield return actually do?" names the mechanism, not just the vocabulary: "the compiler rewrites the method into a hidden class implementing IEnumerator\\<T>, with locals turned into fields so they survive between MoveNext() calls, and each MoveNext() resumes right after the last yield return." Being able to say that — instead of just "it makes things lazy" — is what separates having used yield return from understanding it.
+
+                    A good follow-up demonstration: write an iterator method with a `Console.WriteLine` at the top and a parameter validation check, call it, and point out that neither has run yet — proving the body genuinely hasn't executed before enumeration starts.
+                    """, 6),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Putting argument validation at the top of an iterator method and expecting it to throw immediately when the method is called: `IEnumerable<int> GetPage(int size) { if (size <= 0) throw new ArgumentException(); ... yield return ...; }` — calling `GetPage(-1)` does **not** throw, because the method body hasn't run yet; it only throws once something enumerates the result (`foreach`, `.ToList()`), which can be far from the call site and confusing to debug. The fix is to split it: a small non-iterator wrapper method validates eagerly and throws immediately, then calls a private iterator method that does the actual `yield return`ing.
+
+                    Also common: writing `while (true) { yield return ...; }` for an infinite sequence and then accidentally enumerating it with a plain `foreach` (with no `break`) or `.ToList()` instead of `.Take(n)` — since nothing internally stops it, the program hangs (or the list grows) forever.
+                    """, 7),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    An eager method returning `List<T>` is like a bakery that bakes its entire day's stock of every pastry before opening the doors — impressive if a customer wants one of everything, wasteful if most only want a croissant, and outright impossible if "the whole day's stock" were actually infinite.
+
+                    A `yield return` iterator is a bakery that bakes to order: nothing comes out of the oven until a customer actually asks for the next item, and it only ever makes one at a time. That's why an iterator can happily describe an infinite menu — nobody's asking it to prepare everything in advance, only to hand over the next item whenever `MoveNext()` (a customer stepping up to the counter) asks for one.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "What actually happens when the compiler processes a method whose body contains `yield return`?",
+                    "The compiler compiles the method into a hidden nested class implementing IEnumerator<T>/IEnumerable<T>, turning locals and parameters into fields on that class so their values survive between calls, and resuming execution right after the last yield return on each MoveNext() call. It does not eagerly buffer results, run on a separate thread, or require a compile-time error for non-primitive T.",
+                    [
+                        new QuizOptionSeed("It eagerly runs the whole method and buffers every value into a List<T> before returning", false),
+                        new QuizOptionSeed("It generates a hidden state machine class implementing IEnumerator<T>, with locals captured as fields", true),
+                        new QuizOptionSeed("It throws a compile error unless T is a primitive numeric type", false),
+                        new QuizOptionSeed("It automatically runs the iteration on a background thread", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "`IEnumerable<int> GetSequence(int n) { if (n < 0) throw new ArgumentException(); yield return n; }` is called as `var seq = GetSequence(-1);`. When does the exception actually get thrown?",
+                    "Iterator method bodies don't execute at all when the method is called - calling GetSequence(-1) only constructs the hidden state machine object. The body (including the validation check) only runs once something enumerates the result, such as a foreach loop or a call to ToList().",
+                    [
+                        new QuizOptionSeed("Immediately, on the line that calls GetSequence(-1)", false),
+                        new QuizOptionSeed("Only when the returned sequence is first enumerated, e.g. in a foreach loop or ToList()", true),
+                        new QuizOptionSeed("Never - validation code is unreachable inside iterator methods", false),
+                        new QuizOptionSeed("At compile time, since the compiler evaluates iterator method bodies statically", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Iterators (C#)", "https://learn.microsoft.com/en-us/dotnet/csharp/iterators", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("yield statement (C# reference)", "https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/statements/yield", LinkType.OfficialDocs),
+            ]);
+
+        var lesson1Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson1.Slug,
+        [
+            "Write a custom iterator method using yield return that lazily generates values, and confirm with Console.WriteLine that its body doesn't run until enumeration starts",
+            "Write an infinite sequence with yield return, and safely consume only the first N items using Take",
+            "Reproduce (and then fix) the 'validation exception fires late' gotcha by splitting an iterator method into a validating wrapper plus a private iterator",
+        ]);
+
+        var lesson2 = BuildLesson(
+            slug: "linq-deferred-execution-and-custom-operators",
+            title: "LINQ Deferred Execution & Writing Custom LINQ Operators",
+            summary: "Why Where/Select are themselves iterator methods under the hood, the multiple-enumeration bug, and writing your own yield-return-based LINQ operator.",
+            estimatedMinutes: 45,
+            objectives:
+            [
+                "Explain precisely why Where/Select build a deferred query chain instead of executing immediately, using the iterator mechanics from the previous lesson",
+                "Diagnose and fix the multiple enumeration bug, including its correctness and performance consequences",
+                "Write a custom LINQ-style extension method (e.g. WhereGreaterThan or TakeEvery) using yield return",
+                "Decide when to materialize a query with ToList()/ToArray() versus leave it deferred",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    The LINQ Fundamentals lesson established that `Where`/`Select` build up a query description instead of running immediately — deferred execution. This lesson is about the *mechanism* underneath that behavior, because it's exactly the mechanism from the previous lesson: `Enumerable.Where`, `Enumerable.Select`, and almost every other LINQ to Objects operator are themselves implemented as iterator methods using `yield return`, internally, inside the .NET runtime. `.Where(predicate)` doesn't loop over the source and build a filtered list — it returns a new iterator that, each time *its* `MoveNext()` is called, pulls the next element from the source's iterator, tests the predicate, and yields it only if it passes. Chaining `.Where(...).Select(...)` layers one hand-written-style iterator on top of another, exactly like the `Fibonacci()`/`LazySquares()` methods from the previous lesson — nothing about LINQ's laziness is special-cased magic, it's the same `yield return` state machine, just written by Microsoft instead of by you.
+
+                    Because each stage is a thin, independent iterator with no memory of previous runs, enumerating the *same* unmaterialized query object more than once — `.Any()` followed by a separate `foreach`, or two separate `foreach` loops over one `IEnumerable<T>` variable — re-runs the *entire* chain from the original source each time. This is the **multiple enumeration** problem: at best it's wasted CPU work (re-filtering/re-projecting the same data twice); against an EF Core `IQueryable<T>` it's a second network round trip to the database; against a source with side effects (a `Random`, a file reader, an API call wrapped in an iterator) it can silently produce *different* results on the second enumeration, which is a correctness bug, not just a performance one.
+
+                    You can write your own LINQ-style operator the same way the framework does: an extension method on `IEnumerable<T>` whose body is itself an iterator method, using `yield return` to stay just as lazy and composable as `Where`/`Select` — so it slots into an existing chain (`source.Where(...).WhereGreaterThan(5).Select(...)`) without breaking deferred execution for anything downstream.
+                    """, 1),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Where LINQ's laziness actually comes from**
+
+                    - `Enumerable.Where`/`Enumerable.Select`/etc. are themselves iterator methods (`yield return` internally)
+                    - Each chained call wraps the previous iterator — nothing runs until the outermost one is enumerated
+
+                    **The multiple enumeration bug**
+
+                    - Symptom: `.Any()` then `foreach`, or two `foreach` loops, over the same un-materialized `IEnumerable<T>`/`IQueryable<T>`
+                    - Cost against `IQueryable<T>` (EF Core): a second database round trip per extra enumeration
+                    - Cost against a non-deterministic/stateful source: different results each time, not just wasted work
+                    - Fix: call `.ToList()`/`.ToArray()` once, and enumerate the materialized collection instead
+
+                    **Writing your own LINQ-style operator**
+
+                    - `public static IEnumerable<T> MyOp<T>(this IEnumerable<T> source, ...) { foreach (...) { yield return ...; } }`
+                    - Keep it an iterator (`yield return`) to preserve laziness and composability
+                    - Validate arguments in a small eager wrapper — same fix as the previous lesson's late-validation gotcha
+                    """, 2),
+                Block(BlockType.CodeSnippet, "Two Custom LINQ Operators, and the Multiple Enumeration Bug", BodyFormat.PlainText, """
+                    // A custom LINQ-style operator - just an extension method whose BODY
+                    // is an iterator, exactly like the previous lesson's hand-written iterators.
+                    public static IEnumerable<int> WhereGreaterThan(this IEnumerable<int> source, int threshold)
+                    {
+                        foreach (var item in source)
+                        {
+                            if (item > threshold)
+                            {
+                                yield return item; // still lazy - nothing runs until enumerated
+                            }
+                        }
+                    }
+
+                    // Another one: keep every Nth element, starting from the first.
+                    public static IEnumerable<T> TakeEvery<T>(this IEnumerable<T> source, int step)
+                    {
+                        if (step <= 0) throw new ArgumentOutOfRangeException(nameof(step)); // eager check - see below
+
+                        var index = 0;
+                        foreach (var item in source)
+                        {
+                            if (index % step == 0)
+                            {
+                                yield return item;
+                            }
+                            index++;
+                        }
+                    }
+
+                    // Both compose with built-in LINQ exactly like any other operator:
+                    var result = numbers
+                        .Where(n => n % 2 == 0)
+                        .WhereGreaterThan(10)
+                        .TakeEvery(2)
+                        .ToList();
+
+                    // --- The multiple enumeration bug ---
+                    IEnumerable<int> RandomScores()
+                    {
+                        var random = new Random();
+                        for (var i = 0; i < 5; i++)
+                        {
+                            yield return random.Next(0, 100); // a non-deterministic source
+                        }
+                    }
+
+                    var scores = RandomScores().Where(s => s > 50); // still just a query description
+
+                    if (scores.Any())                  // enumeration #1 - runs the whole chain
+                    {
+                        foreach (var s in scores)       // enumeration #2 - runs the ENTIRE chain AGAIN,
+                        {                                // generating a brand-new set of random numbers
+                            Console.WriteLine(s);        // scores printed here may not match what Any() saw
+                        }
+                    }
+
+                    // Fix: materialize once, then reuse the snapshot.
+                    var fixedScores = RandomScores().Where(s => s > 50).ToList();
+                    if (fixedScores.Count > 0)
+                    {
+                        foreach (var s in fixedScores) Console.WriteLine(s); // same data both times
+                    }
+                    """, 3, language: "csharp"),
+                Block(BlockType.Diagram, "A LINQ Chain Is a Pull-Based Iterator Pipeline", BodyFormat.StructuredSteps, """
+                    [{"label":"numbers.Where(isEven).WhereGreaterThan(10).TakeEvery(2)","note":"builds 3 nested iterators - nothing has executed yet"},{"label":".ToList() or foreach starts enumeration","note":"calls MoveNext() on the OUTERMOST iterator, TakeEvery's"},{"label":"TakeEvery.MoveNext() calls WhereGreaterThan.MoveNext()","note":"which calls Where.MoveNext(), which calls the source's MoveNext()"},{"label":"One element flows back up through the chain","note":"filtered, kept, or dropped at each stage, one at a time - a pull, not a push"},{"label":"Enumerating the SAME chain object again","note":"re-runs every step from the original source - this is the multiple enumeration bug"}]
+                    """, 4),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Materialize once with `.ToList()`/`.ToArray()` the moment you know a query will be enumerated more than once, or whenever the source is expensive (a database query), non-deterministic (`Random`, `DateTime.Now`), or has side effects — store the *result*, and enumerate that stored result as many times as you need.
+
+                    When writing your own LINQ-style operator, keep the operator itself a pure `yield return` iterator with no side effects, and — echoing the previous lesson's fix for late-firing validation — validate arguments (`step <= 0`, a null `source`) in a small non-iterator wrapper method that throws immediately, then delegate to a private iterator method for the actual `yield return` logic. That keeps eager argument checking (fail fast, at the call site) separate from lazy element production (fail lazily, only when enumerated).
+                    """, 5),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    If asked "why is LINQ lazy?", the strongest answer ties it directly back to iterators: "because Where and Select are themselves implemented with yield return — they're not special, they're iterator methods just like ones you'd write by hand, so calling them only constructs a state machine and nothing runs until something calls MoveNext()." Then, if asked for a real bug this causes, describe multiple enumeration against an EF Core IQueryable\\<T> silently issuing a second database round trip — a concrete, production-relevant consequence beats reciting the definition of "deferred execution."
+                    """, 6),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    The classic multiple enumeration bug: calling `.Any()`, `.Count()`, or a `foreach` more than once on the same `IEnumerable<T>`/`IQueryable<T>` variable that was never materialized — each call independently re-runs the whole chain from the original source. Against a database-backed `IQueryable<T>` this means extra round trips for what looks like "just checking before looping"; against any source with side effects or non-determinism, it can produce different results each time, which is a correctness bug that's easy to miss because the code visually looks like it's just reading the same variable twice.
+
+                    Also common when writing a custom LINQ-style operator: accidentally making it eager by building a `List<T>` internally and returning that instead of using `yield return` — it'll still work, but it silently loses laziness (an infinite source now hangs the method forever, before ever returning) and does all its work upfront even when the caller only wanted the first couple of results via `Take(n)`.
+                    """, 7),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    A LINQ chain is an assembly line where each `Where`/`Select`/custom operator is its own station, and — just like the previous lesson's bakery — no station does any work until the station after it asks for a finished item; that request travels backward through every station to the original source, one item at a time.
+
+                    Multiple enumeration is like a shift supervisor checking "do we have any orders ready?" by asking the line to run once, then separately asking it to run again to actually collect them — the second request doesn't hand over the first run's output, it restarts the whole line from raw materials, which is wasteful if the line is slow and outright wrong if the raw materials (a fresh batch of random numbers, today's date) are different the second time around.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "Enumerable.Where and Enumerable.Select are, under the hood, implemented using which mechanism?",
+                    "LINQ to Objects operators like Where and Select are themselves iterator methods using yield return internally, exactly like any hand-written iterator - that's the actual source of their deferred, lazy behavior, not special-cased runtime magic.",
+                    [
+                        new QuizOptionSeed("yield-return-based iterator methods, the same mechanism you'd use in a hand-written iterator", true),
+                        new QuizOptionSeed("They eagerly build a List<T> result internally and wrap it in an IEnumerable<T>", false),
+                        new QuizOptionSeed("They spawn a background thread per query to compute results ahead of time", false),
+                        new QuizOptionSeed("They use reflection to inspect the source's element type on every MoveNext() call", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "In `var scores = RandomScores().Where(s => s > 50); if (scores.Any()) { foreach (var s in scores) ... }`, why might the values printed in the foreach not match what Any() evaluated?",
+                    "scores was never materialized, so Any() and the foreach are two independent enumerations of the same deferred query. Each one re-runs the entire chain from scratch, including a fresh call to RandomScores(), which generates a brand-new set of random numbers the second time. Calling .ToList() once and reusing that snapshot fixes it.",
+                    [
+                        new QuizOptionSeed("Any() caches its result, so the foreach should show the exact same values - this is actually a bug in LINQ", false),
+                        new QuizOptionSeed("Any() and the foreach are independent enumerations that each re-run the whole chain, including generating a fresh set of random numbers", true),
+                        new QuizOptionSeed("Where filters different elements each time it's called for no discoverable reason", false),
+                        new QuizOptionSeed("Any() and foreach execute on different threads, causing a data race on scores", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Extension methods (C# Programming Guide)", "https://learn.microsoft.com/en-us/dotnet/csharp/programming-guide/classes-and-structs/extension-methods", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("Standard query operators overview", "https://learn.microsoft.com/en-us/dotnet/csharp/linq/standard-query-operators/", LinkType.OfficialDocs),
+            ],
+            prerequisites: [lesson1]);
+
+        var lesson2Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson2.Slug,
+        [
+            "Write your own IEnumerable<T> extension method (e.g. WhereGreaterThan or TakeEvery) using yield return, and chain it after a built-in LINQ operator",
+            "Reproduce the multiple enumeration bug against a query with a visible side effect or non-deterministic source, then fix it with a single ToList()",
+            "Explain out loud why Where/Select behave lazily by connecting it back to how yield return builds an iterator, not 'because LINQ is smart'",
+        ]);
+
+        var module = BuildModule(topicId, "csharp-iterators-and-linq-internals", "Iterators, Yield Return & LINQ Internals",
+            "How custom iterators actually work under the compiler's hood, and how that same yield-return mechanism explains LINQ's deferred execution, the multiple-enumeration bug, and how to write your own LINQ-style operators.",
+            85, [lesson1, lesson2], sortOrder: 9);
+
+        return (module, [lesson1Checklist, lesson2Checklist]);
+    }
+    private static (Module, List<ChecklistSeed>) BuildCSharpDesignPatternsModule(int topicId)
+    {
+        var lesson1 = BuildLesson(
+            slug: "design-patterns-creational-and-structural",
+            title: "Creational & Structural Design Patterns",
+            summary: "Singleton (and the thread-safe Lazy<T> idiom), Factory Method vs. Abstract Factory, the fluent Builder, and wrapping interfaces with Decorator and Adapter.",
+            estimatedMinutes: 50,
+            objectives:
+            [
+                "Implement a thread-safe Singleton with Lazy<T>, and explain precisely why the naive lazily-initialized version is broken under concurrent first access",
+                "Differentiate Factory Method from Abstract Factory, and pick the right one for a given object-creation problem",
+                "Build a fluent Builder that constructs a complex object step by step, and explain when Builder earns its extra ceremony over an object initializer",
+                "Implement Decorator to layer behavior onto an interface at runtime and Adapter to make an incompatible interface fit, and state the structural difference between the two",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    Design patterns are named, reusable solutions to recurring design problems — shared vocabulary for describing a design in one word instead of a paragraph, not a checklist to force onto every class. The classic "Gang of Four" catalog splits them into **creational** (how objects get created), **structural** (how objects are composed), and **behavioral** (how objects communicate) patterns. This lesson covers five of the patterns most likely to come up in an actual interview: Singleton, Factory Method, Abstract Factory, Builder, and — from the structural family — Decorator and Adapter.
+
+                    **Singleton** guarantees a class has exactly one instance, globally accessible through a single access point. It's also the pattern with the single most common interview trap baked into it: the naive "lazy initialization" version — `if (_instance is null) { _instance = new T(); } return _instance;` — is **not thread-safe**. Two threads can both evaluate `_instance is null` as `true` before either has finished assigning it, so both construct an instance; whichever assignment happens last wins, the other is silently discarded, and if the constructor has any side effect (opening a file, a socket, a connection pool), that side effect fires more than once. The idiomatic C# fix is `Lazy<T>`: `new Lazy<T>(() => new T())` defers construction until `.Value` is first read, and its default thread-safety mode (`LazyThreadSafetyMode.ExecutionAndPublication`) guarantees the factory delegate runs to completion exactly once even if multiple threads race to read `.Value` simultaneously — every thread gets the same instance, and no thread ever observes a half-constructed one.
+
+                    **Factory Method** defines a method for creating an object, but lets a subclass decide which concrete type gets created — calling code only ever depends on an abstract product type, never on a hardcoded `new ConcreteClass()`. **Abstract Factory** is one level up: a factory that creates an entire *family* of related objects meant to be used together (a `LightThemeFactory` producing a matching `Button` + `Checkbox`, versus a `DarkThemeFactory` producing the dark-themed equivalents of both) — it's best understood as grouping several Factory Methods behind one interface so the whole family stays internally consistent.
+
+                    **Builder** separates the step-by-step construction of a complex object from its final representation, typically via method chaining (a "fluent" API) that returns `this` from each step and exposes a final `.Build()`. It earns its complexity over a constructor or object initializer once an object has several optional parts, needs to be assembled incrementally, or should end up immutable — a long parameter list of optional constructor arguments (the "telescoping constructor" problem) is exactly what Builder replaces with self-documenting, chainable calls.
+
+                    **Decorator** wraps an object in another object that implements the *same* interface, adding behavior before/after delegating to the wrapped instance — without touching the wrapped object's class and without needing a subclass for every possible combination of behavior. **Adapter** wraps an object with an *incompatible* interface so it satisfies whatever interface the calling code already expects, translating one shape into another — most often used to make a third-party or legacy type fit an interface your code depends on, without modifying that original type. The two are easy to conflate: Decorator keeps the interface identical and adds behavior; Adapter changes the interface shape and adds no new behavior of its own, only translation.
+                    """, 1),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    A naive Singleton is like a "walk-in" ticket counter with no queue markers: if two customers approach the empty counter at the exact same instant, both may conclude "no one's being served, I'll start" and both start being helped — by the time anyone notices, two transactions are already underway instead of one. `Lazy<T>` is the same counter with a single-file queue rope installed: the first customer to reach the rope triggers the one-time setup, everyone else who arrives during that setup simply waits at the rope, and every customer walks away having been served by the exact same teller.
+
+                    Factory Method is a restaurant kitchen where the head chef decides on the spot which specific dish to plate for "today's special," while the waiter never needs to know which dish that turns out to be — only that a themed set of related dishes will come out consistent with each other. Abstract Factory is a full themed restaurant franchise: choose "Italian" and you get a matching appetizer, entrée, and dessert built by that franchise's own recipes; choose "Japanese" and every course changes together, never mixing recipes from two different franchises.
+
+                    Builder is like ordering a custom sandwich at a counter — you specify bread, then protein, then toppings, one step at a time, and only get the finished sandwich handed to you at the very end, instead of trying to describe the entire sandwich in one breath to the person behind the counter.
+
+                    Decorator is like layering clothing for cold weather: a base t-shirt (the component), then a sweater over it, then a jacket over that — each layer wraps the previous one and adds its own effect, but you're still recognizably wearing "a shirt" underneath it all. Adapter is a travel power plug adapter: it doesn't add any new electrical behavior, it just reshapes a plug from one country's socket so it fits a wall outlet from a completely different country.
+                    """, 2),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Singleton**
+
+                    - Naive: `if (_instance is null) _instance = new T();` — **not** thread-safe, can construct twice
+                    - Fix: `private static readonly Lazy<T> _instance = new(() => new T());` then expose `T Instance => _instance.Value;`
+                    - `Lazy<T>` default mode `ExecutionAndPublication` — factory runs exactly once, even under thread contention
+
+                    **Factory Method vs. Abstract Factory**
+
+                    - Factory Method: one overridable method, creates **one** product (`CreateTransport()` -> `Truck` or `Ship`)
+                    - Abstract Factory: one interface grouping **several** Factory Methods, creates a matching **family** of products
+
+                    **Builder**
+
+                    - Fluent: each step method returns `this`; a final `.Build()` produces the object
+                    - Earns its keep once there are several optional parts, or the built object should end up immutable
+
+                    **Decorator vs. Adapter**
+
+                    - Decorator: same interface in and out, wraps to **add behavior**; stackable (`new C(new B(new A()))`)
+                    - Adapter: translates one interface into a **different** one the caller expects; adds no new behavior, only translation
+                    """, 3),
+                Block(BlockType.CodeSnippet, "Singleton (Naive vs. Lazy<T>), Factory Method, Abstract Factory, Builder, Decorator, and Adapter", BodyFormat.PlainText, """
+                    // 1. Singleton: the naive, NON-thread-safe version (classic interview trap)
+                    public sealed class NaiveConfigManager
+                    {
+                        private static NaiveConfigManager? _instance;
+
+                        public static NaiveConfigManager Instance
+                        {
+                            get
+                            {
+                                if (_instance is null)          // <-- race window: two threads can both see null here
+                                {
+                                    _instance = new NaiveConfigManager(); // both construct; one assignment silently wins
+                                }
+                                return _instance;
+                            }
+                        }
+
+                        private NaiveConfigManager() { /* imagine this opens a file handle or a socket */ }
+                    }
+
+                    // The idiomatic, thread-safe fix: Lazy<T>
+                    public sealed class ConfigManager
+                    {
+                        private static readonly Lazy<ConfigManager> _instance =
+                            new(() => new ConfigManager(), LazyThreadSafetyMode.ExecutionAndPublication);
+
+                        public static ConfigManager Instance => _instance.Value;
+
+                        private readonly Dictionary<string, string> _settings;
+
+                        private ConfigManager()
+                        {
+                            _settings = new Dictionary<string, string> { ["Environment"] = "Production" };
+                        }
+
+                        public string Get(string key) => _settings[key];
+                    }
+
+                    // 2. Factory Method: a subclass decides WHICH concrete product to create
+                    public interface ITransport { void Deliver(); }
+                    public class Truck : ITransport { public void Deliver() => Console.WriteLine("Delivering by road"); }
+                    public class Ship : ITransport { public void Deliver() => Console.WriteLine("Delivering by sea"); }
+
+                    public abstract class LogisticsBase
+                    {
+                        protected abstract ITransport CreateTransport(); // the "factory method"
+
+                        public void PlanDelivery() => CreateTransport().Deliver(); // never calls `new` directly
+                    }
+
+                    public class RoadLogistics : LogisticsBase
+                    {
+                        protected override ITransport CreateTransport() => new Truck();
+                    }
+
+                    public class SeaLogistics : LogisticsBase
+                    {
+                        protected override ITransport CreateTransport() => new Ship();
+                    }
+
+                    // 3. Abstract Factory: one interface creates a whole FAMILY of related products
+                    public interface IButton { void Render(); }
+                    public interface ICheckbox { void Render(); }
+
+                    public interface IUiFactory
+                    {
+                        IButton CreateButton();
+                        ICheckbox CreateCheckbox();
+                    }
+
+                    public class LightButton : IButton { public void Render() => Console.WriteLine("Rendering a light button"); }
+                    public class LightCheckbox : ICheckbox { public void Render() => Console.WriteLine("Rendering a light checkbox"); }
+                    public class DarkButton : IButton { public void Render() => Console.WriteLine("Rendering a dark button"); }
+                    public class DarkCheckbox : ICheckbox { public void Render() => Console.WriteLine("Rendering a dark checkbox"); }
+
+                    public class LightThemeFactory : IUiFactory
+                    {
+                        public IButton CreateButton() => new LightButton();
+                        public ICheckbox CreateCheckbox() => new LightCheckbox();
+                    }
+
+                    public class DarkThemeFactory : IUiFactory
+                    {
+                        public IButton CreateButton() => new DarkButton();
+                        public ICheckbox CreateCheckbox() => new DarkCheckbox();
+                    }
+                    // Swapping the whole IUiFactory swaps every control's theme together — never a light Button
+                    // paired with a dark Checkbox by accident.
+
+                    // 4. Builder: assemble a complex, immutable object step by step, fluently
+                    public sealed class Pizza
+                    {
+                        public string Size { get; }
+                        public IReadOnlyList<string> Toppings { get; }
+
+                        public Pizza(string size, IReadOnlyList<string> toppings)
+                        {
+                            Size = size;
+                            Toppings = toppings;
+                        }
+                    }
+
+                    public class PizzaBuilder
+                    {
+                        private string _size = "Medium";
+                        private readonly List<string> _toppings = new();
+
+                        public PizzaBuilder WithSize(string size) { _size = size; return this; }
+                        public PizzaBuilder AddTopping(string topping) { _toppings.Add(topping); return this; }
+                        public Pizza Build() => new(_size, _toppings.AsReadOnly());
+                    }
+
+                    var pizza = new PizzaBuilder()
+                        .WithSize("Large")
+                        .AddTopping("Pepperoni")
+                        .AddTopping("Mushroom")
+                        .Build();
+
+                    // 5. Decorator: wrap the SAME interface, stack behavior at runtime
+                    public interface INotifier { void Send(string message); }
+
+                    public class EmailNotifier : INotifier
+                    {
+                        public void Send(string message) => Console.WriteLine($"Email: {message}");
+                    }
+
+                    public abstract class NotifierDecorator : INotifier
+                    {
+                        private readonly INotifier _inner;
+                        protected NotifierDecorator(INotifier inner) => _inner = inner;
+                        public virtual void Send(string message) => _inner.Send(message);
+                    }
+
+                    public class SmsDecorator : NotifierDecorator
+                    {
+                        public SmsDecorator(INotifier inner) : base(inner) { }
+                        public override void Send(string message)
+                        {
+                            base.Send(message);
+                            Console.WriteLine($"SMS: {message}");
+                        }
+                    }
+
+                    public class SlackDecorator : NotifierDecorator
+                    {
+                        public SlackDecorator(INotifier inner) : base(inner) { }
+                        public override void Send(string message)
+                        {
+                            base.Send(message);
+                            Console.WriteLine($"Slack: {message}");
+                        }
+                    }
+
+                    INotifier notifier = new SlackDecorator(new SmsDecorator(new EmailNotifier()));
+                    notifier.Send("Deploy finished"); // Email, then SMS, then Slack — each layer wraps the next
+
+                    // 6. Adapter: translate an INCOMPATIBLE interface into the one callers expect
+                    public class LegacyXmlLogger // third-party/legacy type you don't own and can't change
+                    {
+                        public void WriteXmlEntry(string xml) => Console.WriteLine(xml);
+                    }
+
+                    public interface ILogger { void Log(string message); } // the interface your app depends on
+
+                    public class XmlLoggerAdapter : ILogger
+                    {
+                        private readonly LegacyXmlLogger _legacy;
+                        public XmlLoggerAdapter(LegacyXmlLogger legacy) => _legacy = legacy;
+
+                        public void Log(string message) => _legacy.WriteXmlEntry($"<entry>{message}</entry>");
+                    }
+                    """, 4, language: "csharp"),
+                Block(BlockType.Diagram, "Decorator: Each Layer Wraps the Same Interface", BodyFormat.AsciiArt, """
+                    notifier.Send("Deploy finished")
+                            |
+                            v
+                    SlackDecorator.Send()  --base.Send()-->  SmsDecorator.Send()  --base.Send()-->  EmailNotifier.Send()
+                    (writes "Slack: ..."                     (writes "SMS: ..."                     (writes "Email: ...")
+                     AFTER delegating inward)                 AFTER delegating inward)                (the real component)
+
+                    Every layer implements the SAME INotifier interface as the one it wraps.
+                    Adapter is different: it sits between two DIFFERENT interfaces —
+
+                    caller expects ILogger.Log(msg) --> XmlLoggerAdapter --> LegacyXmlLogger.WriteXmlEntry(xml)
+                                                        (translates the call, adds no new behavior of its own)
+                    """, 5),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Reach for `Lazy<T>` for every Singleton you write in C# — it's a one-line, framework-provided way to get correct thread-safe lazy initialization, so there's essentially never a reason to hand-roll double-checked locking yourself. In an ASP.NET Core app, also ask whether you even need a hand-rolled Singleton at all: registering a service with `builder.Services.AddSingleton<T>()` gives you the same one-instance guarantee, managed by the DI container instead of a static field.
+
+                    Reach for Abstract Factory only when you actually have *families* of products that must stay consistent with each other; if there's only ever one product being created, plain Factory Method (or even just a simple factory function) is enough and Abstract Factory is needless ceremony.
+
+                    Prefer Builder over a constructor with many optional parameters once you have roughly four or more optional parts, or the object should end up immutable after construction — for a handful of required parameters, a plain constructor or object initializer is simpler and should be preferred.
+
+                    Have Decorator and Adapter each implement the interface they present to *callers*, not the interface of whatever they wrap — a Decorator's whole point is being indistinguishable from the component it wraps, and an Adapter's whole point is looking exactly like the interface the caller already depends on.
+                    """, 6),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    The single most common trap here: "implement a Singleton in C#" followed immediately by "is that thread-safe?" Many candidates write the naive `if (_instance is null)` version and confidently say yes. The correct answer names the exact race: two threads can both observe `null` before either has assigned `_instance`, so the constructor can run more than once. Naming `Lazy<T>` and its default `LazyThreadSafetyMode.ExecutionAndPublication` — which guarantees the factory delegate executes exactly once even under contention — is what separates "knows the pattern" from "has actually shipped it."
+
+                    Also expect "what's the difference between Factory Method and Abstract Factory?" The precise answer is about scope: Factory Method is one overridable method producing one product; Abstract Factory is an interface bundling several Factory Methods together so an entire *family* of related products stays consistent. And expect "Decorator vs. Adapter — aren't they both just 'wrapping a class'?" — the distinguishing detail is that Decorator preserves the same interface and adds behavior (and is meant to be stacked), while Adapter changes the interface shape to match what the caller expects and adds no behavior of its own.
+                    """, 7),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Shipping the naive `if (_instance is null) { _instance = new T(); }` Singleton in code that's actually accessed concurrently — under load, this really does construct more than one instance, and if the constructor opens a resource (a file, a connection), that resource genuinely gets opened twice. Reach for `Lazy<T>` instead of re-deriving double-checked locking by hand.
+
+                    Confusing a `static` class (or a class with only static members) with the Singleton *pattern* — a static class has no instance at all and can't implement an interface, participate in polymorphism, or be constructed with dependencies; Singleton specifically guarantees exactly *one instance* of an otherwise-ordinary class, which a plain static class cannot substitute for.
+
+                    Reaching for Abstract Factory when there's only one product to create (plain Factory Method would do) — and the mirror-image mistake with Decorator/Adapter: writing a "Decorator" that actually changes the interface shape (that's really an Adapter), or an "Adapter" that adds unrelated new behavior beyond translation (that's really a Decorator wearing an Adapter's name).
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "Why is `if (_instance is null) { _instance = new T(); } return _instance;` not thread-safe, and how does Lazy<T> fix it?",
+                    "Two threads can both evaluate _instance is null as true before either has finished assigning it, so both can end up constructing an instance — re-running any constructor side effects and leaving the final value dependent on whichever assignment happens to run last. Lazy<T>'s default thread-safety mode (ExecutionAndPublication) guarantees the factory delegate passed to it executes to completion exactly once, even if multiple threads read .Value at the same time; every thread receives the same fully-constructed instance.",
+                    [
+                        new QuizOptionSeed("Two threads can both pass the null-check before either assigns, potentially constructing more than once and re-running constructor side effects; Lazy<T>'s default mode guarantees the factory runs exactly once", true),
+                        new QuizOptionSeed("Static fields cannot be reassigned after their first write, so the bug is a compile-time error instead", false),
+                        new QuizOptionSeed("Lazy<T> works by wrapping the constructor call in a database transaction", false),
+                        new QuizOptionSeed("The naive version is actually thread-safe in C#; the bug only affects languages without garbage collection", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "What is the key structural difference between Factory Method and Abstract Factory?",
+                    "Factory Method is a single (often overridden) method that creates one product, so callers depend only on an abstract product type rather than a concrete class. Abstract Factory is one level up: an interface that groups several such creation methods together so a whole family of related objects (e.g., a matching Button and Checkbox for one UI theme) is produced consistently, never mixing pieces from two different families.",
+                    [
+                        new QuizOptionSeed("Factory Method creates one product via a single overridable method; Abstract Factory groups several creation methods behind one interface to produce a consistent family of related products", true),
+                        new QuizOptionSeed("Factory Method only works with sealed classes, while Abstract Factory requires every product to be a struct", false),
+                        new QuizOptionSeed("Abstract Factory is simply an older name for Factory Method with no practical difference in modern C#", false),
+                        new QuizOptionSeed("Factory Method requires reflection to select the concrete type; Abstract Factory does not", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Lazy<T> Class (thread-safe lazy initialization)", "https://learn.microsoft.com/en-us/dotnet/api/system.lazy-1", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("Refactoring Guru: Decorator", "https://refactoring.guru/design-patterns/decorator", LinkType.FurtherReading),
+            ]);
+
+        var lesson1Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson1.Slug,
+        [
+            "Implement both the naive non-thread-safe Singleton and the Lazy<T> version, and explain in one sentence why the first is broken under concurrent first access",
+            "Write a Factory Method and an Abstract Factory example, and state in one sentence what distinguishes them",
+            "Build a fluent Builder for an object with at least three optional parts, then wrap that object's interface with one Decorator and adapt an incompatible type with one Adapter",
+        ]);
+
+        var lesson2 = BuildLesson(
+            slug: "design-patterns-behavioral-repository-unit-of-work",
+            title: "Behavioral Patterns & the Repository/Unit of Work Pattern",
+            summary: "Strategy (and how it overlaps with a plain Func<>), Observer (and how C# events already implement it), and the Repository + Unit of Work pattern as it's actually built over EF Core in production backends.",
+            estimatedMinutes: 50,
+            objectives:
+            [
+                "Implement the Strategy pattern via an interface and via a plain Func<>/delegate field, and state when the extra interface ceremony over a delegate actually earns its keep",
+                "Explain the Observer pattern and show precisely how a C# event (+=/-=/Invoke) already implements it at the language level",
+                "Implement a generic IRepository<T> and an IUnitOfWork over EF Core's DbContext, and explain why Unit of Work exists (one atomic SaveChanges across multiple repositories)",
+                "Critically evaluate the argument that DbContext already is a Repository/Unit of Work, and decide when the extra abstraction layer is worth its cost",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    Behavioral patterns are about how objects communicate and distribute responsibility, rather than how they're created (creational) or composed (structural). This lesson covers two classic behavioral patterns — Strategy and Observer — plus the Repository/Unit of Work pattern, which is less "Gang of Four" and more the pattern actual .NET backend interviews ask about most.
+
+                    **Strategy** defines a family of interchangeable algorithms behind one interface, letting the caller supply whichever one applies at runtime — e.g., different shipping-cost calculations behind one `IShippingStrategy`. The important nuance for C#: Strategy overlaps enormously with simply accepting a `Func<>`/delegate as a constructor or method parameter, which was covered in depth in the *Delegates & Functional-Style C#* module. When a "strategy" is genuinely just one method with no extra state of its own, a `Func<Order, decimal>` field *is* the Strategy pattern, with none of the interface/class ceremony. The interface-based version earns its keep once a strategy needs more than one related method, needs its own constructor-injected dependencies, or benefits from being registered and resolved by name through a DI container.
+
+                    **Observer** has a subject maintain a list of dependents and notify all of them automatically whenever its state changes, without the subject knowing anything concrete about what each observer does with that notification. Here's the key fact for C#: **the `event` keyword already is the Observer pattern, built into the language.** Recall the `StockTicker`/`PriceChanged` example from the *Delegates & Functional-Style C#* module — a subject's `event EventHandler<TEventArgs>` field is exactly the subject's list of observers, `+=`/`-=` are `Subscribe`/`Unsubscribe`, and `SomeEvent?.Invoke(this, e)` is `NotifyAll`. The BCL also ships a literal, generic-interface version of Observer (`IObserver<T>`/`IObservable<T>`, used heavily by Rx.NET), but in day-to-day C# you reach for `event` because the language already gives you the safe subscribe/unsubscribe machinery for free.
+
+                    **Repository** is an abstraction over data access: business logic asks for domain objects ("give me this order") without knowing or caring whether they come from SQL, a REST API, or an in-memory cache. **Unit of Work** sits one level above a set of repositories: it tracks every change made across all of them during one logical operation and commits them together, as a single atomic unit — the whole point is that a business operation touching *multiple* repositories either fully succeeds or fully fails together, never half-committed.
+
+                    Here's the honest, senior-level nuance worth having ready: **EF Core's `DbContext` already implements most of this itself.** Its change tracker already batches every tracked insert/update/delete into one atomic transaction on `SaveChanges()` — that already *is* Unit of Work — and each `DbSet<T>` already exposes `Add`/`Remove`/`Find` plus full LINQ querying, which is most of what a hand-rolled Repository provides. So why do real codebases still wrap it in `IRepository<T>`/`IUnitOfWork`? Mainly for **testability**: substituting a trivial in-memory fake for `IRepository<T>` in a unit test is far simpler than mocking `DbContext`/`DbSet<T>` directly, and it keeps business logic from depending on EF Core specifics, in case the underlying persistence technology ever needs to change. The abstraction is easy to over-apply, though — if it just becomes a thin pass-through that leaks `IQueryable<T>` straight out of every method, it isn't decoupling anything from EF Core, it's just adding a layer of indirection around it.
+                    """, 1),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    Strategy is a GPS app offering "fastest," "shortest," and "avoid tolls" routes — the destination never changes, only which algorithm plans the path there, chosen at the moment you need it. Building that as a formal `IRouteStrategy` interface with a class per option is like hiring a dedicated specialist per route type; handing over a single `Func<>` is like handing the driver a sticky note with turn-by-turn directions instead — cheaper, and just as effective, right up until the "directions" need their own state or more than one method.
+
+                    Observer is a magazine subscription: subscribers sign up once, and the publisher pushes every new issue to everyone on the list without needing to know what each subscriber does with their copy. A C# `event` is that exact subscription desk built directly into the publisher's storefront — `+=` is filling out the subscription card, `-=` is cancelling it, and raising the event is the delivery truck dropping off the new issue to everyone still subscribed.
+
+                    Repository + Unit of Work is a warehouse with several departments (orders, customers, inventory) and one shared checkout counter. Each department can be asked for what it holds without the requester needing to know which shelf or system stores it (Repository); but a single order that needs to touch several departments at once — reserve stock *and* update the customer's record — only becomes final when the checkout counter stamps one receipt for the whole transaction, not one receipt per department (Unit of Work). If the warehouse already had one integrated system that reserved stock and updated records atomically on its own, adding a separate "checkout counter" on top is worthwhile only if it lets you rehearse the whole process with a training mock instead of the real warehouse.
+                    """, 2),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Strategy**
+
+                    - Interface-based: `interface IShippingStrategy { decimal CalculateCost(Order o); }`, one class per strategy
+                    - Delegate-based: `Func<Order, decimal>` field — same behavior, no interface/class ceremony
+                    - Use the interface when a strategy needs >1 method, its own dependencies, or DI-container resolution by type
+
+                    **Observer**
+
+                    - Classic GoF: subject holds `List<IObserver>`; `Subscribe`/`Unsubscribe`/`NotifyAll` (foreach + call)
+                    - C# idiomatic: `event EventHandler<TEventArgs>` — `+=`/`-=` ARE Subscribe/Unsubscribe; `?.Invoke(...)` IS NotifyAll
+                    - `IObserver<T>`/`IObservable<T>` — literal BCL generic-interface version (used by Rx.NET); `event` is used far more often in plain C#
+
+                    **Repository + Unit of Work (over EF Core)**
+
+                    - `IRepository<T>` — `GetByIdAsync` / `ListAsync` / `Add` / `Remove`, wraps one `DbSet<T>`
+                    - `IUnitOfWork` — exposes several `IRepository<T>` properties + one `SaveChangesAsync()`
+                    - The point: mutate several repositories, call `SaveChangesAsync()` **once** — one atomic commit
+                    - Reality check: `DbContext` already IS a Unit of Work (change tracker batches one transaction); `DbSet<T>` already IS most of a Repository
+                    - Real justification for the extra layer: testability (fake `IRepository<T>` beats mocking `DbContext`) and decoupling from EF Core specifics — not "EF Core can't do this itself"
+                    """, 3),
+                Block(BlockType.CodeSnippet, "Strategy (Interface vs. Func<>), Observer (Classic vs. event), and Repository + Unit of Work over EF Core", BodyFormat.PlainText, """
+                    // Minimal domain types used throughout this snippet
+                    public class Order
+                    {
+                        public int Id { get; set; }
+                        public int CustomerId { get; set; }
+                        public decimal Weight { get; set; }
+                    }
+
+                    public class Customer
+                    {
+                        public int Id { get; set; }
+                        public DateTime LastOrderDate { get; set; }
+                    }
+
+                    // 1. Strategy: interface-based version — one class per algorithm
+                    public interface IShippingStrategy
+                    {
+                        decimal CalculateCost(Order order);
+                    }
+
+                    public class StandardShipping : IShippingStrategy
+                    {
+                        public decimal CalculateCost(Order order) => order.Weight * 0.50m;
+                    }
+
+                    public class ExpressShipping : IShippingStrategy
+                    {
+                        public decimal CalculateCost(Order order) => order.Weight * 1.25m + 5m;
+                    }
+
+                    public class OrderProcessor
+                    {
+                        private readonly IShippingStrategy _shippingStrategy;
+                        public OrderProcessor(IShippingStrategy shippingStrategy) => _shippingStrategy = shippingStrategy;
+
+                        public decimal GetShippingCost(Order order) => _shippingStrategy.CalculateCost(order);
+                    }
+
+                    // Strategy: Func<> version — same behavior, no interface or class required
+                    public class LightweightOrderProcessor
+                    {
+                        private readonly Func<Order, decimal> _calculateShipping;
+                        public LightweightOrderProcessor(Func<Order, decimal> calculateShipping) =>
+                            _calculateShipping = calculateShipping;
+
+                        public decimal GetShippingCost(Order order) => _calculateShipping(order);
+                    }
+
+                    var standard = new LightweightOrderProcessor(order => order.Weight * 0.50m);
+                    var express = new LightweightOrderProcessor(order => order.Weight * 1.25m + 5m);
+                    // Identical behavior to the interface version above, with far less ceremony —
+                    // this stops being "enough" the moment a strategy needs a second method or its own dependencies.
+
+                    // 2. Observer: the classic GoF shape, hand-rolled
+                    public interface IPriceObserver
+                    {
+                        void OnPriceChanged(decimal oldPrice, decimal newPrice);
+                    }
+
+                    public class StockTickerClassic
+                    {
+                        private readonly List<IPriceObserver> _observers = new();
+
+                        public void Subscribe(IPriceObserver observer) => _observers.Add(observer);
+                        public void Unsubscribe(IPriceObserver observer) => _observers.Remove(observer);
+
+                        private decimal _price;
+                        public void UpdatePrice(decimal newPrice)
+                        {
+                            var oldPrice = _price;
+                            _price = newPrice;
+                            foreach (var observer in _observers) // NotifyAll
+                            {
+                                observer.OnPriceChanged(oldPrice, newPrice);
+                            }
+                        }
+                    }
+                    // The idiomatic C# equivalent of everything above is the StockTicker / PriceChangedEventArgs
+                    // example already built with `event EventHandler<TEventArgs>` in the Delegates &
+                    // Functional-Style C# module — same pattern, expressed with language-level syntax instead
+                    // of a hand-rolled observer list: `+=`/`-=` replace Subscribe/Unsubscribe, and
+                    // `PriceChanged?.Invoke(this, e)` replaces the foreach-based NotifyAll above.
+
+                    // 3. Repository + Unit of Work over EF Core
+                    public class AppDbContext : DbContext
+                    {
+                        public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
+                        public DbSet<Order> Orders => Set<Order>();
+                        public DbSet<Customer> Customers => Set<Customer>();
+                    }
+
+                    public interface IRepository<T> where T : class
+                    {
+                        Task<T?> GetByIdAsync(int id);
+                        Task<List<T>> ListAsync();
+                        void Add(T entity);
+                        void Remove(T entity);
+                    }
+
+                    public class EfRepository<T> : IRepository<T> where T : class
+                    {
+                        private readonly DbSet<T> _dbSet;
+                        public EfRepository(AppDbContext context) => _dbSet = context.Set<T>();
+
+                        public Task<T?> GetByIdAsync(int id) => _dbSet.FindAsync(id).AsTask();
+                        public Task<List<T>> ListAsync() => _dbSet.ToListAsync();
+                        public void Add(T entity) => _dbSet.Add(entity);
+                        public void Remove(T entity) => _dbSet.Remove(entity);
+                    }
+
+                    public interface IUnitOfWork : IDisposable
+                    {
+                        IRepository<Order> Orders { get; }
+                        IRepository<Customer> Customers { get; }
+                        Task<int> SaveChangesAsync();
+                    }
+
+                    public class EfUnitOfWork : IUnitOfWork
+                    {
+                        private readonly AppDbContext _context;
+                        public IRepository<Order> Orders { get; }
+                        public IRepository<Customer> Customers { get; }
+
+                        public EfUnitOfWork(AppDbContext context)
+                        {
+                            _context = context;
+                            Orders = new EfRepository<Order>(context);
+                            Customers = new EfRepository<Customer>(context);
+                        }
+
+                        public Task<int> SaveChangesAsync() => _context.SaveChangesAsync();
+                        public void Dispose() => _context.Dispose();
+                    }
+
+                    // Usage: business logic touches TWO repositories, but commits atomically ONCE
+                    public class PlaceOrderService
+                    {
+                        private readonly IUnitOfWork _unitOfWork;
+                        public PlaceOrderService(IUnitOfWork unitOfWork) => _unitOfWork = unitOfWork;
+
+                        public async Task PlaceOrderAsync(Order order)
+                        {
+                            _unitOfWork.Orders.Add(order);
+
+                            var customer = await _unitOfWork.Customers.GetByIdAsync(order.CustomerId);
+                            customer!.LastOrderDate = DateTime.UtcNow;
+
+                            await _unitOfWork.SaveChangesAsync(); // ONE SaveChanges commits both changes together
+                        }
+                    }
+                    """, 4, language: "csharp"),
+                Block(BlockType.Diagram, "Unit of Work: Two Repositories, One Atomic Commit", BodyFormat.StructuredSteps, """
+                    [{"label":"PlaceOrderAsync(order) called","note":"one logical business operation, spanning two entity types"},{"label":"unitOfWork.Orders.Add(order)","note":"tracked by EfRepository<Order>, but NOT yet saved to the database"},{"label":"unitOfWork.Customers.GetByIdAsync(order.CustomerId)","note":"tracked by EfRepository<Customer>, same underlying DbContext"},{"label":"customer.LastOrderDate = DateTime.UtcNow","note":"mutates the tracked Customer entity in memory only"},{"label":"unitOfWork.SaveChangesAsync()","note":"the DbContext's change tracker commits BOTH the new Order and the updated Customer in one transaction"},{"label":"Result: all-or-nothing","note":"if this call fails partway, neither the Order insert nor the Customer update is persisted"}]
+                    """, 5),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Default to a `Func<>`/delegate field for Strategy when the "algorithm" really is just one method with no dependencies of its own — reach for a full `IStrategy` interface only once it needs more than one related method, its own constructor-injected dependencies, or discovery/registration through a DI container by type.
+
+                    Default to a plain C# `event` for Observer-shaped problems in ordinary application code — it gives you the safe `+=`/`-=` subscribe/unsubscribe semantics for free. Reach for `IObservable<T>`/Rx.NET only when you need to compose, filter, or combine multiple asynchronous event streams together, which is the actual problem Rx solves beyond what a plain event can.
+
+                    Before introducing `IRepository<T>`/`IUnitOfWork` over EF Core, ask what it's actually buying you: if the honest answer is "nothing beyond what `DbContext`/`DbSet<T>` already does," skip it and use EF Core directly — `DbContext` already tracks a Unit of Work, and each `DbSet<T>` already behaves like a Repository. Introduce the extra layer specifically when you need to unit-test business logic without spinning up a real (or in-memory) database, or when the persistence technology genuinely might change. When you do introduce it, keep `IQueryable<T>` from leaking out of the interface — return materialized results (`List<T>`, or specific query methods), or the "abstraction" isn't actually hiding EF Core from callers at all.
+                    """, 6),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    A frequent follow-up once you've explained Strategy: "isn't that just... passing a function?" The strong answer agrees and gets specific: when a strategy is a single, dependency-free method, `Func<>`/delegate parameters (covered in the Delegates & Functional-Style C# module) *are* the Strategy pattern with the ceremony stripped away — C# lets you express this GoF pattern as a first-class language feature instead of a class hierarchy. The interface version only becomes necessary once a strategy needs more than one method or its own dependencies.
+
+                    Similarly for Observer: "how would you implement Observer in C#?" — naming a hand-rolled `List<IObserver>` and a `NotifyAll` loop is correct but incomplete. The stronger answer is that `event` already *is* Observer, built into the language: `+=`/`-=` are Subscribe/Unsubscribe, and `?.Invoke(...)` is NotifyAll, which is exactly the mechanism behind the `StockTicker.PriceChanged` example from the delegates module.
+
+                    Far and away the most common .NET backend interview question in this space: "why would you add a Repository/Unit of Work layer on top of EF Core, when DbContext already does most of that?" Naming the honest tradeoff — EF Core's change tracker already is a Unit of Work, and DbSet<T> already is most of a Repository, so the real justification is testability and decoupling from EF Core specifics, not a missing capability — is what separates candidates who've actually thought about the pattern from candidates who've only memorized that "Repository + Unit of Work goes over EF Core."
+                    """, 7),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Reaching for a full `IStrategy` interface and a class per algorithm when every one of those classes would contain exactly one method and no fields — that's a `Func<>` field wearing unnecessary ceremony, not a design win. The inverse mistake also happens: cramming a strategy that genuinely needs several coordinated methods or its own injected dependencies into a single `Func<>`, when an interface would express the contract far more clearly.
+
+                    Building a hand-rolled `List<IObserver>` + manual `Subscribe`/`Unsubscribe`/`NotifyAll` in ordinary C# application code instead of just declaring an `event` — this reimplements, by hand and with more surface area for bugs (forgetting a null-check before invoking, for one), something the language already gives you for free.
+
+                    Letting an `IRepository<T>` method return `IQueryable<T>` directly — that leaks EF Core's query-building all the way through the "abstraction," which means it isn't actually decoupling callers from EF Core at all, just adding an extra layer of indirection around it. Also common: calling `SaveChangesAsync()` after every single repository operation instead of once at the end of a logical business operation — that defeats the entire point of Unit of Work, which is committing a set of related changes together, atomically, as one unit.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "Two engineers implement the same pricing-strategy selection — one via an IPricingStrategy interface with a class per strategy, the other via a single Func<Order, decimal> field. When does the interface-based version genuinely earn its extra ceremony over the Func<> version?",
+                    "A Func<> field already IS the Strategy pattern when a strategy is a single, dependency-free method — that's exactly the overlap between Strategy and delegates covered in the Delegates & Functional-Style C# module. The interface-based version earns its keep once a strategy needs more than one related method, its own constructor-injected dependencies, or needs to be resolved/registered by type through a DI container — none of which a bare Func<> can express.",
+                    [
+                        new QuizOptionSeed("Once a strategy needs more than one method, its own injected dependencies, or DI-container resolution by type — a single dependency-free method is already fully expressed by Func<>", true),
+                        new QuizOptionSeed("Never — Func<> can always fully replace an interface regardless of how many members or dependencies the strategy needs", false),
+                        new QuizOptionSeed("Only when raw performance is a concern, since interfaces are inherently faster than delegate invocation", false),
+                        new QuizOptionSeed("Only in .NET Framework projects, since Func<> was not available before .NET Core", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "A teammate argues that wrapping EF Core's DbContext in a custom IRepository<T>/IUnitOfWork layer is redundant, since DbContext already batches tracked changes into one atomic SaveChanges call and each DbSet<T> already supports Add/Remove/Find/LINQ. What is the strongest justification for still introducing the extra layer?",
+                    "The teammate is largely right that DbContext already behaves like a Unit of Work and DbSet<T> already behaves like a Repository — so the honest justification isn't a missing EF Core capability. It's testability and decoupling: substituting a simple in-memory fake for IRepository<T>/IUnitOfWork in a unit test is far simpler than mocking DbContext/DbSet<T> directly, and it keeps business logic from depending on EF Core specifics in case the persistence technology ever changes.",
+                    [
+                        new QuizOptionSeed("It makes unit testing business logic easier by substituting a simple fake for IRepository/IUnitOfWork, without needing to mock EF Core's DbContext or DbSet<T> directly, and decouples business logic from EF Core specifics", true),
+                        new QuizOptionSeed("Because DbContext cannot commit multiple entity changes in a single transaction without a separate Unit of Work class", false),
+                        new QuizOptionSeed("Because DbSet<T> does not support LINQ queries unless it is wrapped by a Repository", false),
+                        new QuizOptionSeed("Because EF Core requires a Repository layer in order to track entity changes at all", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Implementing the Repository and Unit of Work Patterns over EF Core", "https://learn.microsoft.com/en-us/aspnet/mvc/overview/older-versions/getting-started-with-ef-5-using-mvc-4/implementing-the-repository-and-unit-of-work-patterns-in-an-asp-net-mvc-application", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("Refactoring Guru: Observer", "https://refactoring.guru/design-patterns/observer", LinkType.FurtherReading),
+            ],
+            prerequisites: [lesson1]);
+
+        var lesson2Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson2.Slug,
+        [
+            "Implement one Strategy as an interface with a class per strategy, then rewrite it as a Func<> field, and state in one sentence when the interface version would still be worth it",
+            "Explain in one sentence why a C# event IS the Observer pattern, mapping Subscribe/Unsubscribe/NotifyAll onto +=/-=/Invoke",
+            "Implement IRepository<T> and IUnitOfWork over an EF Core DbContext, and write one service method that mutates two different entities behind a single SaveChangesAsync call",
+        ]);
+
+        var module = BuildModule(topicId, "csharp-design-patterns", "Design Patterns in C#",
+            "Idiomatic C# implementations of the design patterns interviewers actually ask about: Singleton (and the thread-safe Lazy<T> fix), Factory Method vs. Abstract Factory, Builder, Decorator, and Adapter, plus Strategy, Observer, and the Repository/Unit of Work pattern as it's really built over EF Core.",
+            100, [lesson1, lesson2], sortOrder: 10);
+
+        return (module, [lesson1Checklist, lesson2Checklist]);
+    }
+    private static (Module, List<ChecklistSeed>) BuildCSharpDependencyInjectionAndModernSyntaxModule(int topicId)
+    {
+        var lesson1 = BuildLesson(
+            slug: "dependency-injection-and-ioc-in-aspnet-core",
+            title: "Dependency Injection & IoC in ASP.NET Core",
+            summary: "What Inversion of Control actually inverts, constructor injection, the built-in IServiceCollection/IServiceProvider container, the three service lifetimes, and the captive dependency bug that comes from mixing them incorrectly.",
+            estimatedMinutes: 45,
+            objectives:
+            [
+                "Explain what Inversion of Control means and how constructor injection implements it",
+                "Register services in IServiceCollection and have them resolved via constructor injection by the built-in ASP.NET Core container",
+                "Describe Singleton, Scoped, and Transient, and choose the correct one for a given service",
+                "Explain the captive dependency bug that occurs when a Scoped service is injected into a Singleton, and how to avoid it",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    **Inversion of Control (IoC)** describes a shift in *who decides* how a dependency gets created. Normally, a class that needs a collaborator just constructs it directly — `private readonly SqlOrderRepository _repo = new();` — which means that class controls both *what concrete type* it depends on and *when/how* an instance of it comes into existence. IoC inverts that: the class stops constructing its own dependencies and instead simply declares what it needs (an `IOrderRepository`, say), and something external supplies a concrete instance. The decision of which implementation to use, and when to build it, moves out of the consumer entirely.
+
+                    **Dependency Injection (DI)** is the specific technique most commonly used to achieve IoC: dependencies are *passed in* rather than looked up or newed-up internally. **Constructor injection** is the standard, preferred form — a class declares its dependencies as constructor parameters, which makes its requirements visible directly in its type signature and guarantees every dependency is present before the object is ever usable, instead of a partially-built object waiting for someone to set properties later.
+
+                    ASP.NET Core has a DI container built directly into the framework, not bolted on. `IServiceCollection` is the registry you populate during startup (`builder.Services.AddScoped<IOrderRepository, SqlOrderRepository>()`), and `IServiceProvider` is the resolver built from that registry, responsible for satisfying a requested type by recursively resolving its constructor parameters — the same reflection-driven trick as a hand-rolled DI container, just production-hardened. You rarely call `IServiceProvider.GetService<T>()` directly in application code; the framework calls it for you, injecting constructor parameters into controllers, minimal API handlers, and any other service the container itself constructs.
+
+                    Every registration carries a **lifetime**, which controls how long a resolved instance is reused before a new one is created:
+
+                    - **Singleton** — one instance for the entire application's lifetime, created once and shared by every consumer, everywhere, for as long as the process runs.
+                    - **Scoped** — one instance per scope (in ASP.NET Core, one scope = one HTTP request), shared by everything resolved within that single request, then disposed at the end of it.
+                    - **Transient** — a brand-new instance every single time it's requested, never shared with anyone.
+
+                    A **composition root** is the single, narrow place in an application — typically `Program.cs` — where every `Add*` registration happens and the whole object graph gets wired together. Everywhere else in the app should just declare dependencies through constructors and never touch the container directly; passing `IServiceProvider` around and calling `GetService` from inside business logic is the "service locator" anti-pattern DI exists to replace.
+
+                    This is exactly where the classic **captive dependency** bug comes from. EF Core's `DbContext` is registered Scoped by default (via `AddDbContext`) because it's explicitly documented as not thread-safe and meant to represent one unit of work per request. If a Singleton service takes an `AppDbContext` as a constructor parameter, the container must resolve that `DbContext` once, at the moment the Singleton is first built — and that one instance is then held alive and reused for every future request, for the rest of the process's life. A longer-lived object ends up holding a shorter-lived one hostage inside its own lifetime. In production this shows up as data corruption or exceptions under concurrent load, because requests that should each get their own isolated unit of work are secretly sharing internal state that was never designed to be shared. ASP.NET Core's container catches many (not all) instances of this automatically in the Development environment via **scope validation** (`ValidateScopes` defaults to `true` there): resolving a Scoped service from the root provider throws an `InvalidOperationException` at startup instead of silently shipping the bug — but that validation is off by default outside Development, so an untested path can still slip into Staging or Production.
+                    """, 1),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Registering services** (`builder.Services...`)
+
+                    - `AddSingleton<TService, TImpl>()` / `AddSingleton<TService>(instance)` — one instance, application lifetime
+                    - `AddScoped<TService, TImpl>()` — one instance per request/scope
+                    - `AddTransient<TService, TImpl>()` — new instance every resolution
+                    - `AddDbContext<TContext>()` — registers EF Core's DbContext as Scoped by default
+
+                    **Resolving**
+
+                    - Constructor injection (preferred, everywhere) — declare `IFoo foo` as a constructor parameter, the container supplies it
+                    - `IServiceProvider.GetRequiredService<T>()` — manual resolution, reserved for the composition root / framework internals, not everyday code
+                    - `IServiceScopeFactory.CreateScope()` — manually opens a new Scoped lifetime; the escape hatch a Singleton uses to safely obtain a short-lived Scoped dependency
+
+                    **Lifetime compatibility rule of thumb**
+
+                    - Singleton should depend only on Singleton (or nothing)
+                    - Scoped can depend on Scoped or Singleton
+                    - Transient can depend on anything
+                    - Never: Singleton depending directly on Scoped/Transient — the captive dependency bug
+
+                    **Composition root**
+
+                    - The one place (`Program.cs`) where every `Add*` call lives and the whole graph is wired
+                    - Everywhere else: just ask for what you need via the constructor, never touch the container directly
+                    """, 2),
+                Block(BlockType.CodeSnippet, "Registering Lifetimes, Constructor Injection, and Fixing a Captive Dependency", BodyFormat.PlainText, """
+                    // --- Composition root: Program.cs, the ONLY place registrations happen ---
+                    var builder = WebApplication.CreateBuilder(args);
+
+                    builder.Services.AddDbContext<AppDbContext>(opt => opt.UseSqlite("Data Source=app.db")); // Scoped by default
+                    builder.Services.AddScoped<IOrderRepository, SqlOrderRepository>();      // one per request
+                    builder.Services.AddSingleton<IClock, SystemClock>();                     // one for the app's life
+                    builder.Services.AddTransient<IOrderNumberGenerator, OrderNumberGenerator>(); // new every time
+
+                    var app = builder.Build();
+
+                    // --- Constructor injection: the class just DECLARES what it needs ---
+                    public class OrderService(IOrderRepository repository, IClock clock, IOrderNumberGenerator numberGenerator)
+                    {
+                        // No "new SqlOrderRepository()" anywhere in here - IoC means OrderService
+                        // never decides which concrete type it gets, or when it gets built.
+                        public async Task<Order> PlaceOrderAsync(CreateOrderRequest request)
+                        {
+                            var order = new Order
+                            {
+                                Number = numberGenerator.Next(),
+                                PlacedAtUtc = clock.UtcNow,
+                            };
+                            await repository.AddAsync(order);
+                            return order;
+                        }
+                    }
+
+                    // --- THE CAPTIVE DEPENDENCY BUG ---
+                    // WRONG: a Singleton takes a Scoped DbContext directly. The container
+                    // resolves ONE AppDbContext the moment this Singleton is first built,
+                    // and every request forever after shares that same, eventually-disposed
+                    // instance. In Development, ValidateScopes throws InvalidOperationException
+                    // for exactly this - resolving a Scoped service from the root provider.
+                    public class BrokenReportCache(AppDbContext db) // <- captive dependency
+                    {
+                        public async Task<int> GetOrderCountAsync() => await db.Orders.CountAsync();
+                    }
+
+                    // RIGHT: the Singleton takes IServiceScopeFactory instead, and opens a
+                    // fresh Scoped lifetime exactly when the work happens, then disposes it.
+                    public class ReportCache(IServiceScopeFactory scopeFactory)
+                    {
+                        public async Task<int> GetOrderCountAsync()
+                        {
+                            using var scope = scopeFactory.CreateScope();
+                            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                            return await db.Orders.CountAsync(); // a genuinely short-lived DbContext
+                        }
+                    }
+                    """, 3, language: "csharp"),
+                Block(BlockType.Diagram, "Instance Counts Across Two Requests, by Lifetime", BodyFormat.AsciiArt, """
+                    Request 1: resolve OrderService -> needs IOrderRepository, IClock, INumberGenerator
+                    Request 2: resolve OrderService -> needs the same three services again
+
+                              Request 1                  Request 2
+                    Transient   [new #1]  [new #2]         [new #3]  [new #4]     <- always a fresh instance
+                    Scoped      [instance A]  (reused       [instance B]  (reused  <- one per request, then disposed
+                                 within req 1)                within req 2)
+                    Singleton   [------------------- instance X -------------------]  <- built once, lives forever
+
+                    Captive dependency bug: a Singleton built during Request 1 that holds
+                    a Scoped instance (like "instance A" above) keeps using instance A
+                    for Request 2 as well - even though instance A was meant to die with
+                    Request 1 and instance B was meant to be Request 2's own copy.
+                    """, 4),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Default to **Scoped** for anything stateful tied to a unit of work — `DbContext` and any repository/service built directly on top of it. Reserve **Singleton** for things that are genuinely stateless or safely shareable across concurrent requests (immutable configuration snapshots, an in-memory cache with its own internal locking, an `HttpClient` obtained through `IHttpClientFactory`).
+
+                    If a Singleton genuinely needs a Scoped dependency, never inject the Scoped service itself — inject `IServiceScopeFactory`, and open a short-lived scope exactly when the work happens (see `ReportCache` above), disposing it immediately after. Keep the composition root free of business logic: it should only wire dependencies together, never contain application behavior itself.
+                    """, 5),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    When asked to explain the three lifetimes, don't stop at the definitions — walk through a concrete failure scenario: "if you inject a Scoped `DbContext` into a Singleton, the Singleton captures the first request's `DbContext` forever, and every later request reuses that same, eventually-disposed instance — that's a captive dependency." Mentioning that ASP.NET Core's `ValidateScopes` setting catches this automatically in Development (but not by default elsewhere) signals you've actually hit the bug, not just memorized the term.
+                    """, 6),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Injecting a Scoped service directly into a Singleton's constructor — the captive dependency bug — instead of injecting `IServiceScopeFactory` and creating a scope when the work actually happens.
+
+                    Also common: "fixing" a captive dependency error by manually calling `new AppDbContext(...)` inside the Singleton to work around the container's complaint — this reintroduces the exact same bug by hand, just without the container's validation to catch it. And more generally: injecting `IServiceProvider` everywhere and calling `GetService`/`GetRequiredService` from inside ordinary business logic instead of declaring real constructor dependencies — this is the service locator anti-pattern, and it hides a class's true dependencies instead of making them visible in its signature.
+                    """, 7),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    Before IoC, a cook has to walk to the market himself, pick his own ingredients, and know every supplier by name — the cook controls what he uses and when he goes to get it. With IoC, ingredients simply arrive at his station already selected by someone else (the composition root, like a head chef doing procurement) — the cook just plugs in whatever shows up and cooks.
+
+                    The three lifetimes are like kitchen supplies with different reuse rules: **Transient** is a fresh paper napkin handed out fresh every single time. **Scoped** is a prep bowl assigned to one table's order — shared by everything that order needs, then washed and put away once that table leaves. **Singleton** is the one industrial oven the entire restaurant shares, all night, for every table. The captive dependency bug is what happens if someone bolts one table's temporary prep bowl (Scoped) permanently into the kitchen and never washes it — every other table that later tries to use "their" bowl is actually reusing food-crusted leftovers from a table that left hours ago.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "What does 'Inversion of Control' actually invert?",
+                    "IoC moves control over WHICH concrete dependency is created and WHEN it is created out of the consuming class and into an external mechanism (like a DI container's composition root). The class stops constructing its own collaborators and instead just declares what it needs.",
+                    [
+                        new QuizOptionSeed("Control over which concrete dependency is created and when, moving that decision out of the consuming class and into an external mechanism", true),
+                        new QuizOptionSeed("The order in which methods execute inside a single class", false),
+                        new QuizOptionSeed("Whether a program runs synchronously or asynchronously", false),
+                        new QuizOptionSeed("The direction data flows between a client and a server over HTTP", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "Why does injecting a Scoped DbContext into a Singleton service cause the 'captive dependency' bug?",
+                    "The Singleton is constructed once, at which point the container resolves one DbContext instance for it to hold onto forever. Every future request then reuses that same instance instead of getting its own scoped unit of work, eventually hitting a disposed or corrupted DbContext under concurrent load.",
+                    [
+                        new QuizOptionSeed("The Singleton captures whatever DbContext instance existed at construction time and reuses it for every future request, instead of each request getting its own", true),
+                        new QuizOptionSeed("Singleton services are not allowed to have any constructor parameters", false),
+                        new QuizOptionSeed("DbContext types cannot be registered with AddDbContext at all", false),
+                        new QuizOptionSeed("ASP.NET Core silently converts the DbContext registration to Transient in that case", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Dependency injection in ASP.NET Core", "https://learn.microsoft.com/en-us/aspnet/core/fundamentals/dependency-injection", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("Dependency injection guidelines", "https://learn.microsoft.com/en-us/dotnet/core/extensions/dependency-injection-guidelines", LinkType.OfficialDocs),
+            ]);
+
+        var lesson1Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson1.Slug,
+        [
+            "Register a service with all three lifetimes (AddTransient/AddScoped/AddSingleton) and log an instance ID from each within the same request to see which ones repeat",
+            "Deliberately inject a Scoped service into a Singleton in a local project and observe the InvalidOperationException scope validation throws in Development",
+            "Rewrite a Singleton that needs a Scoped dependency to use IServiceScopeFactory.CreateScope() instead of taking the Scoped service directly",
+        ]);
+
+        var lesson2 = BuildLesson(
+            slug: "string-immutability-stringbuilder-and-modern-csharp-syntax",
+            title: "String Immutability, StringBuilder & Modern C# Syntax",
+            summary: "Why every string 'mutation' is really a new allocation, the intern pool, when StringBuilder genuinely earns its keep, ordinal vs. culture-aware comparison pitfalls, and a tour of modern C# syntax additions.",
+            estimatedMinutes: 45,
+            objectives:
+            [
+                "Explain why C# strings are immutable and why every 'mutation' actually allocates a new string",
+                "Explain string interning and predict when two string references will be equal by reference versus only by value",
+                "Decide when StringBuilder measurably helps performance versus when it's needless ceremony",
+                "Choose ordinal versus culture-aware string comparison correctly, and recognize modern C# syntax features (raw string literals, primary constructors, file-scoped namespaces, top-level statements, target-typed new())",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    A `string` in .NET is **immutable**: once created, its character content can never change in place. Every method that looks like it mutates a string — `Replace`, `ToUpper`, `Trim`, `Substring`, or concatenation with `+` — actually allocates a brand-new `String` object on the heap holding the new content, and leaves the original object, and every other reference still pointing at it, completely untouched. `s = s.Replace("a", "b");` reassigns the *variable* `s` to point at a new object; it does not alter whatever object `s` used to point at. This is exactly why strings can be handed out freely without defensive copying, why they're safe to read from multiple threads with no locking, and why comparing two strings is fundamentally a *value* question (which `==`/`.Equals()` answer for strings by default), not a reference-identity one.
+
+                    The CLR also maintains an **intern pool** — a table of unique string values. Every string *literal* in your source code is automatically interned: the runtime guarantees only one object exists for that exact literal text anywhere in the process, so two separate literals with identical text end up pointing at the very same object (`ReferenceEquals("Hello", "Hello")` is `true`). Strings built at *runtime* — via `StringBuilder.ToString()`, `string.Concat` of variables, interpolation of variables, `Substring` — are NOT automatically interned; each call typically allocates a genuinely distinct object even when its text matches an interned literal exactly, so `ReferenceEquals` on two such runtime-built strings is normally `false`, even though `==`/`.Equals()` still correctly reports them equal by value. `string.Intern(s)` can force a runtime string into the pool, but it's rarely needed, and the pool is never garbage-collected, so interning many unique or large strings can waste memory rather than save it.
+
+                    Because strings are immutable, building text with `s = s + piece` inside a loop allocates a new string on every single iteration — copying everything accumulated so far *plus* the new piece — which is O(n) work per iteration across n iterations, i.e. O(n squared) total for the whole loop. `StringBuilder` keeps one mutable internal character buffer, growing it as needed, and only materializes a final immutable `string` once, when `.ToString()` is called — turning that same loop into genuinely O(n) work. That matters for loops of any real size. It does NOT matter, and is needless ceremony, for a handful of fixed pieces (`"Hello, " + name + "!"` or `$"Hello, {name}!"`) — the compiler already lowers a short, fixed chain of concatenation into a single efficient call, and `StringBuilder` there only adds noise.
+
+                    `==` and `.Equals()` on strings perform **ordinal** (exact character-code) comparison by default, which is the right default almost everywhere. The pitfall is in methods that are **culture-sensitive** by default: `string.Compare(a, b)` with no `StringComparison` argument, `.ToUpper()`/`.ToLower()` with no `CultureInfo`, and overloads of `IndexOf`/`StartsWith`/`Contains` without a `StringComparison` argument all use the *current thread's culture*, which changes behavior depending on what locale the process runs under. The textbook example is the "Turkish-I problem": under a Turkish (`tr-TR`) culture, `"I".ToLower()` produces a dotless `"ı"`, not `"i"`, because Turkish distinguishes dotted and dotless I letters — code that does `if (input.ToLower() == "istanbul")` to normalize a comparison will silently fail to match on a machine configured for Turkish culture. The fix is to use `StringComparison.Ordinal`/`OrdinalIgnoreCase` (or `.ToUpperInvariant()`/`.ToLowerInvariant()`) for anything that's about program logic — identifiers, tokens, protocol strings, dictionary keys, filenames — and reserve culture-aware comparison for text you're genuinely presenting or sorting for a specific user locale.
+
+                    Beyond string mechanics, recent C# versions added several syntax features that show up constantly in real codebases and interviews alike. Raw string literals (C# 11) let you write multi-line text without escaping embedded quotes or backslashes — this entire seed-data file is written using exactly that feature. File-scoped namespaces (C# 10) let a file declare `namespace MyApp.Services;` once at the top instead of wrapping everything in a braced block, removing a full indentation level. Top-level statements (C# 9) let an entry point be plain statements at the top of `Program.cs`, with no explicit `class Program { static void Main(...) }` boilerplate — exactly the shape every ASP.NET Core minimal API `Program.cs` takes. Target-typed `new()` (C# 9) lets you write `Dictionary<string, List<int>> map = new();`, inferring the constructed type from the left-hand-side declaration instead of repeating it. Primary constructors (C# 12) let a class or struct declare its constructor parameters directly in the type declaration, making them usable throughout the class body without hand-writing a constructor whose only job is assigning fields — genuinely useful for services whose whole constructor is "assign every injected dependency to a field," which describes most DI-injected services, including `OrderService` from the previous lesson.
+                    """, 1),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Immutability & interning**
+
+                    - Every string "mutation" (Replace/Trim/ToUpper/Substring/+) returns a NEW string; the original is untouched
+                    - String literals are automatically interned — identical literals share one object (ReferenceEquals true)
+                    - Runtime-built strings (StringBuilder.ToString(), interpolation of variables) are NOT auto-interned
+                    - string.Intern(s) forces a runtime string into the pool (rarely needed)
+
+                    **StringBuilder vs. concatenation**
+
+                    - A loop building text over many iterations -> StringBuilder (O(n) instead of O(n squared))
+                    - A handful of fixed pieces -> plain `+` or `$"..."` interpolation (already efficient, more readable)
+                    - `sb.Append(...)` repeatedly, then `sb.ToString()` once at the end
+
+                    **Comparison**
+
+                    - `==` / `.Equals()` on strings -> ordinal by default (safe default)
+                    - `string.Compare`, `.ToUpper()`/`.ToLower()`, `IndexOf`/`Contains` without a StringComparison -> culture-sensitive by default (pitfall)
+                    - Use `StringComparison.Ordinal`/`OrdinalIgnoreCase` for logic/keys/tokens; reserve culture-aware comparison for user-facing text
+
+                    **Modern C# syntax tour**
+
+                    - Raw string literals (C# 11) — multi-line text bounded by a run of double-quote characters, no escaping needed
+                    - File-scoped namespaces (C# 10) — one namespace declaration per file, no extra brace/indentation level
+                    - Top-level statements (C# 9) — plain statements as the entry point, no Main method boilerplate
+                    - Target-typed new() (C# 9) — `Dictionary<string,int> d = new();`, type inferred from the declaration
+                    - Primary constructors (C# 12) — constructor parameters declared directly on the type
+                    """, 2),
+                Block(BlockType.CodeSnippet, "Immutability, Interning, StringBuilder, Comparison Pitfalls, and Modern Syntax", BodyFormat.PlainText, """
+                    // --- Immutability: every "mutation" is a new allocation ---
+                    string original = "hello";
+                    string upper = original.ToUpper();
+                    Console.WriteLine(original); // "hello" - completely untouched
+                    Console.WriteLine(upper);    // "HELLO" - a brand-new string object
+
+                    // --- Interning: literals share one object, runtime-built strings don't ---
+                    string a = "MentorOS";
+                    string b = "MentorOS";
+                    Console.WriteLine(ReferenceEquals(a, b)); // True - both point at the same interned literal
+
+                    string c = new StringBuilder().Append("Mentor").Append("OS").ToString();
+                    Console.WriteLine(a == c);                // True - equal by VALUE
+                    Console.WriteLine(ReferenceEquals(a, c)); // False - c was never interned
+
+                    // --- StringBuilder: matters in a loop, not for a handful of pieces ---
+                    // Bad: O(n squared) - a new string is allocated and copied on every iteration
+                    string report = "";
+                    for (int i = 0; i < 10_000; i++)
+                        report += $"Row {i}\n"; // each += discards the previous string entirely
+
+                    // Good: O(n) - one growing buffer, one final allocation
+                    var sb = new StringBuilder();
+                    for (int i = 0; i < 10_000; i++)
+                        sb.Append("Row ").Append(i).Append('\n');
+                    string fastReport = sb.ToString();
+
+                    // Needless here: a handful of fixed pieces - StringBuilder buys nothing
+                    string greeting = $"Hello, {name}! You have {count} messages.";
+
+                    // --- Comparison pitfalls: ordinal vs. culture-aware ---
+                    string input = "ISTANBUL";
+                    bool ordinalMatch = input.Equals("istanbul", StringComparison.OrdinalIgnoreCase); // correct, locale-independent
+                    bool cultureMatch = input.ToLower() == "istanbul"; // WRONG under tr-TR culture: "I".ToLower() -> "ı", not "i"
+
+                    // --- Modern C# syntax tour ---
+                    namespace MentorOS.Services; // file-scoped namespace (C# 10) - no extra indentation level
+
+                    public class OrderNotifier(IEmailSender emailSender, ILogger<OrderNotifier> logger) // primary constructor (C# 12)
+                    {
+                        // emailSender/logger are usable directly below - no hand-written constructor needed
+                        public void NotifyShipped(Order order) =>
+                            emailSender.Send(order.CustomerEmail, $"Order {order.Id} has shipped!");
+                    }
+
+                    Dictionary<string, List<int>> ordersByRegion = new(); // target-typed new() (C# 9)
+
+                    // Program.cs, in full, using top-level statements (C# 9) - no Main method, no Program class
+                    var builder = WebApplication.CreateBuilder(args);
+                    var app = builder.Build();
+                    app.MapGet("/", () => "Hello, MentorOS!");
+                    app.Run();
+                    """, 3, language: "csharp"),
+                Block(BlockType.Diagram, "Immutability and Interning on the Heap", BodyFormat.AsciiArt, """
+                    string a = "hello";       a ----> ["hello"]   (heap object #1)
+                    a = a.ToUpper();          a ----> ["HELLO"]   (heap object #2, brand NEW)
+                                              (object #1 "hello" is now unreferenced -> eligible for GC)
+
+                    Interning:
+                    string x = "Mentor";  ----> intern pool ["Mentor"] <---- string y = "Mentor";
+                                              (x and y point at the SAME pooled object)
+
+                    new StringBuilder().Append("Mentor").ToString()  ----> ["Mentor"]  (a fresh, NOT interned object)
+                                              (equal in VALUE to the pooled "Mentor", but a different object)
+                    """, 4),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Reach for `StringBuilder` specifically when appending inside a loop whose iteration count isn't small and fixed; for a handful of pieces, plain interpolation is both faster to write and just as fast to run.
+
+                    Default to `StringComparison.Ordinal`/`OrdinalIgnoreCase` for any comparison that's about logic rather than display — configuration keys, route segments, protocol tokens, file extensions, dictionary lookups — and reserve culture-aware comparison for text you're genuinely presenting or sorting for a specific user locale. Reach for file-scoped namespaces, top-level statements, target-typed `new()`, and primary constructors by default in a modern (C# 10+) codebase — they cut ceremony without giving anything up, and primary constructors pair especially well with DI-injected services whose entire constructor body would otherwise just assign fields.
+                    """, 5),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    Be ready to explain WHY strings are immutable beyond "because Microsoft decided so": it enables safe sharing without defensive copies, thread-safe reads without locking, and interning as an optimization that wouldn't be sound if strings could change out from under a shared reference. When asked about culture-aware comparison pitfalls, mentioning the Turkish-I problem by name is a strong, concrete signal that you've actually hit that bug in practice rather than just memorized the phrase "CultureInfo."
+                    """, 6),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Concatenating strings with `+=` inside a loop instead of using `StringBuilder`, turning an O(n) loop into O(n squared) allocations — this profiles fine against a 10-item test list and falls over against a 100,000-row production export.
+
+                    Also common: normalizing or comparing strings with a culture-sensitive method (`.ToUpper()`/`.ToLower()`, or `string.Compare` with no `StringComparison`) when the comparison is actually about program logic rather than display — the Turkish-I bug is the textbook example, and it only reproduces on machines or deployments running a different culture than whoever wrote the code. And: assuming `ReferenceEquals` can be used as a shortcut value-equality check for arbitrary strings — it only reliably holds for interned literals, and most runtime-built strings are never interned, so this "optimization" silently produces false negatives.
+                    """, 7),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    A string is like a printed, laminated page: you can't edit it in place. "Editing" it means printing a whole new laminated page with the updated text and discarding your reference to the old one — the old page still physically exists as long as anyone else is still holding it. `StringBuilder` is the rough whiteboard draft you actually erase and rewrite as you go, laminating (`.ToString()`) only once, at the very end, when the content is final — laminating after every single edit, the way naive `+=` concatenation does, is exactly why doing that inside a loop of thousands gets expensive fast.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "Why does concatenating strings with += inside a loop of many iterations get slow?",
+                    "Strings are immutable, so each += allocates an entirely new string containing the old accumulated content plus the new piece, copying everything each time. Across n iterations that's O(n squared) total work, instead of the O(n) work StringBuilder achieves by growing one internal buffer and materializing a final string only once.",
+                    [
+                        new QuizOptionSeed("Each += allocates a new string with the old content copied plus the new piece, turning the loop into O(n squared) total work instead of O(n)", true),
+                        new QuizOptionSeed("StringBuilder is required by the C# compiler for any loop containing a string operation", false),
+                        new QuizOptionSeed("+= triggers a culture-aware comparison on every iteration", false),
+                        new QuizOptionSeed("String literals are limited to a fixed maximum length that += eventually exceeds", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "A method normalizes input with `input.ToLower() == \"istanbul\"`. Under what circumstance can this fail even when the input is textually 'ISTANBUL'?",
+                    "ToLower() with no explicit culture uses the current thread's culture by default. Under a Turkish (tr-TR) culture, uppercase 'I' lowercases to a dotless 'ı' rather than 'i', so the comparison silently fails on a machine configured for that culture. Using StringComparison.OrdinalIgnoreCase (or ToLowerInvariant()) avoids the problem entirely.",
+                    [
+                        new QuizOptionSeed("When the running thread's culture is Turkish (tr-TR), because ToLower() without an explicit culture uses the current culture, and Turkish 'I' lowercases differently than in the invariant/ordinal case", true),
+                        new QuizOptionSeed("It can never fail — ToLower() always behaves identically on every machine and locale", false),
+                        new QuizOptionSeed("Only when the input string exceeds 255 characters", false),
+                        new QuizOptionSeed("Only if the input string was originally built with StringBuilder instead of a literal", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Best practices for using strings in .NET", "https://learn.microsoft.com/en-us/dotnet/standard/base-types/best-practices-strings", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("What's new in C#", "https://learn.microsoft.com/en-us/dotnet/csharp/whats-new/overview", LinkType.OfficialDocs),
+            ],
+            prerequisites: [lesson1]);
+
+        var lesson2Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson2.Slug,
+        [
+            "Write a loop that concatenates 50,000 strings with += and time it, then rewrite it with StringBuilder and compare",
+            "Reproduce ReferenceEquals returning false for two value-equal strings — one from a literal, one built via StringBuilder.ToString()",
+            "Find (or write) a string comparison that uses ToUpper()/ToLower() or string.Compare without a StringComparison argument, and change it to the correct Ordinal(IgnoreCase) call",
+        ]);
+
+        var module = BuildModule(topicId, "csharp-dependency-injection-and-modern-syntax", "Dependency Injection, Strings & Modern C#",
+            "Inversion of Control and the built-in ASP.NET Core DI container, the three service lifetimes and the captive dependency bug that comes from mixing them incorrectly, plus a deep dive into string immutability, interning, StringBuilder performance, comparison pitfalls, and a tour of modern C# syntax features.",
+            90, [lesson1, lesson2], sortOrder: 11);
 
         return (module, [lesson1Checklist, lesson2Checklist]);
     }
