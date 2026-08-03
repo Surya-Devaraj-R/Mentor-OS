@@ -90,7 +90,8 @@ public static class InterviewPrepEndpoints
         var companies = question.QuestionCompanies.Select(qc => qc.Company!.Name).ToList();
         return new InterviewQuestionDto(
             question.Id, question.QuestionType, question.Title, question.PromptText,
-            question.SuggestedApproach, question.SampleAnswer, question.SortOrder,
+            question.SuggestedApproach, question.SampleAnswer,
+            question.DiagramBody, question.DiagramFormat, question.SortOrder,
             completedIds.Contains(question.Id), companies);
     }
 }

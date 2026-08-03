@@ -9,6 +9,8 @@ public record InterviewQuestionDto(
     string PromptText,
     string? SuggestedApproach,
     string? SampleAnswer,
+    string? DiagramBody,
+    DiagramFormat? DiagramFormat,
     int SortOrder,
     bool IsCompleted,
     IReadOnlyList<string> Companies);

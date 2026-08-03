@@ -10,6 +10,8 @@ public class InterviewQuestion
     public string PromptText { get; set; } = "";
     public string? SuggestedApproach { get; set; }
     public string? SampleAnswer { get; set; }
+    public string? DiagramBody { get; set; }
+    public DiagramFormat? DiagramFormat { get; set; }
     public int SortOrder { get; set; }
     public DateTime CreatedUtc { get; set; }
     public DateTime UpdatedUtc { get; set; }

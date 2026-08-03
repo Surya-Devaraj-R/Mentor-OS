@@ -10,5 +10,6 @@ public class InterviewQuestionConfiguration : IEntityTypeConfiguration<Interview
     {
         builder.Property(q => q.QuestionType).HasConversion<string>().HasMaxLength(30);
         builder.Property(q => q.Title).HasMaxLength(200).IsRequired();
+        builder.Property(q => q.DiagramFormat).HasConversion<string>().HasMaxLength(20);
     }
 }

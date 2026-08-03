@@ -1,6 +1,8 @@
 import { getInterviewQuestions, setInterviewQuestionCompleted, getCompanies } from '../api/interviewPrep.js';
 import { getProgressSummary } from '../api/progress.js';
 import { renderMiniMarkdown } from '../components/content-blocks/mini-markdown.js';
+import { renderStructuredSteps } from '../components/content-blocks/structured-steps.js';
+import { renderAsciiArt } from '../components/content-blocks/ascii-art.js';
 import { createLoadingMessage, createErrorMessage } from '../components/status-message.js';
 import { setState } from '../state.js';
 import { navigate } from '../router.js';
@@ -154,6 +156,9 @@ function createQuestionCard(question) {
   if (question.suggestedApproach) {
     body.appendChild(createSubsection('Suggested Approach', question.suggestedApproach));
   }
+  if (question.diagramBody) {
+    body.appendChild(createDiagramSubsection(question.diagramBody, question.diagramFormat));
+  }
   if (question.sampleAnswer) {
     body.appendChild(createSubsection('Sample Answer', question.sampleAnswer));
   }
@@ -171,5 +176,20 @@ function createSubsection(label, text) {
   heading.textContent = label;
 
   wrapper.append(heading, renderMiniMarkdown(text));
+  return wrapper;
+}
+
+function createDiagramSubsection(diagramBody, diagramFormat) {
+  const wrapper = document.createElement('div');
+  wrapper.className = 'flex flex-col gap-2';
+
+  const heading = document.createElement('h3');
+  heading.className = 'text-xs font-semibold uppercase tracking-wide text-emerald-400';
+  heading.textContent = 'Diagram';
+
+  wrapper.append(
+    heading,
+    diagramFormat === 'AsciiArt' ? renderAsciiArt(diagramBody) : renderStructuredSteps(diagramBody),
+  );
   return wrapper;
 }
