@@ -40,12 +40,16 @@ public static class CurriculumContentSeedData
             BuildDotNetIdentityAndMessagingModule(topicIdBySlug["dotnet"]),
             BuildDotNetApiDesignAndTrafficControlModule(topicIdBySlug["dotnet"]),
             BuildDotNetDistributedCommunicationAndObservabilityModule(topicIdBySlug["dotnet"]),
+            BuildDotNetResilientHttpCallsAndErrorHandlingModule(topicIdBySlug["dotnet"]),
             BuildDsaModule(topicIdBySlug["dsa"]),
             BuildDsaGraphsModule(topicIdBySlug["dsa"]),
             BuildDsaLinkedListsAndHeapsModule(topicIdBySlug["dsa"]),
+            BuildDsaGreedyAndBitManipulationModule(topicIdBySlug["dsa"]),
+            BuildDsaUnionFindAndWeightedGraphsModule(topicIdBySlug["dsa"]),
             BuildSystemDesignModule(topicIdBySlug["system-design"]),
             BuildApiGatewayAndCdnModule(topicIdBySlug["system-design"]),
             BuildConsistentHashingAndCaseStudiesModule(topicIdBySlug["system-design"]),
+            BuildDistributedCoordinationModule(topicIdBySlug["system-design"]),
             BuildSqlModule(topicIdBySlug["sql"]),
             BuildSqlAdvancedModule(topicIdBySlug["sql"]),
             BuildSqlViewsAndOptimizationModule(topicIdBySlug["sql"]),
@@ -8121,6 +8125,389 @@ public static class CurriculumContentSeedData
         return (module, [lesson1Checklist, lesson2Checklist]);
     }
 
+    private static (Module, List<ChecklistSeed>) BuildDotNetResilientHttpCallsAndErrorHandlingModule(int topicId)
+    {
+        var lesson1 = BuildLesson(
+            slug: "global-exception-handling-and-problemdetails",
+            title: "Global Exception Handling & ProblemDetails",
+            summary: "Why scattering try/catch across every endpoint doesn't scale, and how .NET 8+'s IExceptionHandler pipeline plus the RFC 7807 ProblemDetails standard give an app one centralized place to catch, log, and consistently shape every unhandled exception.",
+            estimatedMinutes: 40,
+            objectives:
+            [
+                "Explain why per-endpoint try/catch blocks don't scale as a codebase grows, and what specifically goes wrong when a new endpoint forgets one",
+                "Describe the IExceptionHandler interface and how AddExceptionHandler<T>()/UseExceptionHandler() register it as a single centralized point where unhandled exceptions land",
+                "Explain the ProblemDetails standard (RFC 7807) -- type, title, status, detail, instance -- and why a consistent error shape matters to API clients",
+                "Map specific exception types to specific ProblemDetails responses while keeping a catch-all fallback that logs full details server-side but never leaks internals to the caller",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    Wrapping every endpoint body in its own `try/catch` looks reasonable in a two-endpoint API and turns into a liability by the twentieth one. Each catch block has to independently decide what status code to return, what shape the error JSON takes, and whether to log anything useful -- and because that logic is duplicated everywhere, it drifts: one endpoint returns `{ "error": "..." }`, another returns a bare string, a third forgets to catch anything at all and lets a raw exception (and, if you're not careful, its full stack trace) leak straight to the client. The real failure mode isn't that try/catch is wrong in principle -- it's that centralizing error handling in twenty different places means it is, in practice, centralized nowhere. The moment someone adds endpoint twenty-one and forgets the pattern, that one endpoint now behaves differently from every other one in the API, and nothing in the codebase enforces otherwise.
+
+                    .NET 8 introduced **`IExceptionHandler`** specifically to fix this: a small interface with one method, `TryHandleAsync(HttpContext, Exception, CancellationToken)`, that gets a shot at any exception that escapes a request pipeline unhandled. You register an implementation with `builder.Services.AddExceptionHandler<MyExceptionHandler>()` and wire the middleware in with `app.UseExceptionHandler()` (typically placed early in the pipeline, right after `UseHttpsRedirection`, so it wraps everything after it). From that point on, no endpoint needs its own try/catch for the general case -- an unhandled exception anywhere downstream flows to this one registered handler instead of bubbling up to a generic, undifferentiated 500 response. You can register more than one `IExceptionHandler` implementation; ASP.NET Core tries them in registration order, and the first one whose `TryHandleAsync` returns `true` (meaning "I handled this, stop looking") short-circuits the chain -- letting you have a specific handler for one exception type and a catch-all handler registered last as the safety net.
+
+                    The other half of the problem -- what shape the error response actually takes -- is solved by **`ProblemDetails`**, the JSON representation defined by RFC 7807 and built into ASP.NET Core. Instead of every endpoint (or every exception handler) inventing its own error JSON, `ProblemDetails` gives every error response the same five well-known fields: `type` (a URI identifying the error category, often just a link to relevant docs), `title` (a short, human-readable summary), `status` (the HTTP status code, duplicated in the body for convenience), `detail` (specifics about this particular occurrence), and `instance` (typically the request path that triggered it). Calling `builder.Services.AddProblemDetails()` registers the machinery ASP.NET Core uses to produce this shape automatically for framework-generated error responses (like an unhandled 4xx from routing or model binding), and your own `IExceptionHandler` implementations can construct and write a `ProblemDetails` object explicitly for exceptions they handle -- so every error response in the entire API, whether it came from routing, validation, or an exception handler, has the same predictable shape a client can parse once and rely on everywhere.
+
+                    Putting the two together: map exceptions you understand and expect -- a custom `NotFoundException`, a `ValidationException` -- to specific status codes and specific, safe `ProblemDetails` detail messages, because you know exactly what went wrong and it's safe to describe. Then register a catch-all handler last, for the `Exception` type generically, that catches anything unexpected: it should log the exception in full (message, stack trace, inner exceptions) via `ILogger` so you can actually debug it, but return a deliberately generic `ProblemDetails` response to the caller -- something like "An unexpected error occurred" with a `500` status and no exception message or stack trace in the body. Leaking a raw exception message or stack trace to an API caller in production isn't just untidy; it can expose internal type names, file paths, SQL fragments, or other implementation details an attacker can use, so the discipline is: rich detail into the logs, generic detail into the response.
+                    """, 1),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Registering centralized exception handling**
+
+                    - `builder.Services.AddExceptionHandler<MyExceptionHandler>();` -- register one (or more) `IExceptionHandler` implementations
+                    - `builder.Services.AddProblemDetails();` -- enables ProblemDetails as the standard error JSON shape app-wide
+                    - `app.UseExceptionHandler();` -- wires the middleware into the pipeline; place it early, after `UseHttpsRedirection`
+
+                    **The IExceptionHandler contract**
+
+                    - `ValueTask<bool> TryHandleAsync(HttpContext httpContext, Exception exception, CancellationToken cancellationToken)`
+                    - Return `true` -- "I handled this, stop looking"; return `false` -- "not mine, try the next registered handler"
+                    - Multiple handlers registered -- tried in registration order until one returns `true`
+
+                    **ProblemDetails (RFC 7807) fields**
+
+                    - `type` -- URI identifying the error category (often docs link)
+                    - `title` -- short, human-readable summary
+                    - `status` -- HTTP status code, duplicated in the body
+                    - `detail` -- specifics about this particular occurrence
+                    - `instance` -- typically the request path
+
+                    **The golden rule**
+
+                    - Known exception (e.g. `NotFoundException`) -- specific status + specific, safe detail message
+                    - Unknown/unexpected exception -- log full details server-side, return a generic, non-leaky message + 500 to the client
+                    """, 2),
+                Block(BlockType.CodeSnippet, "Centralized IExceptionHandler Implementations with ProblemDetails", BodyFormat.PlainText, """
+                    // Exceptions/NotFoundException.cs -- a domain exception with meaning,
+                    // deliberately safe to describe to a caller.
+                    public class NotFoundException(string resourceName, object key)
+                        : Exception($"{resourceName} with id '{key}' was not found.");
+
+                    // ExceptionHandlers/NotFoundExceptionHandler.cs -- handles ONE known
+                    // exception type and maps it to a specific, safe ProblemDetails response.
+                    public class NotFoundExceptionHandler(IProblemDetailsService problemDetailsService)
+                        : IExceptionHandler
+                    {
+                        public async ValueTask<bool> TryHandleAsync(
+                            HttpContext httpContext, Exception exception, CancellationToken cancellationToken)
+                        {
+                            if (exception is not NotFoundException notFoundException)
+                                return false; // not mine -- let the next registered handler try
+
+                            httpContext.Response.StatusCode = StatusCodes.Status404NotFound;
+
+                            await problemDetailsService.WriteAsync(new ProblemDetailsContext
+                            {
+                                HttpContext = httpContext,
+                                ProblemDetails = new ProblemDetails
+                                {
+                                    Type = "https://api.example.com/errors/not-found",
+                                    Title = "Resource not found",
+                                    Status = StatusCodes.Status404NotFound,
+                                    Detail = notFoundException.Message, // safe: we authored this message
+                                    Instance = httpContext.Request.Path,
+                                },
+                            });
+
+                            return true; // handled -- stop looking for another handler
+                        }
+                    }
+
+                    // ExceptionHandlers/GlobalExceptionHandler.cs -- the catch-all safety net.
+                    // Registered LAST so specific handlers above get first refusal.
+                    public class GlobalExceptionHandler(
+                        ILogger<GlobalExceptionHandler> logger, IProblemDetailsService problemDetailsService)
+                        : IExceptionHandler
+                    {
+                        public async ValueTask<bool> TryHandleAsync(
+                            HttpContext httpContext, Exception exception, CancellationToken cancellationToken)
+                        {
+                            // Full details go to the logs -- never to the client.
+                            logger.LogError(exception,
+                                "Unhandled exception for {Method} {Path}",
+                                httpContext.Request.Method, httpContext.Request.Path);
+
+                            httpContext.Response.StatusCode = StatusCodes.Status500InternalServerError;
+
+                            await problemDetailsService.WriteAsync(new ProblemDetailsContext
+                            {
+                                HttpContext = httpContext,
+                                ProblemDetails = new ProblemDetails
+                                {
+                                    Type = "https://api.example.com/errors/internal",
+                                    Title = "An unexpected error occurred",
+                                    Status = StatusCodes.Status500InternalServerError,
+                                    // Deliberately generic -- never exception.Message or exception.StackTrace here.
+                                    Detail = "Something went wrong while processing your request. Please try again later.",
+                                    Instance = httpContext.Request.Path,
+                                },
+                            });
+
+                            return true;
+                        }
+                    }
+
+                    // Program.cs -- registration order matters: specific handlers first,
+                    // catch-all last.
+                    builder.Services.AddExceptionHandler<NotFoundExceptionHandler>();
+                    builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
+                    builder.Services.AddProblemDetails();
+
+                    var app = builder.Build();
+                    app.UseExceptionHandler(); // no options needed -- registered handlers do the work
+                    """, 3, language: "csharp"),
+                Block(BlockType.Diagram, "One Unhandled Exception, Tried Against Each Registered Handler in Order", BodyFormat.AsciiArt, """
+                    Endpoint throws NotFoundException
+                              |
+                              v
+                    [ UseExceptionHandler() middleware catches it ]
+                              |
+                              v
+                    [ NotFoundExceptionHandler.TryHandleAsync ]
+                       is exception a NotFoundException? --YES--> write 404 ProblemDetails --> return true --> STOP
+                              |
+                              NO (returns false)
+                              v
+                    [ GlobalExceptionHandler.TryHandleAsync ]  (registered last -- the safety net)
+                       log full exception details (ILogger)
+                       write generic 500 ProblemDetails (no stack trace, no exception.Message)
+                       return true --> STOP
+
+                    If GlobalExceptionHandler were registered FIRST instead of last, it would
+                    catch every exception itself and NotFoundExceptionHandler would never run --
+                    order of registration is the order handlers are tried.
+                    """, 4),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Register specific, expected-exception handlers before the catch-all, and keep the catch-all registered last so it only ever catches what nothing more specific recognized -- registration order is try order, so getting this backwards silently swallows every exception in the generic handler and specific handlers never fire. Treat `ProblemDetails.Detail` as public-facing text for every response, known or unknown: for known exceptions it's fine to describe exactly what went wrong (you authored the message), but for the catch-all it should always be a fixed, generic sentence, never `exception.Message` or `exception.ToString()`.
+
+                    Log the full exception -- message, stack trace, inner exceptions -- via `ILogger` inside the catch-all handler before writing the generic response, so production incidents are still fully debuggable server-side even though the client saw nothing but "an unexpected error occurred." Call `AddProblemDetails()` even if you write every `ProblemDetails` object by hand in your own handlers -- it also shapes the framework's own built-in error responses (like a 404 from routing that never reaches your code) so the whole API stays consistent, not just the paths you explicitly handle.
+                    """, 5),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    If asked "how do you handle errors in an ASP.NET Core API," don't describe try/catch in every action method -- that answer signals you haven't hit the scaling problem yet. Lead with `IExceptionHandler` and `UseExceptionHandler()` as the centralized pipeline point every unhandled exception flows through regardless of which endpoint threw it, and name `ProblemDetails`/RFC 7807 as the reason every error response has the same shape instead of each endpoint inventing its own.
+
+                    Be ready to explain the "tried in order until one handles it" mechanic precisely: multiple `IExceptionHandler` implementations can be registered, `TryHandleAsync` returning `false` means "not mine, try the next one," and the catch-all belongs last specifically because it would otherwise intercept everything before more specific handlers get a chance. And always mention the security angle unprompted: the generic handler must log full exception detail server-side but return a sanitized message to the client -- interviewers listen for whether you'd casually leak `exception.Message`/stack traces to production API consumers.
+                    """, 6),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Registering only a single catch-all `IExceptionHandler` that returns `exception.Message` (or worse, `exception.ToString()`, which includes the full stack trace) directly in the `ProblemDetails.Detail` field -- this technically "handles" every exception but leaks internal type names, file paths, and implementation details to whoever called the API, which is exactly the leak centralizing error handling was supposed to prevent, just funneled through one place instead of twenty. Another common one: registering a broad catch-all handler for `Exception` *before* a more specific handler for `NotFoundException` -- since handlers are tried in registration order and the broad one matches everything, the specific handler never runs and every 404 case degrades into a generic 500.
+
+                    Also common: calling `app.UseExceptionHandler()` but forgetting `builder.Services.AddExceptionHandler<T>()` (or vice versa) -- both are required, one registers the handler implementations in DI, the other wires the middleware into the pipeline that actually invokes them, and omitting either one leaves exceptions unhandled exactly as before.
+                    """, 7),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    Per-endpoint try/catch is like every cashier in a store deciding, on the spot and independently, what to do when a customer's card is declined -- one apologizes and offers a manager, another just says "no" and walks away, a third panics and reads the payment terminal's raw error code out loud. `IExceptionHandler` plus `ProblemDetails` is that store installing one trained customer-service desk that every declined transaction gets routed to automatically: it has a fixed, professional script for common situations (a specific problem, a specific known fix) and a fallback script for anything unusual -- log the weird details in the back office for the manager to review later, but tell the customer something calm and generic, never read them the raw error code off the terminal.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "An ASP.NET Core app registers two exception handlers, in this order: builder.Services.AddExceptionHandler<GlobalExceptionHandler>(); then builder.Services.AddExceptionHandler<NotFoundExceptionHandler>();. A NotFoundException is thrown. What happens?",
+                    "IExceptionHandler implementations are tried in registration order. GlobalExceptionHandler is registered first, and if it's written as a catch-all that returns true for any Exception, it will handle the NotFoundException itself -- NotFoundExceptionHandler, registered second, never gets a chance to run. The fix is registering specific handlers before the catch-all.",
+                    [
+                        new QuizOptionSeed("GlobalExceptionHandler runs first and, if it unconditionally returns true, handles the exception itself -- NotFoundExceptionHandler never runs", true),
+                        new QuizOptionSeed("Both handlers always run together and their responses are merged into one ProblemDetails object", false),
+                        new QuizOptionSeed("ASP.NET Core automatically reorders handlers so the more specific one always runs first", false),
+                        new QuizOptionSeed("Registration order has no effect on which handler runs -- only the exception type matters", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "A catch-all exception handler writes exception.Message directly into ProblemDetails.Detail for every unhandled exception, so callers always get a real diagnostic message. What is the main problem with this in production?",
+                    "Returning exception.Message (or a stack trace) to API callers can leak internal implementation details -- type names, file paths, SQL fragments -- that an attacker could use, and it defeats the purpose of centralizing error handling in the first place. The exception's full detail should go to server-side logs via ILogger; the client should get a fixed, generic message instead.",
+                    [
+                        new QuizOptionSeed("It can leak internal implementation details (type names, file paths, SQL fragments) to API callers, which is a security and information-disclosure risk", true),
+                        new QuizOptionSeed("ProblemDetails.Detail is not allowed to contain any text longer than 20 characters", false),
+                        new QuizOptionSeed("exception.Message can only be read once, so future requests would throw a NullReferenceException", false),
+                        new QuizOptionSeed("IExceptionHandler implementations are not permitted to reference the caught Exception object", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Handle errors in ASP.NET Core", "https://learn.microsoft.com/en-us/aspnet/core/fundamentals/error-handling", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("ProblemDetails class (Microsoft.AspNetCore.Mvc)", "https://learn.microsoft.com/en-us/dotnet/api/microsoft.aspnetcore.mvc.problemdetails", LinkType.OfficialDocs),
+            ]);
+
+        var lesson1Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson1.Slug,
+        [
+            "Create a custom exception type (e.g. NotFoundException) and an IExceptionHandler implementation that maps it to a specific ProblemDetails response, then register it with AddExceptionHandler<T>()",
+            "Add a catch-all IExceptionHandler registered last that logs the full exception via ILogger and returns a generic ProblemDetails message, and confirm via a deliberately thrown unexpected exception that no stack trace or exception.Message reaches the client",
+            "Reorder the two registrations so the catch-all is registered first, trigger the specific exception again, and observe that the specific handler no longer runs -- then put the order back",
+        ]);
+
+        var lesson2 = BuildLesson(
+            slug: "resilient-http-calls-with-retries-and-circuit-breakers",
+            title: "Resilient HTTP Calls: Retries & Circuit Breakers",
+            summary: "Why calling another service over HTTP needs explicit protection against transient failures, and how retries with exponential backoff and the circuit breaker pattern -- wired in via Microsoft.Extensions.Http.Resilience's AddStandardResilienceHandler() -- keep both the caller and a struggling downstream service healthy.",
+            estimatedMinutes: 45,
+            objectives:
+            [
+                "Explain why a naive HttpClient.GetAsync call has no protection against transient network or downstream-service failures",
+                "Describe the retry-with-exponential-backoff pattern and why immediate, unthrottled retries can worsen an already-struggling downstream service (a retry storm)",
+                "Describe the circuit breaker pattern's three states (closed, open, half-open) and what problem each state solves for the caller and the downstream service",
+                "Wire AddHttpClient<T>().AddStandardResilienceHandler() into an ASP.NET Core app and explain what it bundles versus configuring retry/circuit-breaker/timeout individually",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    A single `await httpClient.GetAsync(url)` call assumes the network is reliable and the other end is healthy -- and in a distributed system, both of those assumptions fail routinely rather than exceptionally. A packet gets dropped. The downstream service is mid-deployment and briefly unreachable. It's under heavy load and takes three seconds to respond instead of thirty milliseconds. None of these are bugs in your code; they're the normal operating conditions of calling anything over a network, and a plain `HttpClient` call has zero built-in protection against any of them -- it either eventually times out and throws, or it succeeds, with nothing in between.
+
+                    The first layer of protection is the **retry pattern with exponential backoff**: on a failure that looks transient (a timeout, a 503, a connection reset -- not a 404 or a 400, which won't succeed no matter how many times you ask), retry the call a small number of times, waiting longer between each attempt than the last (e.g. 1 second, then 2, then 4) rather than retrying instantly and repeatedly. That backoff is not a minor detail -- retrying immediately and aggressively against a downstream service that's already struggling under load is precisely how a **retry storm** happens: every failed caller retries at the same instant, multiplying the exact load that caused the failures in the first place, and a service that might have recovered on its own gets pushed further underwater by the very clients trying to be resilient to it. Exponential backoff spaces retries out so a brief, genuine blip clears before the next attempt, without hammering a service that's actively failing.
+
+                    Retries alone aren't enough, though, because they don't address the case where a downstream service isn't having a brief blip -- it's genuinely down or badly degraded for an extended period. Retrying against a service in that state just means every caller pays the full retry-and-timeout cost, request after request, for as long as the outage lasts. That's the problem the **circuit breaker** pattern solves. A circuit breaker tracks consecutive failures on calls to a specific downstream dependency, and once that count crosses a threshold, it "opens" the circuit: for a cooldown period, calls to that dependency fail immediately, without even attempting the network call, let alone a timeout or a retry sequence. This protects two things at once -- the caller stops burning threads and time waiting on calls that are very likely to fail anyway, and the struggling downstream service stops receiving a pile-on of requests (including retries) while it's trying to recover. After the cooldown period elapses, the circuit moves to a **half-open** state: it lets a small number of trial calls through to test whether the downstream service has actually recovered. If those trial calls succeed, the circuit closes again and normal traffic resumes; if they still fail, it reopens and waits through another cooldown period before trying again.
+
+                    .NET's modern, built-in-on-Polly answer to wiring this up is the **`Microsoft.Extensions.Http.Resilience`** package. Rather than hand-assembling retry policies and circuit breaker policies separately, `builder.Services.AddHttpClient<MyServiceClient>().AddStandardResilienceHandler()` attaches a single, pre-configured resilience pipeline to every call that named/typed `HttpClient` makes. The standard handler bundles several strategies together in the right order: retry (with jittered exponential backoff), a circuit breaker, an overall request timeout, and a per-attempt timeout -- all tuned with sensible defaults out of the box. That's the right default for most services; when a specific dependency genuinely needs different behavior (a much higher failure threshold before opening, or no retries at all for a non-idempotent operation), `AddResilienceHandler()` lets you configure each strategy individually instead, but `AddStandardResilienceHandler()` is the one-line starting point that covers retries, circuit breaking, and timeouts together without hand-wiring three separate policies yourself.
+                    """, 1),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Why plain HttpClient isn't enough**
+
+                    - No protection against transient network blips, downstream slowness, or downstream outages
+                    - Either eventually succeeds or eventually throws -- nothing resilient in between
+
+                    **Retry with exponential backoff**
+
+                    - Retry a small number of times on transient failures (timeouts, 503s, connection resets) -- not on 400/404, which won't succeed on retry
+                    - Increase the delay between attempts (e.g. 1s, 2s, 4s) instead of retrying instantly
+                    - Immediate/unthrottled retries across many callers can cause a **retry storm** -- worsening the exact overload that caused the failures
+
+                    **Circuit breaker states**
+
+                    - **Closed** -- calls flow through normally; failures are counted
+                    - **Open** -- failure threshold crossed; calls fail fast immediately (no network attempt) for a cooldown period
+                    - **Half-open** -- after cooldown, a few trial calls test recovery; success closes the circuit, failure reopens it
+
+                    **Wiring it into .NET**
+
+                    - `Microsoft.Extensions.Http.Resilience` -- modern, built-in-on-Polly standard library
+                    - `builder.Services.AddHttpClient<MyServiceClient>().AddStandardResilienceHandler();` -- one line, bundles retry + circuit breaker + timeout (overall and per-attempt)
+                    - `AddResilienceHandler(name, builder => { ... })` -- configure each strategy individually when a dependency needs non-default behavior
+                    """, 2),
+                Block(BlockType.CodeSnippet, "Wiring Retries and a Circuit Breaker with Microsoft.Extensions.Http.Resilience", BodyFormat.PlainText, """
+                    // Program.cs -- the one-line standard resilience handler: retry
+                    // (jittered exponential backoff) + circuit breaker + timeouts, bundled.
+                    builder.Services.AddHttpClient<PaymentsServiceClient>(client =>
+                    {
+                        client.BaseAddress = new Uri("https://payments-service.internal");
+                    })
+                    .AddStandardResilienceHandler();
+
+                    var app = builder.Build();
+
+                    // PaymentsServiceClient.cs -- ordinary-looking code. The resilience
+                    // pipeline wraps every call this HttpClient makes -- retries, circuit
+                    // breaking, and timeouts all happen underneath this one await.
+                    public class PaymentsServiceClient(HttpClient httpClient)
+                    {
+                        public async Task<PaymentStatus?> GetStatusAsync(int paymentId, CancellationToken ct)
+                        {
+                            var response = await httpClient.GetAsync($"/status/{paymentId}", ct);
+                            response.EnsureSuccessStatusCode();
+                            return await response.Content.ReadFromJsonAsync<PaymentStatus>(ct);
+                        }
+                    }
+
+                    // For a dependency that needs different behavior than the defaults --
+                    // e.g. no retries for a non-idempotent POST, or a lower failure
+                    // threshold before opening -- configure each strategy explicitly.
+                    builder.Services.AddHttpClient<InventoryServiceClient>(client =>
+                    {
+                        client.BaseAddress = new Uri("https://inventory-service.internal");
+                    })
+                    .AddResilienceHandler("inventory-pipeline", pipelineBuilder =>
+                    {
+                        pipelineBuilder.AddRetry(new HttpRetryStrategyOptions
+                        {
+                            MaxRetryAttempts = 3,
+                            BackoffType = DelayBackoffType.Exponential,
+                            UseJitter = true, // spreads out retries across callers -- avoids synchronized retry storms
+                            Delay = TimeSpan.FromSeconds(1),
+                        });
+
+                        pipelineBuilder.AddCircuitBreaker(new HttpCircuitBreakerStrategyOptions
+                        {
+                            FailureRatio = 0.5,               // open once 50% of calls in the window fail...
+                            MinimumThroughput = 10,            // ...but only after at least 10 calls, to avoid noise
+                            SamplingDuration = TimeSpan.FromSeconds(30),
+                            BreakDuration = TimeSpan.FromSeconds(15), // cooldown before moving to half-open
+                        });
+
+                        pipelineBuilder.AddTimeout(TimeSpan.FromSeconds(5));
+                    });
+                    """, 3, language: "csharp"),
+                Block(BlockType.Diagram, "Circuit Breaker State Transitions", BodyFormat.AsciiArt, """
+                    [ CLOSED ]  -- normal operation, calls flow through, failures counted
+                        |
+                        | failure threshold crossed (e.g. 50% failures over last 10+ calls)
+                        v
+                    [ OPEN ]  -- calls fail IMMEDIATELY, no network attempt, for BreakDuration
+                        |
+                        | cooldown (BreakDuration) elapses
+                        v
+                    [ HALF-OPEN ]  -- a small number of trial calls are let through
+                        |
+                        |---- trial calls succeed ----> back to [ CLOSED ]
+                        |
+                        |---- trial calls still fail --> back to [ OPEN ]  (wait another BreakDuration)
+
+                    While OPEN: the caller is protected (no time wasted waiting on calls
+                    likely to fail) and the downstream service is protected (no pile-on of
+                    requests/retries while it's trying to recover).
+                    """, 4),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Reach for `AddStandardResilienceHandler()` as the default for every outgoing `HttpClient` that calls another service -- it's a single line that bundles retry, circuit breaker, and timeout strategies with sensible defaults, and it should take a deliberate, named reason to skip it, not the other way around. Only drop down to `AddResilienceHandler()` with per-strategy configuration when a specific dependency's behavior genuinely needs to differ from the defaults -- for instance, disabling retries entirely on a non-idempotent `POST` that isn't safe to send twice, or loosening the circuit breaker's threshold for a dependency known to be flaky but not actually unhealthy.
+
+                    Always enable jitter (`UseJitter = true`) on retry delays in any service with multiple caller instances -- without it, many callers that all fail at the same moment retry at the exact same intervals, recreating a synchronized retry storm even with exponential backoff in place. And keep retries limited to idempotent operations (GET, or a PUT/DELETE designed to be safely repeatable) -- retrying a POST that already partially succeeded server-side can duplicate the effect (e.g. charging a payment twice) unless the endpoint is specifically built to be idempotent (e.g. via an idempotency key).
+                    """, 5),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    If asked "how do you make a service resilient to a downstream dependency failing," don't stop at "add retries" -- that answer alone can make things worse. Name both patterns and how they complement each other: retries with exponential backoff handle brief, transient blips, while a circuit breaker handles the case where the dependency is genuinely down for longer, by failing fast instead of letting every caller pile on retries against a service that isn't recovering. Be explicit that the circuit breaker protects two parties at once -- the caller (no more wasted time waiting on calls likely to fail) and the downstream service (no more added load while it's trying to recover).
+
+                    Be ready to name the concrete .NET mechanism, not just the pattern in the abstract: `Microsoft.Extensions.Http.Resilience`'s `AddStandardResilienceHandler()`, built on Polly, attached via `AddHttpClient<T>()`. If pressed on retry safety, mention jitter and idempotency specifically -- retrying a non-idempotent call, or retrying without jitter across many caller instances, are the two most common ways a "resilience" fix quietly makes an incident worse instead of better.
+                    """, 6),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Adding retries without exponential backoff or jitter -- retrying instantly, three times in a row, the moment a call fails -- which, multiplied across every instance of a caller service failing at roughly the same time, is exactly how a retry storm takes a struggling downstream service the rest of the way down instead of giving it room to recover. A closely related mistake: retrying a non-idempotent operation (like a payment-charging `POST`) without confirming the endpoint is safe to call twice -- if the first attempt actually succeeded server-side but the response was lost before the caller saw it, a blind retry can duplicate the side effect.
+
+                    Also common: configuring retries but never a circuit breaker, so a caller keeps dutifully retrying (with backoff) against a dependency that's been down for ten minutes -- every single request pays the full retry-and-timeout cost with nothing gained, when a circuit breaker would have started failing fast after the first handful of failures. And the reverse mistake: reaching straight for a hand-rolled Polly pipeline (or worse, a custom homegrown retry loop) before checking whether `AddStandardResilienceHandler()`'s defaults already cover the need -- reinventing a well-tested default instead of overriding only the one setting that actually needs to differ.
+                    """, 7),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    Retrying without backoff is like getting a busy signal calling a restaurant and immediately hitting redial as fast as your fingers allow, over and over -- if the phone line was merely momentarily overloaded, everyone doing this at once is exactly what keeps it overloaded. Exponential backoff is waiting a bit longer between each redial, giving the line a real chance to clear. A circuit breaker is the restaurant's host noticing the phone has been busy nonstop for the last five minutes and putting up a sign at the door saying "phone temporarily down, please don't call for a bit" -- so people stop wasting their time redialing a line that clearly isn't answering, and the staff inside get a clear stretch of time to actually fix whatever's wrong, instead of being interrupted by another ring the instant they hang up. Every so often, the host takes the sign down just long enough to check if one call gets through cleanly (half-open) before deciding whether to leave the phone open again or put the sign back up.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "A service calls a downstream dependency that's currently returning 503s under heavy load. Every instance of the calling service retries three times, instantly and without jitter, on every failed call. What is the most likely consequence?",
+                    "Instant, unthrottled retries across many caller instances multiply the load hitting an already-overloaded downstream service at the exact moments it's struggling -- a retry storm -- which can prevent it from recovering or make the outage worse. Exponential backoff with jitter spaces retries out and avoids many callers retrying in lockstep.",
+                    [
+                        new QuizOptionSeed("The retries multiply load on the already-struggling downstream service at the same moments it's overloaded, worsening the outage (a retry storm)", true),
+                        new QuizOptionSeed("HttpClient automatically converts instant retries into exponential backoff, so no problem occurs", false),
+                        new QuizOptionSeed("Retrying instantly guarantees the second or third attempt succeeds, since 503s are always transient", false),
+                        new QuizOptionSeed("Retries have no effect on the downstream service's load, only on the calling service's own CPU usage", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "A circuit breaker has been OPEN for a downstream dependency for the last 15 seconds (its configured BreakDuration). What happens next, and why is that useful?",
+                    "Once the cooldown (BreakDuration) elapses, the circuit moves to half-open and lets a small number of trial calls through to test whether the dependency has recovered. This is useful because it avoids two extremes: staying open forever (never noticing recovery) and going straight back to fully closed (risking a full pile-on if the dependency is still unhealthy).",
+                    [
+                        new QuizOptionSeed("The circuit moves to half-open and allows a small number of trial calls through to test if the dependency has recovered", true),
+                        new QuizOptionSeed("The circuit stays open permanently until the application is restarted", false),
+                        new QuizOptionSeed("The circuit closes fully and immediately resumes sending 100% of traffic with no testing", false),
+                        new QuizOptionSeed("The downstream dependency is automatically restarted by the circuit breaker", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Build resilient HTTP apps: Key development patterns", "https://learn.microsoft.com/en-us/dotnet/core/resilience/http-resilience", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("Polly and resilience pipelines in .NET", "https://learn.microsoft.com/en-us/dotnet/core/resilience/", LinkType.OfficialDocs),
+            ],
+            prerequisites: [lesson1]);
+
+        var lesson2Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson2.Slug,
+        [
+            "Add AddHttpClient<T>().AddStandardResilienceHandler() to a typed HttpClient calling a real (or mock) endpoint, then simulate transient failures (e.g. a test endpoint that returns 503 a few times before succeeding) and observe the retries in logs",
+            "Configure a custom AddResilienceHandler pipeline with an explicit HttpCircuitBreakerStrategyOptions, force enough consecutive failures to open the circuit, and confirm subsequent calls fail immediately without attempting the network call",
+            "Explain out loud, for a payment-charging POST endpoint, why blindly enabling retries on it is unsafe without an idempotency key, and what you'd change to make it safely retryable",
+        ]);
+
+        var module = BuildModule(topicId, "aspnet-core-resilient-http-calls-and-error-handling", "Resilient HTTP Calls & Global Error Handling",
+            "Centralizing unhandled-exception handling with IExceptionHandler and the RFC 7807 ProblemDetails standard, then hardening outbound HTTP calls against transient failures with retry-with-backoff and circuit breakers via Microsoft.Extensions.Http.Resilience.",
+            85, [lesson1, lesson2], sortOrder: 7);
+
+        return (module, [lesson1Checklist, lesson2Checklist]);
+    }
+
     // ============================== DSA ==============================
 
     private static (Module, List<ChecklistSeed>) BuildDsaModule(int topicId)
@@ -9590,6 +9977,791 @@ public static class CurriculumContentSeedData
         return (module, [lesson1Checklist, lesson2Checklist]);
     }
 
+    private static (Module, List<ChecklistSeed>) BuildDsaGreedyAndBitManipulationModule(int topicId)
+    {
+        var lesson1 = BuildLesson(
+            slug: "greedy-algorithm-patterns",
+            title: "Greedy Algorithm Patterns",
+            summary: "The greedy-choice property, the exchange argument used to prove greedy correct, and the interval-scheduling and gas-station patterns — plus how to spot when a greedy-looking problem actually needs DP.",
+            estimatedMinutes: 50,
+            objectives:
+            [
+                "State the greedy-choice property and optimal substructure, and explain what has to be true about a problem for greedy to reach the global optimum",
+                "Sketch an exchange argument to justify why a greedy strategy is correct",
+                "Solve activity-selection / interval scheduling by sorting by end time and greedily picking compatible intervals",
+                "Recognize when a problem that looks greedy actually requires DP, using 0/1 knapsack vs. fractional knapsack as the canonical contrast",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    A problem is **greedy-solvable** when it has two properties at once:
+
+                    - **Greedy-choice property** — making the locally best choice at each step, without ever revisiting or undoing it, still leads to a globally optimal solution.
+                    - **Optimal substructure** — an optimal solution to the whole problem contains optimal solutions to its subproblems (the same property DP relies on — the difference is that DP considers many choices and combines subproblem answers, while greedy commits to one choice per step and never looks back).
+
+                    Having optimal substructure alone is not enough — plenty of DP problems have it but do *not* have the greedy-choice property, which is exactly why "looks greedy" is such a common interview trap.
+
+                    **The exchange argument** is the standard way to justify a greedy strategy: assume some optimal solution `O` differs from the greedy solution `G` at the first point of disagreement. Show that swapping `O`'s choice at that point for `G`'s choice produces another solution that is *at least as good* (never worse). Repeating this exchange step by step transforms `O` into `G` without ever decreasing its quality — so `G` must be optimal too. You rarely write this out formally in an interview, but stating it out loud in one or two sentences is what separates "I've memorized this pattern" from "I can prove this pattern is correct."
+
+                    **Activity selection / interval scheduling** (the canonical teaching example): given a set of intervals, select the maximum number that don't overlap. The greedy rule is *sort by end time, ascending, then repeatedly pick the next interval whose start time is at or after the end time of the last picked interval*. The exchange argument: for any optimal solution, its first-chosen activity can be swapped for the one with the earliest finish time without reducing the count — finishing earlier only ever leaves *more* room (never less) for everything scheduled after it.
+
+                    **Gas station (circular tour)**: `n` stations arranged in a circle, `gas[i]` fuel gained at station `i`, `cost[i]` fuel spent driving from station `i` to `i + 1`. A valid starting station exists if and only if `sum(gas) >= sum(cost)`. Given that a valid start exists, a single greedy pass finds it: track a running tank total starting from index 0; the moment the tank goes negative at index `i`, none of the stations from the current `start` through `i` can possibly be a valid starting point either (each of them would inherit the same deficit or worse), so reset `start = i + 1` and the tank to 0, and keep going.
+
+                    **Where greedy fails — 0/1 knapsack vs. fractional knapsack**: in the *fractional* knapsack problem (you may take any fraction of an item), sorting items by value-to-weight ratio and greedily taking as much as possible of the best ratio first is provably optimal — the exchange argument holds because you can always "top off" with a partial unit of the next-best item. In the *0/1* knapsack problem (each item must be taken whole or not at all), that same ratio-greedy strategy can produce a suboptimal answer, because a high-ratio item might not fit the remaining capacity, and there's no way to take a fraction of it to fill the gap — the greedy-choice property breaks down, and you need dynamic programming over (item index, remaining capacity) to consider the combinations greedy would have skipped. Whenever a problem forces "all or nothing" choices with interacting constraints, that's usually a DP signal, not a greedy one.
+                    """, 1),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **When greedy is worth trying**
+
+                    - The problem asks for a max/min count, or an optimal single pass over sorted input
+                    - You can state a one-sentence greedy rule ("always pick the interval that finishes earliest") and sketch why swapping it into any optimal solution can't make things worse
+                    - Once a choice is made, nothing later in the algorithm needs to reconsider or undo it
+
+                    **Activity selection / interval scheduling template**
+
+                    - Sort intervals by end time ascending — `O(n log n)`
+                    - Scan once, tracking `lastEnd`; pick interval `i` if `start[i] >= lastEnd`, then update `lastEnd` — `O(n)`
+
+                    **Gas station template**
+
+                    - Feasibility check: `sum(gas) >= sum(cost)` (skip this if the problem guarantees a solution exists)
+                    - Single pass tracking a running `tank`; reset `start = i + 1` and `tank = 0` the moment `tank` goes negative — `O(n)` time, `O(1)` space
+
+                    **Red flags that greedy will silently produce the wrong answer**
+
+                    - Items must be taken whole ("all or nothing") *and* have two independent constraints trading off against each other (0/1 knapsack)
+                    - The problem requires exploring multiple choices and comparing them ("in how many ways", "is it possible to reach exactly X") — that's DP or backtracking territory
+                    - You cannot construct even an informal exchange argument, or you can find a small counterexample where the greedy rule picks worse than an alternative
+                    """, 2),
+                Block(BlockType.CodeSnippet, "Activity Selection, Gas Station, and Jump Game", BodyFormat.PlainText, """
+                    // Activity selection / interval scheduling: max count of non-overlapping intervals.
+                    // O(n log n) for the sort, O(n) for the scan.
+                    public int MaxNonOverlappingIntervals(int[][] intervals)
+                    {
+                        if (intervals.Length == 0) return 0;
+
+                        // Greedy rule: sort by END time ascending, not start time -- finishing earliest
+                        // is what maximizes the room left over for everything scheduled after it.
+                        Array.Sort(intervals, (a, b) => a[1].CompareTo(b[1]));
+
+                        var count = 1;
+                        var lastEnd = intervals[0][1];
+
+                        for (var i = 1; i < intervals.Length; i++)
+                        {
+                            if (intervals[i][0] >= lastEnd) // compatible: starts at or after the last pick ends
+                            {
+                                count++;
+                                lastEnd = intervals[i][1];
+                            }
+                        }
+
+                        return count;
+                    }
+
+                    // Gas station (circular tour): find the starting station, or -1 if none exists.
+                    // O(n) time, O(1) space -- a single pass, no simulation of every possible start.
+                    public int CanCompleteCircuit(int[] gas, int[] cost)
+                    {
+                        var totalSurplus = 0;
+                        var tank = 0;
+                        var start = 0;
+
+                        for (var i = 0; i < gas.Length; i++)
+                        {
+                            var surplus = gas[i] - cost[i];
+                            totalSurplus += surplus;
+                            tank += surplus;
+
+                            if (tank < 0)
+                            {
+                                // No station between `start` and `i` (inclusive) can be a valid start either --
+                                // each would carry the same deficit forward. Try the next station instead.
+                                start = i + 1;
+                                tank = 0;
+                            }
+                        }
+
+                        return totalSurplus >= 0 ? start : -1; // feasible overall iff total gas >= total cost
+                    }
+
+                    // Jump Game: can you reach the last index, greedily tracking the furthest reachable index?
+                    // O(n) time, O(1) space.
+                    public bool CanJump(int[] nums)
+                    {
+                        var maxReach = 0;
+
+                        for (var i = 0; i < nums.Length; i++)
+                        {
+                            if (i > maxReach) return false; // this index is unreachable from anywhere before it
+
+                            maxReach = Math.Max(maxReach, i + nums[i]);
+                        }
+
+                        return true;
+                    }
+                    """, 3, language: "csharp"),
+                Block(BlockType.Diagram, "Activity Selection Walked Through", BodyFormat.AsciiArt, """
+                    Intervals (start, end): (1,4) (3,5) (0,6) (5,7) (8,9) (5,9)
+
+                    Sort by END time ascending:
+
+                    (1,4)  (3,5)  (0,6)  (5,7)  (8,9)  (5,9)
+                     end=4  end=5  end=6  end=7  end=9  end=9
+
+                    Scan, tracking lastEnd:
+
+                    pick (1,4)          lastEnd = 4   count = 1
+                    (3,5): start 3 < 4  -> skip (overlaps the last pick)
+                    (0,6): start 0 < 4  -> skip
+                    (5,7): start 5 >= 4 -> pick   lastEnd = 7   count = 2
+                    (8,9): start 8 >= 7 -> pick   lastEnd = 9   count = 3
+                    (5,9): start 5 < 9  -> skip
+
+                    Result: 3 non-overlapping intervals selected: (1,4), (5,7), (8,9)
+                    """, 4),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Before coding a greedy solution in an interview, spend ten seconds trying to break it with a tiny hand-built counterexample (3-4 elements) — if you can't break it and you can sketch why swapping any optimal choice for the greedy one doesn't hurt, that's your exchange argument and you're safe to proceed. If you find yourself wanting to "try both options and keep the better one" anywhere in your solution, that's a strong signal you actually need DP or backtracking, not greedy.
+
+                    For interval problems specifically, always double-check which field you sorted by — sorting by start time is a natural instinct but is wrong for maximizing count of non-overlapping intervals; sorting by end time is what makes the greedy argument hold.
+                    """, 5),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    State your greedy rule as one crisp sentence before writing any code — "I'll sort by end time and greedily take any interval that starts after my last pick ends" — and follow it immediately with why it's safe: "picking the earliest finisher first never costs me room for later picks." That second sentence is the exchange argument in miniature, and interviewers listen for it specifically.
+
+                    If the interviewer's problem smells like knapsack (items with independent weight and value, capacity constraint), ask out loud whether items are divisible. That single question signals you know the fractional-vs-0/1 distinction, and it often tells you immediately whether to reach for greedy or DP.
+                    """, 6),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Sorting activity-selection input by start time (or not sorting at all) instead of end time — this breaks the greedy guarantee and can silently return a suboptimal count that still looks plausible. A close second: using `start[i] > lastEnd` when the problem allows touching endpoints to count as compatible (should be `>=`), or the reverse when it doesn't.
+
+                    In gas station, resetting only `tank = 0` without also advancing `start = i + 1` (or vice versa) breaks the single-pass argument and silently returns the wrong starting index. And the most common conceptual mistake overall: applying a ratio-greedy strategy to a 0/1 knapsack-shaped problem because it "worked for the fractional version" — always ask whether the problem allows partial/divisible choices before trusting a greedy ratio sort.
+                    """, 7),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    Activity selection is exactly how you'd book a single conference room for as many meetings as possible: you'd always favor letting in whichever meeting frees up the room soonest, because that leaves the most possible time for everything still waiting — never the meeting that arrived first or lasts longest.
+
+                    Gas station is a road trip where you track your fuel tank running total starting from station 0; the instant you'd run dry, you know for certain that starting your trip from any station you've already passed through would only make things worse (you'd hit the same or a worse deficit) — so you shift your starting line to right after where you ran out and keep driving.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "What is the role of an exchange argument in proving a greedy algorithm correct?",
+                    "An exchange argument assumes some optimal solution differs from the greedy solution at its first point of disagreement, then shows that swapping the optimal solution's choice there for the greedy choice produces a solution that is at least as good. Repeating this step-by-step transforms any optimal solution into the greedy one without ever making it worse, proving the greedy solution is itself optimal.",
+                    [
+                        new QuizOptionSeed("It shows that swapping any optimal solution's first differing choice for the greedy choice never makes the solution worse, so the greedy solution must also be optimal", true),
+                        new QuizOptionSeed("It runs the greedy algorithm twice with different tie-breaking rules and checks the results match", false),
+                        new QuizOptionSeed("It proves the algorithm's time complexity is optimal, not that its output is correct", false),
+                        new QuizOptionSeed("It exchanges the greedy algorithm for a brute-force one whenever the input is small enough", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "Why does sorting by value-to-weight ratio and greedily taking the best items work for fractional knapsack, but not for 0/1 knapsack?",
+                    "In fractional knapsack you can take any partial amount of an item, so you can always use a fraction of the next-best-ratio item to exactly fill the remaining capacity -- the exchange argument holds. In 0/1 knapsack each item must be taken whole or skipped entirely, so a high-ratio item might not fit the remaining capacity with no way to take a partial amount to compensate, which breaks the greedy-choice property and forces you to compare combinations with DP instead.",
+                    [
+                        new QuizOptionSeed("Fractional knapsack allows partial items, so a partial unit can always exactly fill leftover capacity; 0/1 knapsack's all-or-nothing constraint breaks that guarantee and requires comparing combinations via DP", true),
+                        new QuizOptionSeed("0/1 knapsack is only solvable for arrays of size 1, which is why it's called '0/1'", false),
+                        new QuizOptionSeed("Fractional knapsack is actually solved with DP too; greedy is just a common but incorrect shortcut for both", false),
+                        new QuizOptionSeed("There is no real difference -- both are correctly solved by the same ratio-greedy approach", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Activity Selection Problem (GeeksforGeeks)", "https://www.geeksforgeeks.org/activity-selection-problem-greedy-algo-1/", LinkType.FurtherReading),
+                new ReferenceLinkSeed("Greedy Algorithms Explore Card (LeetCode)", "https://leetcode.com/explore/learn/card/greedy/", LinkType.FurtherReading),
+            ]);
+
+        var lesson1Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson1.Slug,
+        [
+            "Solve Non-overlapping Intervals / Activity Selection on LeetCode, sorting by end time and stating the exchange argument out loud before coding",
+            "Solve Gas Station (LeetCode 134) using the single-pass running-tank-with-reset technique",
+            "Solve Jump Game (LeetCode 55) with the greedy furthest-reachable-index technique, then explain in one sentence why 0/1 Knapsack needs DP instead of greedy",
+        ]);
+
+        var lesson2 = BuildLesson(
+            slug: "bit-manipulation-techniques",
+            title: "Bit Manipulation Techniques",
+            summary: "The core bitwise operators, XOR's cancellation properties for the Single Number problem, classic bit tricks (power-of-two check, Brian Kernighan's popcount, get/set/clear a bit), and bitmask subset enumeration.",
+            estimatedMinutes: 50,
+            objectives:
+            [
+                "Explain what each bitwise operator (&, |, ^, ~, <<, >>) computes and identify the interview problem shapes each one solves",
+                "Use XOR's self-canceling property to solve 'Single Number' in O(n) time and O(1) space",
+                "Apply the power-of-two check, Brian Kernighan's set-bit-counting trick, and get/set/clear-bit operations from scratch",
+                "Enumerate all subsets of a small set using bitmask iteration and describe how that connects to bitmask dynamic programming",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    The core bitwise operators, and what each is actually used for in interview problems:
+
+                    - `&` (AND) — 1 only if both bits are 1. Used to test or extract specific bits (`n & (1 << i)`) and to clear low bits (`n & (n - 1)`).
+                    - `|` (OR) — 1 if either bit is 1. Used to set a specific bit on (`n | (1 << i)`) or to merge two bitmasks together.
+                    - `^` (XOR) — 1 if the bits differ. Used to toggle a bit, to swap values without a temp variable, and — most famously — to cancel out paired values.
+                    - `~` (NOT) — flips every bit. Used to build a "clear this bit" mask: `~(1 << i)` is all 1s except a 0 at position `i`.
+                    - `<<` (left shift) — shifts bits left, equivalent to multiplying by 2 per shift. `1 << i` produces a mask with only bit `i` set.
+                    - `>>` (right shift) — shifts bits right, equivalent to dividing by 2 per shift (for non-negative values). In C#, `>>` on a signed type is an arithmetic shift (sign-extends), while `>>>` is a logical (unsigned) shift that always fills with 0s.
+
+                    **XOR's specific useful properties**: `x ^ x == 0` (anything XORed with itself cancels to zero), `x ^ 0 == x` (XOR with zero is a no-op), and XOR is both commutative and associative, so `a ^ b ^ c == c ^ a ^ b` — order doesn't matter. This directly solves **Single Number**: given an array where every number appears exactly twice except one, XOR every element together. Every paired value cancels itself out (`x ^ x == 0`), the zeros from those cancellations don't affect anything else (`x ^ 0 == x`), and because XOR doesn't care about order, what's left over is exactly the one unpaired number — found in a single pass, `O(n)` time, `O(1)` space, with no hash set required.
+
+                    **Common bit tricks**:
+
+                    - **Power of two check**: a positive power of two has exactly one bit set (`0b1000`, `0b0100`, etc.). Subtracting 1 flips that single set bit to 0 and every bit below it to 1 (`0b1000 - 1 = 0b0111`), so ANDing `n & (n - 1)` is `0` if and only if `n` had exactly one bit set — i.e., `n` is a power of two (given `n > 0`).
+                    - **Brian Kernighan's algorithm** (counting set bits): `n & (n - 1)` clears the *lowest* set bit of `n` (same reasoning as above, applied to just the lowest 1-bit and everything below it). Repeating "clear the lowest set bit, increment a counter" until `n` reaches 0 counts the set bits in `O(popcount)` iterations instead of checking all 32/64 bits one by one.
+                    - **Get/set/clear a specific bit `i`**: extract with `(n >> i) & 1` or test with `(n & (1 << i)) != 0`; set it on with `n | (1 << i)`; clear it with `n & ~(1 << i)`; toggle it with `n ^ (1 << i)`.
+
+                    **Bitmask subset enumeration**: for a small set of `n` elements (typically `n <= ~20` so `2^n` stays tractable), every subset can be represented as an `n`-bit integer where bit `i` being 1 means "element `i` is included." Looping `for (var mask = 0; mask < (1 << n); mask++)` and checking each bit of `mask` enumerates all `2^n` subsets in a fixed, predictable order without writing recursive backtracking. This same idea — using an integer's bits as a compact "which elements have I used/visited so far" state — is the foundation of **bitmask dynamic programming** (e.g., the classic Traveling Salesman DP, or "assign tasks to workers" problems), where the DP state is `dp[mask][...]` instead of a set object; that's a named technique worth recognizing by name, though the DP mechanics themselves build on the DP fundamentals covered earlier rather than being new here.
+                    """, 1),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Core operators**
+
+                    - `&` — test/extract bits, clear low bits (`n & (n-1)`)
+                    - `|` — set a bit, merge masks
+                    - `^` — toggle a bit, cancel paired values, swap without temp
+                    - `~` — build a "clear this bit" mask
+                    - `<<` / `>>` — build a single-bit mask (`1 << i`), scale by powers of two
+
+                    **XOR identities**
+
+                    - `x ^ x == 0`, `x ^ 0 == x`, commutative and associative
+                    - Array with every value paired except one -> XOR-fold the whole array -> the survivor is the answer
+
+                    **Bit tricks**
+
+                    - Power of two: `n > 0 && (n & (n - 1)) == 0`
+                    - Count set bits (Brian Kernighan): `while (n != 0) { n &= (n - 1); count++; }`
+                    - Get bit `i`: `(n >> i) & 1`
+                    - Set bit `i`: `n | (1 << i)`
+                    - Clear bit `i`: `n & ~(1 << i)`
+                    - Toggle bit `i`: `n ^ (1 << i)`
+
+                    **Bitmask subset enumeration**
+
+                    - `for (var mask = 0; mask < (1 << n); mask++)` visits all `2^n` subsets, `O(2^n * n)` if you inspect every bit of every mask
+                    - Only safe when `n` is small (roughly `n <= 20-25`) — `2^n` grows explosively past that
+                    - Generalizes to bitmask DP: `dp[mask]` = best answer using exactly the elements marked in `mask`
+                    """, 2),
+                Block(BlockType.CodeSnippet, "XOR Single Number, Bit Tricks, and Bitmask Subset Enumeration", BodyFormat.PlainText, """
+                    // Single Number: every element appears twice except one. O(n) time, O(1) space.
+                    public int SingleNumber(int[] nums)
+                    {
+                        var result = 0;
+
+                        foreach (var num in nums)
+                        {
+                            result ^= num; // paired values cancel to 0; the survivor passes through untouched
+                        }
+
+                        return result;
+                    }
+
+                    // Power of two check: a positive power of two has exactly one bit set.
+                    public bool IsPowerOfTwo(int n)
+                    {
+                        return n > 0 && (n & (n - 1)) == 0;
+                    }
+
+                    // Brian Kernighan's algorithm: n & (n - 1) clears the lowest set bit each iteration.
+                    public int CountSetBits(int n)
+                    {
+                        var count = 0;
+
+                        while (n != 0)
+                        {
+                            n &= (n - 1); // clears the lowest 1-bit
+                            count++;
+                        }
+
+                        return count;
+                    }
+
+                    // Get / set / clear / toggle a specific bit i (0-indexed from the least significant bit).
+                    public static class BitOps
+                    {
+                        public static bool GetBit(int n, int i) => (n & (1 << i)) != 0;
+                        public static int SetBit(int n, int i) => n | (1 << i);
+                        public static int ClearBit(int n, int i) => n & ~(1 << i);
+                        public static int ToggleBit(int n, int i) => n ^ (1 << i);
+                    }
+
+                    // Bitmask subset enumeration: every subset of a small array as an n-bit mask.
+                    // O(2^n * n) since we inspect every bit of every mask.
+                    public List<List<int>> AllSubsetsViaBitmask(int[] nums)
+                    {
+                        var n = nums.Length;
+                        var result = new List<List<int>>();
+
+                        for (var mask = 0; mask < (1 << n); mask++)
+                        {
+                            var subset = new List<int>();
+
+                            for (var i = 0; i < n; i++)
+                            {
+                                if ((mask & (1 << i)) != 0) // bit i is set -> element i is in this subset
+                                {
+                                    subset.Add(nums[i]);
+                                }
+                            }
+
+                            result.Add(subset);
+                        }
+
+                        return result; // 2^n subsets total, including the empty set at mask == 0
+                    }
+                    """, 3, language: "csharp"),
+                Block(BlockType.Diagram, "XOR Cancellation and Bitmask Subset Enumeration", BodyFormat.AsciiArt, """
+                    XOR-folding [4, 1, 2, 1, 2] to find the single number:
+
+                    result = 0
+                    result ^= 4   -> 0000 ^ 0100 = 0100  (4)
+                    result ^= 1   -> 0100 ^ 0001 = 0101  (5)
+                    result ^= 2   -> 0101 ^ 0010 = 0111  (7)
+                    result ^= 1   -> 0111 ^ 0001 = 0110  (6)   <- the two 1's have now canceled
+                    result ^= 2   -> 0110 ^ 0010 = 0100  (4)   <- the two 2's have now canceled
+
+                    Final result = 4 (the number with no pair)
+
+
+                    Bitmask subset enumeration for nums = [10, 20, 30]  (n = 3, 2^3 = 8 subsets):
+
+                    mask   bits (elem2 elem1 elem0)   subset
+                    0      0 0 0                      []
+                    1      0 0 1                      [10]
+                    2      0 1 0                      [20]
+                    3      0 1 1                      [10, 20]
+                    4      1 0 0                      [30]
+                    5      1 0 1                      [10, 30]
+                    6      1 1 0                      [20, 30]
+                    7      1 1 1                      [10, 20, 30]
+                    """, 4),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Reach for .NET's built-in `System.Numerics.BitOperations.PopCount(uint)` in real code instead of hand-rolling Brian Kernighan's loop — but implement the loop from scratch at least once so you can explain why it runs in `O(popcount)` iterations rather than a fixed 32/64. Only reach for bitmask subset enumeration when the set size is small enough that `2^n` is actually tractable (roughly `n <= 20-25`); past that, the mask itself no longer fits comfortably or the loop becomes too slow, and you should look for a different technique entirely.
+
+                    When a bit trick's correctness isn't obvious at a glance, trace it on a concrete 4-bit example on paper (as in the diagram above) rather than trying to reason about it purely symbolically — it's much faster to spot an off-by-one in a shift amount that way.
+                    """, 5),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    When you spot "every element appears twice except one," say the XOR identities out loud before coding: "XOR is self-canceling and order-independent, so folding the whole array with XOR leaves only the unpaired value — O(n) time, O(1) space, no hash set needed." That sentence signals you recognize the *why*, not just the trick.
+
+                    For bitmask subset problems, state the complexity explicitly — "there are 2^n subsets, and I'm checking n bits per subset, so this is O(n * 2^n)" — and confirm out loud that the interviewer's `n` is small enough for that to be acceptable before you commit to the approach.
+                    """, 6),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Confusing bitwise operators with their logical counterparts — using `^` expecting "exponentiation" (there is no power operator in C#; `^` is bitwise XOR) or using `&`/`|` where `&&`/`||` short-circuiting was intended. Off-by-one errors in shift amounts are the next most common bug: `1 << i` for bit `i` assumes 0-indexing from the least significant bit — double check whether the problem indexes bits from 0 or 1.
+
+                    Right-shifting a negative signed integer with `>>` in C# performs an arithmetic (sign-extending) shift, not a logical one — it fills with 1s, not 0s, which silently breaks bit-counting or masking code that assumed zero-fill; use `>>>` (the unsigned right-shift operator) when you specifically need logical shifting on a signed type. And forgetting the `n > 0` guard on the power-of-two check lets `n = 0` slip through as a false positive, since `0 & (0 - 1) == 0` too.
+                    """, 7),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    XOR-folding an array to find the unpaired element is like a room full of people pairing off and leaving together — every matched pair walks out and cancels from the room, and whoever is left standing alone at the end, regardless of the order people paired up in, is your answer.
+
+                    A bitmask over a small set is like a row of labeled light switches, one per element — flipping switch `i` on or off toggles whether that element is "in the subset," and reading the whole panel as a binary number gives you a unique, compact ID for every one of the `2^n` possible on/off combinations, which is exactly what makes it usable as a DP array index.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "An array contains every number exactly twice except for one number that appears once. Why does XOR-folding the entire array (result starting at 0, then result ^= each element) correctly isolate the unpaired number?",
+                    "XOR is commutative and associative, so the order elements are folded in doesn't matter, and x ^ x == 0 means every paired value cancels itself out to zero as soon as both copies have been folded in. Since x ^ 0 == x, those cancellations don't disturb the running result otherwise -- so whatever remains after folding every element is exactly the one value that had no partner to cancel it.",
+                    [
+                        new QuizOptionSeed("Every paired value XORs to 0 regardless of order (x ^ x == 0, and XOR is commutative/associative), leaving only the unpaired value in the running result", true),
+                        new QuizOptionSeed("XOR sorts the array internally before combining values, so duplicates end up adjacent and cancel", false),
+                        new QuizOptionSeed("XOR only works here because the array is guaranteed to already be sorted", false),
+                        new QuizOptionSeed("It doesn't actually work for arrays larger than 10 elements due to integer overflow", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "Brian Kernighan's algorithm counts set bits by repeating `n &= (n - 1)` until n reaches 0. What does the expression `n & (n - 1)` do on each iteration, and why does that let you count set bits faster than checking all 32/64 bits individually?",
+                    "Subtracting 1 from n flips its lowest set bit to 0 and every bit below it to 1; ANDing with the original n then clears exactly that lowest set bit while leaving all higher bits untouched. Repeating this once per set bit means the loop runs exactly popcount(n) times rather than a fixed 32 or 64 times, which is faster whenever n has few set bits.",
+                    [
+                        new QuizOptionSeed("It clears the lowest set bit of n, so the loop runs exactly once per set bit instead of once per bit position in the integer", true),
+                        new QuizOptionSeed("It clears the highest set bit of n, counting from the most significant bit down", false),
+                        new QuizOptionSeed("It sets every bit below the lowest set bit to 1, and the loop counts how many bits were flipped", false),
+                        new QuizOptionSeed("It has no defined effect; the algorithm actually relies on n - 1 alone to count bits", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Bit Manipulation (GeeksforGeeks)", "https://www.geeksforgeeks.org/bits-manipulation-important-tactics/", LinkType.FurtherReading),
+                new ReferenceLinkSeed("BitOperations.PopCount Method (Microsoft Learn)", "https://learn.microsoft.com/en-us/dotnet/api/system.numerics.bitoperations.popcount", LinkType.OfficialDocs),
+            ],
+            prerequisites: [lesson1]);
+
+        var lesson2Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson2.Slug,
+        [
+            "Solve Single Number (LeetCode 136) using XOR-folding in O(n) time and O(1) space",
+            "Implement IsPowerOfTwo and a set-bit counter from scratch using Brian Kernighan's n & (n - 1) trick",
+            "Enumerate all subsets of a small array using bitmask iteration (for mask in 0 .. 2^n - 1), printing each subset's elements",
+        ]);
+
+        var module = BuildModule(topicId, "greedy-algorithms-and-bit-manipulation", "Greedy Algorithms & Bit Manipulation",
+            "Proving greedy strategies correct with the exchange argument through interval-scheduling and gas-station patterns, recognizing when greedy fails and DP is needed instead, and core bit-manipulation tricks including XOR cancellation and bitmask subset enumeration.",
+            100, [lesson1, lesson2], sortOrder: 4);
+
+        return (module, [lesson1Checklist, lesson2Checklist]);
+    }
+
+    private static (Module, List<ChecklistSeed>) BuildDsaUnionFindAndWeightedGraphsModule(int topicId)
+    {
+        var lesson1 = BuildLesson(
+            slug: "union-find-disjoint-set",
+            title: "Union-Find (Disjoint Set Union)",
+            summary: "Tracking and merging connected groups efficiently with Find/Union, and the union-by-rank + path-compression optimizations that make both operations effectively constant time.",
+            estimatedMinutes: 45,
+            objectives:
+            [
+                "Explain the problem Union-Find solves -- tracking which elements share a group and merging two groups without rescanning the whole structure",
+                "Implement Find(x) with path compression and Union(x, y) with union by rank/size from scratch",
+                "Explain why the naive parent-pointer version degrades to O(n) per operation, and how union by rank/size plus path compression fix that to near O(1) amortized",
+                "Apply Union-Find to detect a cycle in an undirected graph, count connected components, and implement Kruskal's minimum spanning tree algorithm",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    **Union-Find** (also called **Disjoint Set Union**, or DSU) solves one specific problem: given a collection of elements, efficiently answer "are these two elements in the same group?" and efficiently "merge these two groups into one" -- without ever re-scanning every element to figure out group membership from scratch.
+
+                    It exposes exactly two operations:
+
+                    - **`Find(x)`** — returns the **representative** (or "root") of the group `x` currently belongs to. Two elements are in the same group exactly when `Find(x) == Find(y)`.
+                    - **`Union(x, y)`** — merges `x`'s group and `y`'s group into a single group.
+
+                    The **naive implementation** gives every element a `parent` pointer (initially pointing to itself), and `Find(x)` just walks `parent` pointers upward until it reaches a node that is its own parent (the root). `Union(x, y)` finds both roots and points one root's parent at the other. This works, but nothing stops the resulting trees from becoming long, skinny chains -- if you always attach the new tree underneath the existing one without regard to size, `n` unions in a row can produce a structure that is really just a linked list of depth `n`. `Find` on the far end then costs `O(n)`, not the near-instant lookup the whole data structure exists to provide.
+
+                    Two optimizations fix this, and are almost always used together:
+
+                    - **Union by rank/size** — when merging two trees, always attach the **shorter/smaller** tree underneath the **taller/bigger** tree's root, never the reverse. This alone caps tree height at `O(log n)`.
+                    - **Path compression** — while `Find(x)` walks up to the root, make every node it passes through point **directly** at the root, instead of at its old parent. This doesn't speed up the current call much, but it flattens the tree for every future `Find` on any of those nodes.
+
+                    Together, union by rank and path compression give `Find` and `Union` an amortized time complexity of `O(alpha(n))`, where `alpha` is the **inverse Ackermann function** -- a function that grows so slowly it is less than 5 for any `n` that could ever fit in memory. The practical takeaway interviewers want to hear is simply: "effectively constant time per operation."
+
+                    Common use cases: detecting a cycle in an **undirected** graph (call `Union` on each edge's two endpoints; if they're already in the same group, this edge closes a cycle), counting connected components (a "number of provinces" style problem -- every successful `Union` merges two components into one), and **Kruskal's algorithm** for minimum spanning tree (sort edges by weight ascending, then greedily keep an edge only if `Union` reports its endpoints were *not* already connected -- Union-Find is exactly the fast "would this edge create a cycle?" check that greedy edge-selection needs).
+                    """, 1),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **What it solves**
+
+                    - Track which of `n` elements share a group, and merge two groups, without rescanning the whole structure
+                    - `Find(x)` -> the representative/root of `x`'s group; `Union(x, y)` -> merges `x`'s and `y`'s groups
+
+                    **Complexity**
+
+                    - Naive (parent pointers only, no optimization): `Find`/`Union` up to `O(n)` worst case -- a long chain
+                    - + Union by rank/size (attach smaller tree under bigger tree's root): caps height at `O(log n)`
+                    - + Path compression (flatten every visited node to point at the root during `Find`): combined with union by rank, `O(alpha(n))` amortized per op -- effectively `O(1)` in practice
+
+                    **Use cases**
+
+                    - Cycle detection in an **undirected** graph: `Union(u, v)` for every edge; if `Find(u) == Find(v)` already, this edge creates a cycle
+                    - Counting connected components ("number of provinces"): component count = `n` - (number of successful, group-merging unions)
+                    - Kruskal's MST: sort edges by weight ascending, `Union` each edge's endpoints, keep the edge only if `Union` reports success (it connected two previously separate groups)
+                    """, 2),
+                Block(BlockType.CodeSnippet, "Disjoint Set (Union by Rank + Path Compression), Cycle Detection, and Kruskal's MST", BodyFormat.PlainText, """
+                    // Union-Find with union by rank and path compression.
+                    public class DisjointSet
+                    {
+                        private readonly int[] _parent;
+                        private readonly int[] _rank;
+
+                        public DisjointSet(int size)
+                        {
+                            _parent = new int[size];
+                            _rank = new int[size];
+                            for (var i = 0; i < size; i++)
+                            {
+                                _parent[i] = i; // every node starts as its own root (its own group of one)
+                            }
+                        }
+
+                        // Find the root of x's group, flattening the path to the root as we go.
+                        public int Find(int x)
+                        {
+                            if (_parent[x] != x)
+                            {
+                                _parent[x] = Find(_parent[x]); // path compression: point directly at the root
+                            }
+                            return _parent[x];
+                        }
+
+                        // Merge x's group and y's group. Returns false if they were already in the
+                        // same group -- i.e., this edge would create a cycle.
+                        public bool Union(int x, int y)
+                        {
+                            var rootX = Find(x);
+                            var rootY = Find(y);
+                            if (rootX == rootY) return false; // already unified
+
+                            // Union by rank: attach the shorter tree under the taller tree's root.
+                            if (_rank[rootX] < _rank[rootY])
+                            {
+                                (rootX, rootY) = (rootY, rootX);
+                            }
+                            _parent[rootY] = rootX;
+                            if (_rank[rootX] == _rank[rootY])
+                            {
+                                _rank[rootX]++;
+                            }
+                            return true;
+                        }
+                    }
+
+                    // Cycle detection in an UNDIRECTED graph: process each edge in turn.
+                    // If both endpoints are already in the same set, this edge closes a cycle.
+                    public bool HasCycleUndirected(int nodeCount, List<(int From, int To)> edges)
+                    {
+                        var dsu = new DisjointSet(nodeCount);
+                        foreach (var (from, to) in edges)
+                        {
+                            if (!dsu.Union(from, to)) return true; // Union failed -> already connected -> cycle
+                        }
+                        return false;
+                    }
+
+                    // Kruskal's algorithm: greedily build a minimum spanning tree by scanning
+                    // edges in ascending weight order, using Union-Find to reject any edge
+                    // that would connect two nodes already in the same component.
+                    public List<(int From, int To, int Weight)> KruskalMst(
+                        int nodeCount, List<(int From, int To, int Weight)> edges)
+                    {
+                        var dsu = new DisjointSet(nodeCount);
+                        var mst = new List<(int From, int To, int Weight)>();
+
+                        foreach (var edge in edges.OrderBy(e => e.Weight))
+                        {
+                            if (dsu.Union(edge.From, edge.To)) // true => this edge joins two different components
+                            {
+                                mst.Add(edge);
+                            }
+                        }
+
+                        return mst;
+                    }
+                    """, 3, language: "csharp"),
+                Block(BlockType.Diagram, "Path Compression Flattening a Long Chain", BodyFormat.AsciiArt, """
+                    BEFORE Find(6) -- a long chain built by naive, unranked unions:
+
+                      0 <- 1 <- 2 <- 3 <- 4 <- 5 <- 6
+
+                      parent[1]=0, parent[2]=1, parent[3]=2, parent[4]=3, parent[5]=4, parent[6]=5
+                      Find(6) walks 6 -> 5 -> 4 -> 3 -> 2 -> 1 -> 0 (root): O(n) work, one hop at a time
+
+                    AFTER Find(6) with path compression -- every node visited on the way
+                    now points directly at the root:
+
+                                0
+                             /  |  |  |  |  \\
+                            1   2  3  4  5    6
+
+                      parent[1] = parent[2] = parent[3] = parent[4] = parent[5] = parent[6] = 0
+                      Find(6) next time: one hop straight to the root -> O(1)
+
+                    Union by rank prevents this chain from forming in the first place;
+                    path compression flattens it even if it does.
+                    """, 4),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Always implement both optimizations together, not just one -- union by rank alone already guarantees `O(log n)`, and path compression alone helps but doesn't bound the worst case nearly as well. Together they're what earns the "effectively constant time" claim, and interviewers will often ask specifically whether you applied both.
+
+                    When counting connected components, don't re-`Find` every element and count distinct roots after the fact if you can avoid it -- track a running counter that starts at `n` and decrements by one every time `Union` returns `true` (a real merge happened), which avoids a second full pass.
+                    """, 5),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    When a problem mentions "connected components," "provinces," "friend circles," "accounts merge," or asks whether adding an edge/connection would create a redundant/cyclic connection, say "Union-Find" out loud immediately -- it's one of the most recognizable interview signals. Kruskal's algorithm is also a clean example of the general greedy-algorithm design pattern (sort by some criterion, then greedily commit to each choice that doesn't violate a constraint) -- Union-Find is simply the fast "does this choice violate the constraint?" check that greedy edge selection needs on every step.
+                    """, 6),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Implementing `Union` by directly attaching one root under the other without any rank/size comparison -- this compiles and passes small test cases, but silently reintroduces the `O(n)`-chain worst case that union by rank exists to prevent.
+
+                    Also common: writing `Find` without path compression (just walking to the root and returning, without rewriting `_parent[x]` along the way) -- correct, but throws away the amortized speedup, since every future `Find` on those same nodes re-walks the same path instead of getting progressively faster.
+                    """, 7),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    Union-Find is like tracking which friend groups exist at a party using only "who's your group's designated contact person" instead of drawing out the entire friendship web every time someone asks. When two groups merge (a new couple introduces their friend groups to each other), you don't re-survey every single guest -- you just point one group's contact person at the other's.
+
+                    Path compression is like a rumor about "who's actually in charge now" spreading instantly to everyone who asks, instead of everyone having to ask their immediate boss, who asks their boss, who asks their boss, every single time -- once you've made the trip up the chain once, you remember the answer directly and never have to make that whole trip again.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "A naive Union-Find implementation (parent pointers only, no union by rank and no path compression) is used, and every Union call happens to attach the new tree under the existing one in a way that always grows a single chain. What is the worst-case time for Find(x) after n unions, and why?",
+                    "Without union by rank, nothing bounds how tall the tree can get -- n unions in a row can produce a structure that is really a linked list of depth n. Find(x) then has to walk parent pointers one at a time all the way to the root, which is O(n) in the worst case.",
+                    [
+                        new QuizOptionSeed("O(n), because the tree can degrade into a long chain with no height bound", true),
+                        new QuizOptionSeed("O(log n), because trees are always balanced by definition", false),
+                        new QuizOptionSeed("O(1), because Find only ever checks one parent pointer", false),
+                        new QuizOptionSeed("O(n^2), because every Union call rescans all prior unions", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "While running Kruskal's algorithm on edges sorted by ascending weight, Union(u, v) returns false for the current edge. What should the algorithm do, and why?",
+                    "Union returning false means Find(u) already equals Find(v) -- u and v are already connected through some other combination of edges already added to the tree. Adding this edge would create a cycle without connecting any new component, so Kruskal's algorithm must skip it and move to the next edge.",
+                    [
+                        new QuizOptionSeed("Skip this edge -- u and v are already in the same component, so adding it would only create a cycle", true),
+                        new QuizOptionSeed("Add the edge anyway, since Kruskal's algorithm requires every edge to be included", false),
+                        new QuizOptionSeed("Restart the algorithm, since a false return means the graph is disconnected", false),
+                        new QuizOptionSeed("Remove u and v from the graph entirely", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Disjoint Set (Union-Find) Data Structure (GeeksforGeeks)", "https://www.geeksforgeeks.org/introduction-to-disjoint-set-data-structure-or-union-find-algorithm/", LinkType.FurtherReading),
+                new ReferenceLinkSeed("LeetCode Explore: Union Find", "https://leetcode.com/explore/learn/card/graph/618/disjoint-set/", LinkType.FurtherReading),
+            ]);
+
+        var lesson1Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson1.Slug,
+        [
+            "Implement a DisjointSet class from scratch with Find (path compression) and Union (by rank), then trace by hand how a 7-node chain flattens after a single Find call",
+            "Use Union-Find to detect a cycle in an undirected graph from a raw edge list, without looking at the solution",
+            "Implement Kruskal's algorithm end-to-end: sort edges by weight, then use Union-Find to build a minimum spanning tree, skipping any edge that would create a cycle",
+        ]);
+
+        var lesson2 = BuildLesson(
+            slug: "dijkstras-algorithm-weighted-shortest-paths",
+            title: "Dijkstra's Algorithm: Weighted Shortest Paths",
+            summary: "Why BFS's shortest-path guarantee only holds for unweighted graphs, and how Dijkstra's algorithm generalizes it to weighted graphs using a min-heap and edge relaxation -- plus why it requires non-negative weights.",
+            estimatedMinutes: 45,
+            objectives:
+            [
+                "Explain precisely why the earlier BFS-based shortest path technique only works on unweighted (or equal-weight) graphs",
+                "Implement Dijkstra's algorithm using a min-heap/priority queue that always expands the unvisited node with the smallest known distance",
+                "Explain concretely why Dijkstra's algorithm requires non-negative edge weights, and what goes wrong with a negative one",
+                "Name Bellman-Ford as the correct alternative when negative edges are possible, and state its complexity trade-off against Dijkstra's",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    The earlier graph-traversal-topological-sort lesson used BFS to find shortest paths, and that works perfectly -- but only because it quietly assumes every edge costs exactly the same "1 step." BFS's level-by-level expansion guarantees the first time it reaches a node is via the fewest possible *edges*, which is identical to "the shortest path" only when every edge has equal weight. The moment edges have different costs -- real road distances, network latencies, differently priced flights -- that guarantee collapses: BFS might reach a node in 2 hops that together cost 100, while a 3-hop path costs only 10, and BFS has no way to know or care, because it only counts hops.
+
+                    **Dijkstra's algorithm** is the generalization of that same idea to weighted graphs. Instead of a plain queue, it maintains a running "best known distance so far" for every node (`distances[node]`, starting at infinity except `distances[start] = 0`), and instead of processing nodes in arrival order, it always processes the **unvisited node with the smallest known distance next** -- which is exactly what a min-heap/priority queue is for (the same structure covered in the earlier heaps-priority-queues-and-backtracking lesson: `O(log n)` to pop the current minimum, `O(log n)` to push an updated one).
+
+                    Each time a node is popped off the heap, its neighbors are **relaxed**: for each edge to a neighbor with weight `w`, check whether going through the current node is cheaper than what's already known -- `distances[node] + w < distances[neighbor]`. If so, update `distances[neighbor]` and push the neighbor (with its new, better distance) back onto the heap. Once a node is popped and finalized, Dijkstra never revisits it -- its distance is treated as permanently settled.
+
+                    That last property is exactly why Dijkstra **requires non-negative edge weights**. The algorithm's whole correctness argument rests on: "the node with the smallest known distance right now can never be beaten by a longer-looking path later, because every edge can only add distance." A negative edge breaks that assumption outright -- a path that currently looks longer could later take a negative-weight shortcut and end up cheaper than a distance Dijkstra already finalized and will never look at again. The result is a silently wrong answer, not a crash.
+
+                    When negative edges are possible, the correct tool is **Bellman-Ford**, which relaxes every edge repeatedly (`V - 1` times) rather than greedily committing to one node at a time, which is precisely what lets it tolerate negative edges (and even detect negative cycles). The trade-off is speed: Bellman-Ford runs in `O(V * E)`, versus Dijkstra's `O((V + E) log V)` with a binary heap -- Dijkstra is the right default whenever weights are known to be non-negative, and Bellman-Ford is the fallback the moment they aren't.
+                    """, 1),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Why BFS breaks on weighted graphs**
+
+                    - BFS's level-by-level expansion assumes every edge costs exactly one "step" -- it finds the path with the fewest *edges*, not the smallest total weight
+                    - The moment edges have different weights, "reached first by BFS" and "actually shortest" stop being the same thing
+
+                    **Dijkstra's algorithm** (single-source shortest path, non-negative weights only)
+
+                    - Maintain `distances[node]`, initialized to infinity except `distances[start] = 0`
+                    - Repeatedly pop the unvisited node with the smallest known distance from a min-heap (never a plain queue, never a linear scan)
+                    - **Relax** every neighboring edge: if `distances[node] + weight < distances[neighbor]`, update it and push the neighbor back onto the heap
+                    - Once a node is popped/finalized, its distance is treated as permanently correct -- it is never revisited
+
+                    **Complexity**
+
+                    - Dijkstra with a binary min-heap: `O((V + E) log V)` time, `O(V)` space
+                    - Bellman-Ford (tolerates negative edges, detects negative cycles): `O(V * E)` -- correct when negative edges are possible, but strictly slower
+
+                    **Non-negative weight requirement**
+
+                    - Dijkstra finalizes a node's distance the moment it's popped and never looks at it again
+                    - A negative edge could later offer a cheaper path into an already-finalized node -- Dijkstra would never notice, producing a silently wrong answer
+                    """, 2),
+                Block(BlockType.CodeSnippet, "Dijkstra's Algorithm with a Min-Heap", BodyFormat.PlainText, """
+                    // Weighted graph: node -> list of (neighbor, edge weight).
+                    public class WeightedGraph
+                    {
+                        private readonly Dictionary<int, List<(int Neighbor, int Weight)>> _adjacency = new();
+
+                        public void AddEdge(int from, int to, int weight)
+                        {
+                            if (!_adjacency.ContainsKey(from)) _adjacency[from] = new List<(int, int)>();
+                            if (!_adjacency.ContainsKey(to)) _adjacency[to] = new List<(int, int)>();
+                            _adjacency[from].Add((to, weight));
+                            _adjacency[to].Add((from, weight)); // remove this line for a directed graph
+                        }
+
+                        public IReadOnlyList<(int Neighbor, int Weight)> Neighbors(int node) =>
+                            _adjacency.TryGetValue(node, out var list) ? list : new List<(int, int)>();
+
+                        public IEnumerable<int> Nodes => _adjacency.Keys;
+                    }
+
+                    // Dijkstra's algorithm: shortest distance from `start` to every reachable node.
+                    // Requires all edge weights to be non-negative. O((V + E) log V) with a binary heap.
+                    public Dictionary<int, int> Dijkstra(WeightedGraph graph, int start)
+                    {
+                        var distances = graph.Nodes.ToDictionary(n => n, _ => int.MaxValue);
+                        distances[start] = 0;
+
+                        var finalized = new HashSet<int>();
+                        var minHeap = new PriorityQueue<int, int>(); // element = node, priority = current best distance
+                        minHeap.Enqueue(start, 0);
+
+                        while (minHeap.Count > 0)
+                        {
+                            var node = minHeap.Dequeue();
+
+                            if (!finalized.Add(node)) continue; // already finalized via a shorter path -- stale entry
+
+                            foreach (var (neighbor, weight) in graph.Neighbors(node))
+                            {
+                                var candidateDistance = distances[node] + weight;
+                                if (candidateDistance < distances[neighbor]) // relax the edge
+                                {
+                                    distances[neighbor] = candidateDistance;
+                                    minHeap.Enqueue(neighbor, candidateDistance);
+                                }
+                            }
+                        }
+
+                        return distances;
+                    }
+                    """, 3, language: "csharp"),
+                Block(BlockType.Diagram, "Tracing Dijkstra on a Small Weighted Graph", BodyFormat.StructuredSteps, """
+                    [{"label":"Start: dist[A]=0, dist[B]=dist[C]=dist[D]=infinity","note":"push (A, 0) onto the min-heap"},{"label":"Pop A (smallest dist = 0)","note":"relax A->C weight 1: dist[C]=1; relax A->B weight 4: dist[B]=4"},{"label":"Pop C (smallest dist = 1)","note":"relax C->B weight 1: 1+1=2 < 4, dist[B]=2; relax C->D weight 5: dist[D]=6"},{"label":"Pop B (smallest dist = 2)","note":"relax B->D weight 1: 2+1=3 < 6, dist[D]=3"},{"label":"Pop D (smallest dist = 3)","note":"no better path exists to relax further"},{"label":"Done: dist[A]=0, dist[C]=1, dist[B]=2, dist[D]=3","note":"D's shortest path is A->C->B->D (cost 3), not the direct A->B->D or A->C->D paths"}]
+                    """, 4),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Always use a real min-heap/priority queue to pick the next node, never a plain queue or a linear scan for the minimum -- that heap is the entire reason Dijkstra beats brute-force recomputation. .NET's `PriorityQueue<TElement, TPriority>` has no `decrease-key` operation, so the idiomatic pattern is exactly the one above: push a fresh, better entry whenever you relax an edge, and use a `finalized` set to cheaply skip stale, superseded entries when they're eventually popped.
+
+                    Before reaching for Dijkstra, explicitly confirm the graph's weights are non-negative -- if there's any chance of a negative edge, say so and switch to Bellman-Ford instead of quietly running Dijkstra and hoping.
+                    """, 5),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    When a problem says "weighted graph" and "shortest path" together, say "Dijkstra" out loud immediately, then ask the clarifying question interviewers are listening for: "are all the edge weights non-negative?" If the answer is no, naming Bellman-Ford by name (and its `O(V * E)` cost) demonstrates you understand *why* Dijkstra's greedy assumption fails, not just that it's "the shortest path algorithm."
+                    """, 6),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Reaching for plain BFS on a weighted graph because "it already finds shortest paths" -- BFS only finds the path with the fewest edges, which is only the same thing as the smallest total weight when every edge weight is equal.
+
+                    Running Dijkstra on a graph that turns out to have a negative edge and trusting the result -- Dijkstra doesn't crash or warn in this case, it just silently returns a wrong distance for any node whose true shortest path relies on that negative edge, because a node already finalized as "shortest" is never revisited even if a cheaper path appears later.
+                    """, 7),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    BFS on an unweighted graph is like counting how many intersections you pass through to get somewhere, ignoring how long each block actually is -- fine if every block is the same length, wrong the moment one block is a highway mile and another is a driveway. Dijkstra is GPS navigation done properly: it tracks actual road distances (or drive times) per segment and always explores from whichever reachable point currently has the lowest total travel cost so far, exactly like a delivery dispatcher always sending out next whichever courier currently has the shortest known travel time, not whichever courier happened to check in first.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "Why can't the BFS-based shortest-path technique from the earlier graph-traversal lesson be used directly on a graph where edges have different weights?",
+                    "BFS's level-by-level expansion implicitly assumes every edge costs the same '1 step,' so the node it reaches first is guaranteed to be the fewest hops away -- not necessarily the smallest total weight away. Once edges have different costs, a path with more hops can easily be cheaper than a path with fewer hops.",
+                    [
+                        new QuizOptionSeed("BFS's level-by-level expansion only guarantees fewest edges, not smallest total weight, once edges have different costs", true),
+                        new QuizOptionSeed("BFS can't run on graphs with more than one connected component", false),
+                        new QuizOptionSeed("BFS only works on directed graphs, and weighted graphs are always undirected", false),
+                        new QuizOptionSeed("BFS requires a min-heap internally, and weighted graphs don't support heaps", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "Dijkstra's algorithm finalizes a node's shortest distance the moment it's popped from the min-heap and never revisits it. Why does this break down in a graph containing a negative edge weight?",
+                    "A negative edge could later offer a cheaper path into a node that Dijkstra already finalized as 'shortest.' Because Dijkstra's greedy pop order never re-examines a node once it's finalized, it would keep the earlier, now-incorrect (too large) distance and silently return a wrong answer rather than erroring out.",
+                    [
+                        new QuizOptionSeed("A negative edge could offer a cheaper path into an already-finalized node, but Dijkstra never revisits finalized nodes, so it silently keeps the wrong distance", true),
+                        new QuizOptionSeed("Negative weights cause the priority queue to throw an exception at runtime", false),
+                        new QuizOptionSeed("Negative weights only affect Bellman-Ford's correctness, not Dijkstra's", false),
+                        new QuizOptionSeed("Dijkstra requires all edge weights to be integers, and negative numbers don't count as integers", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Dijkstra's Shortest Path Algorithm (GeeksforGeeks)", "https://www.geeksforgeeks.org/dijkstras-shortest-path-algorithm-greedy-algo-7/", LinkType.FurtherReading),
+                new ReferenceLinkSeed("LeetCode Explore: Shortest Path Algorithms", "https://leetcode.com/explore/learn/card/graph/622/all-different-kinds-of-shortest-path-algorithm/", LinkType.FurtherReading),
+            ],
+            prerequisites: [lesson1]);
+
+        var lesson2Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson2.Slug,
+        [
+            "Implement Dijkstra's algorithm from scratch using PriorityQueue<TElement, TPriority>, tracing dist[] updates by hand on a 4-node weighted graph",
+            "Add a single negative-weight edge to your test graph and confirm Dijkstra silently produces a wrong shortest-distance answer, without throwing",
+            "Explain out loud, in one or two sentences, why Bellman-Ford tolerates negative edges but runs in O(V*E) instead of Dijkstra's O((V+E) log V)",
+        ]);
+
+        var module = BuildModule(topicId, "union-find-and-weighted-graphs", "Union-Find & Weighted Shortest Paths",
+            "The disjoint-set union-find structure -- union by rank and path compression -- for cycle detection, connected components, and Kruskal's MST, followed by Dijkstra's algorithm for weighted shortest paths and why it requires non-negative edge weights.",
+            90, [lesson1, lesson2], sortOrder: 5);
+
+        return (module, [lesson1Checklist, lesson2Checklist]);
+    }
+
     // ============================== System Design ==============================
 
     private static (Module, List<ChecklistSeed>) BuildSystemDesignModule(int topicId)
@@ -10674,6 +11846,326 @@ public static class CurriculumContentSeedData
         var module = BuildModule(topicId, "consistent-hashing-and-case-studies", "Consistent Hashing & System Design Case Studies",
             "How distributed systems rebalance data without a full remap, using consistent hashing and virtual nodes, plus a full case study combining load balancing, caching, databases, and message queues from earlier modules into one design: a social media news feed.",
             95, [lesson1, lesson2], sortOrder: 3);
+
+        return (module, [lesson1Checklist, lesson2Checklist]);
+    }
+
+    private static (Module, List<ChecklistSeed>) BuildDistributedCoordinationModule(int topicId)
+    {
+        var lesson1 = BuildLesson(
+            slug: "distributed-locks-and-leader-election",
+            title: "Distributed Locks & Leader Election",
+            summary: "Why an in-process lock can't coordinate across multiple instances, how a TTL-based distributed lock works and where it can silently break, and how leader election generalizes the idea into a continuously-renewed lease.",
+            estimatedMinutes: 40,
+            objectives:
+            [
+                "Explain why an in-process mutex (e.g. C#'s `lock` keyword) cannot coordinate across multiple server instances or processes",
+                "Describe how a distributed lock backed by a shared external store (Redis, a DB row, ZooKeeper/etcd) provides cross-process mutual exclusion",
+                "Explain why a distributed lock needs a TTL, and the correctness bug that appears if the TTL expires while work is still in progress",
+                "Distinguish leader election from a one-off distributed lock and describe how it's implemented with a renewable lease",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    An in-process lock like C#'s `lock` keyword (or `Monitor`, `Mutex` within one process) only ever coordinates threads that share the same process memory space. The moment your system is more than one instance -- multiple copies of the same service running behind a load balancer, each in its own process, often on different machines -- that lock protects nothing. Two different processes each have their own independent `lock` statement, their own independent memory, and no way to see what the other is doing. A recurring job scheduled to run "once daily" will happily run once per instance if you rely on an in-process lock to prevent it, and code that assumes "only one caller at a time can touch this shared resource" is not actually safe just because each instance individually guards it with a `lock`.
+
+                    A **distributed lock** solves this by moving the lock's state out of any one process's memory and into a store every instance can see and agree on -- commonly Redis, a row in a shared database table, or a coordination service like ZooKeeper or etcd. Instead of "acquire an in-memory flag," acquiring the lock means "write a value to the shared store, but only if no one else has already written it first" -- an atomic check-and-set, not two separate steps.
+
+                    The naive approach is a single atomic command: `SET lock:resource1 instance-id NX PX 30000` against Redis. `NX` means "only set this key if it doesn't already exist" (so two instances racing to acquire it can't both succeed), and `PX 30000` sets a 30-second expiration. That expiration is not optional. Without a TTL, an instance that acquires the lock and then crashes (process killed, box rebooted, network partition) never releases it -- the key sits in Redis forever, and every other instance is locked out permanently. A distributed lock without an expiration is a system that can deadlock itself with no way to recover except manual intervention.
+
+                    But a TTL creates a different, equally real bug: what if the instance is still doing legitimate work when the TTL fires? The lock silently expires, a second instance sees the key is gone, acquires it, and starts its own copy of the same work -- now two instances both believe they exclusively hold the lock and both are modifying the same resource at the same time. This isn't a hypothetical edge case; it happens whenever the actual work takes longer than expected (a slow downstream call, a GC pause, a burst of load), because a TTL is a *guess* about how long the work will take, not a guarantee.
+
+                    This is exactly the problem the **Redlock** algorithm is designed around. Instead of trusting a single Redis instance, Redlock acquires the lock against a set of independent Redis nodes (typically 5) and only considers the lock "held" if a majority of them agree, within a bounded acquisition window. The intuition: a single Redis node can fail, restart, or lose data, and if your entire lock's safety rests on that one node, its failure silently breaks your mutual exclusion guarantee. Requiring a majority of independent nodes means one node failing doesn't unilaterally decide the outcome -- you don't need the full mathematical proof to get the interview-relevant point, just the "why isn't one Redis instance enough" reasoning.
+
+                    **Leader election** is a related but distinct problem. A distributed lock protects one operation for a bounded amount of time; leader election continuously designates exactly one instance in a fleet as "the leader," responsible for an ongoing class of work (e.g., only the leader runs a background reconciliation loop, or only the leader accepts writes). The leader holds a **lease** -- conceptually the same idea as a lock with a TTL -- but must periodically **renew** it before it expires to stay leader. If the current leader stops renewing (it crashed, got network-partitioned, or was too slow), the lease expires and the remaining instances race to become the new leader, giving automatic failover without any human intervention. Coordination services like **ZooKeeper**, **etcd**, and **Consul** provide leader election as a built-in primitive (backed by their own consensus protocols, like Raft or ZAB) specifically so application code doesn't have to hand-roll this lease-renewal dance on top of a plain key-value store.
+                    """, 1),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **In-process lock vs. distributed lock**
+                    - `lock`/`Monitor`/`Mutex` -- coordinates threads within one process only; invisible to every other instance
+                    - Distributed lock -- state lives in a shared external store (Redis, DB row, ZooKeeper/etcd) every instance can see and agree on
+
+                    **Naive Redis lock**
+                    - Acquire: `SET lock:key owner-id NX PX ttl-ms` -- atomic "set only if absent," with expiration
+                    - No TTL -> a crashed lock-holder deadlocks the resource forever
+                    - TTL fires mid-task -> the lock can be silently stolen by another instance while the first is still working
+
+                    **Redlock (conceptual)**
+                    - Acquire the lock against a majority of independent Redis nodes (e.g., 3 of 5), within a bounded time window
+                    - One node failing doesn't unilaterally decide whether the lock is held
+
+                    **Leader election**
+                    - A lock protects one operation; leader election continuously designates exactly one instance for a class of ongoing work
+                    - Leader holds a renewable lease; failing to renew triggers automatic failover to a new leader
+                    - ZooKeeper / etcd / Consul provide this as a built-in primitive, backed by a consensus protocol (Raft, ZAB)
+                    """, 2),
+                Block(BlockType.CodeSnippet, "Redis-Backed Lock: Safe Acquire and Release", BodyFormat.PlainText, """
+                    // Acquiring: atomic "set if not exists" with a TTL, tagged with a unique
+                    // owner token so we can tell OUR lock apart from someone else's later.
+                    public async Task<string?> TryAcquireLockAsync(string resource, TimeSpan ttl)
+                    {
+                        var ownerToken = Guid.NewGuid().ToString();
+                        var acquired = await db.StringSetAsync(
+                            $"lock:{resource}", ownerToken, ttl, When.NotExists);
+
+                        return acquired ? ownerToken : null; // null means someone else holds it
+                    }
+
+                    // Releasing MUST check that we still own the lock before deleting it --
+                    // otherwise, if our TTL already expired and another instance acquired
+                    // the lock in the meantime, we'd delete THEIR lock instead of ours.
+                    // This check-then-delete has to be atomic, so it's a Lua script rather
+                    // than two separate round trips.
+                    private const string ReleaseScript = @"
+                        if redis.call('get', KEYS[1]) == ARGV[1] then
+                            return redis.call('del', KEYS[1])
+                        else
+                            return 0
+                        end";
+
+                    public async Task<bool> ReleaseLockAsync(string resource, string ownerToken)
+                    {
+                        var result = await db.ScriptEvaluateAsync(
+                            ReleaseScript, new RedisKey[] { $"lock:{resource}" }, new RedisValue[] { ownerToken });
+
+                        return (long)result == 1;
+                    }
+
+                    // Usage: only one instance in the fleet actually runs the job.
+                    var ownerToken = await TryAcquireLockAsync("daily-report-job", TimeSpan.FromSeconds(30));
+                    if (ownerToken is not null)
+                    {
+                        try { await RunDailyReportAsync(); }
+                        finally { await ReleaseLockAsync("daily-report-job", ownerToken); }
+                    }
+                    """, 3, language: "csharp"),
+                Block(BlockType.Diagram, "Lock TTL Expiring Mid-Task", BodyFormat.StructuredSteps, """
+                    [{"label":"Instance A: SET lock:job NX PX 30000","note":"acquires the lock, TTL 30s"},{"label":"Instance A starts work","note":"expected to take ~10s"},{"label":"Unexpected delay (GC pause / slow downstream call)","note":"work now takes 45s"},{"label":"TTL expires at 30s","note":"Redis silently deletes the key -- Instance A is still working and doesn't know"},{"label":"Instance B: SET lock:job NX PX 30000","note":"the key is gone, so this succeeds -- B now believes it holds the lock"},{"label":"Both A and B are now modifying the resource","note":"the exact correctness bug a distributed lock was supposed to prevent"}]
+                    """, 4),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Always tag a lock with a unique owner token (a GUID, not just a boolean) and check that token before releasing or renewing it -- it's the only way to tell "I still hold this lock" from "someone else acquired it after mine expired."
+
+                    Set the TTL to comfortably exceed the expected work duration, and where the work can genuinely vary in length, extend (renew) the TTL periodically while work is still in progress instead of picking one large fixed value up front -- a lock held "just in case" for far longer than needed blocks other instances unnecessarily.
+
+                    Reach for a battle-tested client library (e.g., RedLock.net) or a managed coordination service (ZooKeeper, etcd, Consul) rather than hand-rolling Redlock's node-majority logic yourself -- the edge cases (clock drift, network delays during acquisition) are easy to get subtly wrong.
+                    """, 5),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    When a system design question involves "only one instance should do X" (a scheduled job, a leader-only write path, a resource only one worker should touch at a time), say the words "distributed lock" and immediately name where its state would live -- don't just say "we'd use a lock." Volunteer the TTL-expiry correctness bug yourself before the interviewer has to prompt for it; recognizing that a lock's TTL and the actual task duration are two independent, potentially-mismatched things is exactly what separates candidates who've internalized this from ones reciting "use Redis for locking."
+                    """, 6),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Treating a distributed lock as a drop-in replacement for C#'s `lock` keyword and forgetting it needs a TTL at all -- without one, a single crashed instance permanently deadlocks the resource for the rest of the fleet, with no automatic recovery.
+
+                    Also common: releasing a lock with a plain `DEL` instead of a check-then-delete tied to a unique owner token -- if your TTL already expired and another instance has since acquired the lock, an unconditional `DEL` deletes THEIR lock, not yours, defeating the mutual exclusion entirely.
+                    """, 7),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    An in-process lock is like a "do not disturb" sign taped to the inside of your own office door -- it only stops your own coworkers in the same building from walking in; it does nothing for a completely different office across town that also has a key to the same shared filing cabinet.
+
+                    A distributed lock is a sign-out sheet at the shared filing cabinet itself, visible to every office: whoever writes their name down first gets to use it, and everyone checks the sheet before touching the cabinet. But if someone signs out the cabinet and never crosses their name off, the cabinet is locked forever -- which is why the sheet needs an expiration time written next to the name. And if that expiration passes while the first person is still genuinely in the middle of using the cabinet, someone else reads the sheet, sees no valid entry, and starts using the same cabinet at the same time -- both now think they have exclusive access.
+
+                    Leader election is less like a one-time sign-out sheet and more like a standing shift assignment: one person is "on duty" for an entire class of recurring tasks, must check in periodically to prove they're still active, and if they stop checking in, the team automatically promotes someone else to cover the shift.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "Why is C#'s in-process `lock` keyword insufficient to ensure only one instance of a multi-instance service runs a scheduled job?",
+                    "It only synchronizes threads within a single process's memory; separate instances are separate processes with separate memory, so an in-process lock can't see or coordinate with any other instance at all.",
+                    [
+                        new QuizOptionSeed("It only synchronizes threads within a single process; separate instances have separate memory and can't see each other's lock state", true),
+                        new QuizOptionSeed("It's actually sufficient, as long as every instance runs on the same machine", false),
+                        new QuizOptionSeed("lock is deprecated in modern C# in favor of distributed locks", false),
+                        new QuizOptionSeed("It works fine as long as the job method is marked async", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "A distributed lock is acquired with a 30-second TTL, but the holding instance's work unexpectedly takes 45 seconds due to a slow downstream call. What actually happens?",
+                    "The TTL fires at 30 seconds regardless of whether the work is done, Redis deletes the key, and any other instance attempting to acquire the lock afterward succeeds -- meaning two instances can end up believing they hold the lock at the same time.",
+                    [
+                        new QuizOptionSeed("The lock silently expires at 30s; another instance can then acquire it while the first is still working, and both believe they hold it", true),
+                        new QuizOptionSeed("Redis automatically extends the TTL to match however long the work actually takes", false),
+                        new QuizOptionSeed("The first instance's writes are queued until it releases the lock manually", false),
+                        new QuizOptionSeed("The lock cannot expire while the process that acquired it is still running", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Redis: Distributed Locks with Redlock", "https://redis.io/docs/latest/develop/use/patterns/distributed-locks/", LinkType.FurtherReading),
+                new ReferenceLinkSeed("Apache ZooKeeper: Leader Election Recipe", "https://zookeeper.apache.org/doc/current/recipes.html", LinkType.OfficialDocs),
+            ]);
+
+        var lesson1Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson1.Slug,
+        [
+            "Implement a Redis-backed lock acquire/release using SET NX PX and a unique owner token, and verify release only succeeds when the token matches",
+            "Explain, in your own words, what breaks if a distributed lock has no TTL, and separately what breaks if the TTL expires mid-task",
+            "Explain why Redlock requires a majority of independent nodes rather than trusting a single Redis instance",
+        ]);
+
+        var lesson2 = BuildLesson(
+            slug: "designing-a-distributed-rate-limiter",
+            title: "Designing a Distributed Rate Limiter",
+            summary: "A distributed-systems angle on rate limiting: why per-instance in-memory counters silently break the limit, and how a centralized Redis store with atomic operations (INCR, or a sorted set for sliding windows) fixes it, at the cost of a new shared bottleneck.",
+            estimatedMinutes: 45,
+            objectives:
+            [
+                "Explain why a per-instance in-memory counter fails to enforce a global rate limit once there's more than one gateway/service instance",
+                "Design a centralized fixed-window counter using Redis INCR + EXPIRE that stays correct under concurrent requests from multiple instances",
+                "Explain why naive check-then-act rate limiting is a race condition, and why an atomic operation (INCR, or a Lua script) fixes it",
+                "Implement a sliding-window rate limiter using a Redis sorted set (ZADD / ZREMRANGEBYSCORE / ZCARD)",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    The earlier "API Gateway & Rate Limiting Design" lesson covered fixed-window, sliding-window, token-bucket, and leaky-bucket as *algorithms* -- the math for deciding whether a given request is over the limit, assuming a single counter you can read and write. This lesson asks a different question, and it's one of the most commonly asked system design interview questions in its own right: once you have multiple gateway or service instances behind a load balancer, *where does that counter actually live*, and how do concurrent instances keep it correct?
+
+                    The naive answer -- keep an in-memory counter inside each gateway instance -- is wrong the moment there's more than one instance. If a client's requests get spread across 4 instances by the load balancer, each instance only ever sees roughly a quarter of that client's traffic. Each instance's local counter might correctly say "I've seen 25 requests from this client," while the client has actually made 100 requests against the fleet as a whole -- four times the intended limit -- because no single instance ever sees the aggregate. The limit you configured is never actually the limit you enforce.
+
+                    The standard fix is to move the counter out of any one instance's memory and into a **centralized, shared store** every instance reads and writes -- almost always Redis, chosen for its speed and its atomic operations. For a fixed-window counter, the pattern is: `INCR ratelimit:{clientId}:{windowStart}` to atomically bump the count, with an `EXPIRE` set on the very first increment of a new window so the key cleans itself up once the window ends. Every gateway instance hits the same key for the same client, so the count they all see is the true aggregate, not a per-instance fragment.
+
+                    That atomicity matters more than it might first appear. A naive implementation might instead do `GET count`, check in application code whether it's under the limit, then `SET count+1` -- read, decide, write, as three separate steps. Under concurrent requests from *different gateway instances*, two instances can both `GET` the same value before either has written back, both decide "this is under the limit," and both allow the request through -- letting the aggregate exceed the limit despite each individual check looking correct in isolation. This is a genuine race condition, not a rare corner case; it's the default outcome of running check-then-act against a shared value from multiple processes. The fix is collapsing "check and increment" into one atomic round trip -- Redis's `INCR` for the simple case, or a Lua script (which Redis executes atomically) for anything that needs more than a single counter bump.
+
+                    Fixed-window counting has a well-known accuracy problem (a burst right at a window boundary can let through nearly double the intended rate), and a more accurate **sliding window** can be built directly on a Redis **sorted set**: `ZADD ratelimit:{clientId} {timestamp} {requestId}` records each request with its timestamp as the score; `ZREMRANGEBYSCORE ratelimit:{clientId} -inf {now - windowSizeMs}` evicts entries that have aged out of the current window; and `ZCARD ratelimit:{clientId}` counts how many requests remain in the set -- which is exactly the request count within the trailing window, updated on every request. This is a concrete, real technique used in production rate limiters, not just a theoretical improvement over fixed windows.
+
+                    None of this is free. A centralized store becomes a new bottleneck and a new single point of failure -- every single request across the entire fleet now depends on a round trip to that shared Redis instance, and if it's unavailable, either every request fails (fail-closed) or the rate limit stops being enforced (fail-open), neither of which is a small decision. The standard mitigation is a Redis cluster (sharding client counters across nodes, with its own replication for availability), but that's a real infrastructural cost being traded for the correctness that a per-instance counter couldn't give you -- worth naming explicitly rather than treating "just add Redis" as a free win.
+                    """, 1),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Different question than the algorithms lesson**
+                    - Fixed/sliding window, token bucket, leaky bucket = *how* to decide "over limit," assuming one counter
+                    - This lesson = *where the counter state lives* once there's more than one gateway/service instance
+
+                    **Why per-instance in-memory counters are wrong**
+                    - Each instance only sees its own slice of a client's traffic
+                    - The real aggregate rate across the fleet is never actually enforced
+
+                    **Centralized fixed-window counter (Redis)**
+                    - `INCR ratelimit:{client}:{windowStart}` -- atomic bump
+                    - `EXPIRE` set only on the first increment of a window, so the key self-cleans
+                    - All instances hit the same key -> the count is the true aggregate
+
+                    **Why check-then-act is broken**
+                    - `GET` -> decide in app code -> `SET` is three separate steps -- two concurrent instances can both read before either writes, and both let a request through
+                    - Fix: one atomic operation (`INCR`, or a Lua script for anything more complex)
+
+                    **Sliding window via sorted set**
+                    - `ZADD key {timestamp} {requestId}` -- record this request
+                    - `ZREMRANGEBYSCORE key -inf {now - windowMs}` -- evict requests that aged out
+                    - `ZCARD key` -- count of requests still in the trailing window
+
+                    **The tradeoff**
+                    - A centralized store is a new bottleneck / single point of failure
+                    - Mitigated with a Redis cluster -- a real cost traded for correctness
+                    """, 2),
+                Block(BlockType.CodeSnippet, "Fixed-Window and Sliding-Window Counters in Redis", BodyFormat.PlainText, """
+                    // Fixed-window counter: one atomic INCR, with EXPIRE set only when this
+                    // call created the window (count == 1 means it was just created by us).
+                    public async Task<bool> IsAllowedFixedWindowAsync(string clientId, int limit, TimeSpan window)
+                    {
+                        var windowStart = DateTimeOffset.UtcNow.ToUnixTimeSeconds() / (long)window.TotalSeconds;
+                        var key = $"ratelimit:{clientId}:{windowStart}";
+
+                        var count = await db.StringIncrementAsync(key);
+                        if (count == 1)
+                        {
+                            await db.KeyExpireAsync(key, window); // only the request that created the window sets the TTL
+                        }
+
+                        return count <= limit;
+                    }
+
+                    // Sliding window via a sorted set: score = timestamp, member = unique request id.
+                    // NOTE: in production this three-step sequence (ZADD, then trim, then count) is
+                    // normally wrapped in a single Lua script -- the same atomicity reasoning as the
+                    // fixed-window INCR above applies here too; shown as separate calls for clarity.
+                    public async Task<bool> IsAllowedSlidingWindowAsync(string clientId, int limit, TimeSpan window)
+                    {
+                        var key = $"ratelimit:{clientId}";
+                        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+                        var requestId = Guid.NewGuid().ToString();
+
+                        await db.SortedSetAddAsync(key, requestId, now);                          // ZADD: record this request
+                        await db.SortedSetRemoveRangeByScoreAsync(                                // ZREMRANGEBYSCORE: evict aged-out entries
+                            key, double.NegativeInfinity, now - (long)window.TotalMilliseconds);
+                        var count = await db.SortedSetLengthAsync(key);                          // ZCARD: requests left in the window
+
+                        await db.KeyExpireAsync(key, window); // bound the set's lifetime once the client goes idle
+
+                        return count <= limit;
+                    }
+                    """, 3, language: "csharp"),
+                Block(BlockType.Diagram, "Sliding Window as a Redis Sorted Set", BodyFormat.AsciiArt, """
+                    Redis sorted set "ratelimit:client-42"  (score = request timestamp, member = request id)
+
+                      score:   12:00:01.100   12:00:01.900   12:00:02.400   12:00:03.100
+                      member:  req-a1         req-b7         req-c3         req-d9
+                               |______________________________|
+                                      window = 2000ms, "now" = 12:00:03.100
+                                      window start = now - 2000ms = 12:00:01.100
+
+                      ZREMRANGEBYSCORE  -inf  12:00:01.100   -> evicts anything older than window start (none here, right at the edge)
+                      ZCARD                                   -> 4 members remain -> 4 requests counted in the trailing window
+
+                      As time moves forward, old members age out of the left edge and
+                      ZREMRANGEBYSCORE trims them on the next request -- the window
+                      "slides" continuously instead of resetting at fixed boundaries.
+                    """, 4),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Use an atomic operation for every counter mutation that matters -- `INCR` for a simple fixed window, a Lua script for anything that combines a check with a write (sliding window's add-trim-count sequence, or any "read the value and decide" logic) -- rather than trusting that a `GET` followed by a `SET` from application code will stay correct under concurrent instances.
+
+                    Set an `EXPIRE` on every rate-limit key so idle clients don't leave stale counters accumulating in Redis forever, and prefer setting it once per window (on creation) rather than resetting it on every request, which would let an actively-hammering client keep its own key alive indefinitely.
+
+                    Decide and document your fail-open vs. fail-closed behavior for when the shared Redis store itself is unreachable -- silently defaulting to one or the other under an outage is a production incident waiting to happen, not a detail to leave implicit.
+                    """, 5),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    When "design a rate limiter" comes up, explicitly state that you're separating two concerns: the algorithm (fixed/sliding window, token bucket) and the state problem (where the counter lives across multiple instances) -- naming both up front signals you understand this is a distributed systems question, not just "pick an algorithm." Then walk through the check-then-act race condition on a shared counter yourself, and name the atomic fix (`INCR`, or a Lua script) before being prompted -- that's the detail that reliably separates "recited an algorithm" from "understands why a naive distributed implementation breaks."
+                    """, 6),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Designing a rate limiter around a per-instance in-memory counter (a `Dictionary` or a static field) and not noticing that it silently multiplies the effective limit by however many instances are behind the load balancer -- each instance enforces the full configured limit against only its own fraction of the traffic.
+
+                    Also common: implementing rate limiting as a separate `GET` (read the count) and `SET` (write count + 1) against Redis instead of a single atomic `INCR` -- this reintroduces the exact check-then-act race the centralized store was supposed to fix, just against a shared value instead of a local one.
+                    """, 7),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    A per-instance in-memory counter is like four separate bouncers at four separate doors of the same club, each one only counting the people walking through their own door and turning people away once *their* door hits 25 -- meanwhile 100 people have entered the club through the four doors combined, even though the club's actual capacity was meant to be 25.
+
+                    A centralized Redis counter is one shared clipboard at a single check-in desk that every bouncer radios before letting someone in -- now there's one true count everyone agrees on. But if two bouncers radio in at almost the same instant, both hearing "24, still room" before either updates the clipboard, both wave someone through and the clipboard is wrong the moment it's finally updated -- which is why the actual clipboard update has to be a single indivisible action, not "check, then separately write."
+
+                    The sliding-window sorted set is like that same clipboard, except instead of one running number, it lists the exact time each person walked in -- so at any moment, the desk can look back exactly two minutes and count only the people still within that trailing window, instead of resetting to zero at the top of every fixed two-minute block.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "A rate limiter is deployed across 4 gateway instances behind a load balancer, each keeping its own in-memory counter capped at the configured limit. What actually happens?",
+                    "Each instance only sees its own share of a client's traffic and independently enforces the full limit against that share, so the client can send up to roughly 4x the intended limit in aggregate across the fleet -- the true aggregate rate is never actually checked anywhere.",
+                    [
+                        new QuizOptionSeed("The client can send roughly 4x the configured limit in aggregate, since each instance only enforces the limit against its own slice of traffic", true),
+                        new QuizOptionSeed("The load balancer automatically merges the four counters into one true count", false),
+                        new QuizOptionSeed("The limit is enforced correctly, just with slightly higher latency", false),
+                        new QuizOptionSeed("Only the first instance a client hits will ever process its requests", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "Why is a naive `GET count` -> check in app code -> `SET count+1` against a shared Redis key not safe for a distributed rate limiter?",
+                    "Those are three separate round trips; two concurrent requests from different gateway instances can both GET the same value before either writes back, both conclude they're under the limit, and both proceed -- an atomic single operation like INCR (or a Lua script) closes this race by making the check-and-increment indivisible.",
+                    [
+                        new QuizOptionSeed("Two concurrent requests from different instances can both read the same value before either writes back, so both can pass the check even though only one should", true),
+                        new QuizOptionSeed("Redis doesn't support the GET command in production deployments", false),
+                        new QuizOptionSeed("It works correctly, but is simply slower than using INCR", false),
+                        new QuizOptionSeed("SET always throws an error if the key already exists", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Redis: Rate limiting patterns", "https://redis.io/docs/latest/develop/use/patterns/rate-limiter/", LinkType.FurtherReading),
+                new ReferenceLinkSeed("System Design Primer: Rate limiting", "https://github.com/donnemartin/system-design-primer", LinkType.FurtherReading),
+            ],
+            prerequisites: [lesson1]);
+
+        var lesson2Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson2.Slug,
+        [
+            "Implement a Redis-backed fixed-window rate limiter using INCR + EXPIRE and verify it stays correct when called concurrently from multiple simulated instances",
+            "Implement a sliding-window rate limiter using ZADD, ZREMRANGEBYSCORE, and ZCARD against a Redis sorted set",
+            "Explain, in your own words, why a GET-then-SET rate limiter is a race condition and why INCR (or a Lua script) fixes it",
+        ]);
+
+        var module = BuildModule(topicId, "distributed-coordination-locks-and-rate-limiting", "Distributed Coordination: Locks, Leader Election & Rate Limiting at Scale",
+            "How to coordinate exclusive access and elect a single leader across multiple server instances using externally-held locks and renewable leases, and how to design a rate limiter whose counter state is correctly shared across a fleet of instances instead of trapped in any one process's memory.",
+            85, [lesson1, lesson2], sortOrder: 4);
 
         return (module, [lesson1Checklist, lesson2Checklist]);
     }
