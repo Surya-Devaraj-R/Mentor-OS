@@ -46,6 +46,8 @@ public static class CurriculumContentSeedData
             BuildDsaLinkedListsAndHeapsModule(topicIdBySlug["dsa"]),
             BuildDsaGreedyAndBitManipulationModule(topicIdBySlug["dsa"]),
             BuildDsaUnionFindAndWeightedGraphsModule(topicIdBySlug["dsa"]),
+            BuildDsaTwoDimensionalAndStringDpModule(topicIdBySlug["dsa"]),
+            BuildDsaTriesModule(topicIdBySlug["dsa"]),
             BuildSystemDesignModule(topicIdBySlug["system-design"]),
             BuildApiGatewayAndCdnModule(topicIdBySlug["system-design"]),
             BuildConsistentHashingAndCaseStudiesModule(topicIdBySlug["system-design"]),
@@ -10758,6 +10760,858 @@ public static class CurriculumContentSeedData
         var module = BuildModule(topicId, "union-find-and-weighted-graphs", "Union-Find & Weighted Shortest Paths",
             "The disjoint-set union-find structure -- union by rank and path compression -- for cycle detection, connected components, and Kruskal's MST, followed by Dijkstra's algorithm for weighted shortest paths and why it requires non-negative edge weights.",
             90, [lesson1, lesson2], sortOrder: 5);
+
+        return (module, [lesson1Checklist, lesson2Checklist]);
+    }
+
+    private static (Module, List<ChecklistSeed>) BuildDsaTwoDimensionalAndStringDpModule(int topicId)
+    {
+        var lesson1 = BuildLesson(
+            slug: "knapsack-and-grid-dynamic-programming",
+            title: "Knapsack & Grid Dynamic Programming",
+            summary: "The jump from 1D to 2D DP -- 0/1 knapsack worked through as a full table-filling exercise, grid-path DP as a second visual example, and LIS as proof that dimensionality is about state, not array shape.",
+            estimatedMinutes: 50,
+            objectives:
+            [
+                "Explain why some DP problems need a state that depends on two things changing together (item index and remaining capacity, or row and column), and why that forces the DP table itself to become 2D",
+                "Build the 0/1 knapsack dp[i][w] table from its recurrence, and explain precisely why the earlier greedy ratio-sort approach cannot replace it",
+                "Fill a grid-path DP table (Unique Paths / Minimum Path Sum) row by row from dp[i-1][j] and dp[i][j-1]",
+                "Explain why Longest Increasing Subsequence is still a 1D DP table but a genuinely different recurrence style, showing that dimensionality is about how many things the state depends on",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    The earlier dynamic-programming-fundamentals lesson built DP problems whose state depended on a single changing quantity -- climbing stairs' state was just "how many steps remain," coin change's state was just "how much amount is left." That's why a 1D array (`dp[n]`) was always enough.
+
+                    Plenty of real problems need a state that depends on **two things changing together** -- which forces the DP table itself to become 2D (`dp[i][j]`), because you genuinely cannot answer the subproblem without knowing both coordinates at once.
+
+                    **0/1 Knapsack** is the cleanest example. You have `n` items, each with a `weight[i]` and a `value[i]`, and a knapsack with capacity `W`. Each item can be taken whole or left behind entirely (no partial items) -- pick a subset that maximizes total value without exceeding `W`.
+
+                    Define `dp[i][w]` = the best total value achievable using only the first `i` items, with a capacity budget of `w`. The state genuinely needs both numbers: "which items are even available to consider" and "how much room is left" change independently of each other as you build up the table.
+
+                    The recurrence asks one question at each cell: does item `i` even fit in capacity `w`?
+
+                    - If it doesn't fit (`weight[i] > w`): `dp[i][w] = dp[i-1][w]` -- you're stuck with whatever the first `i-1` items already achieved.
+                    - If it does fit: `dp[i][w] = max(dp[i-1][w], dp[i-1][w-weight[i]] + value[i])` -- take the better of *skipping* item `i` (same as the row above) or *taking* item `i` (whatever the first `i-1` items achieved with `weight[i]` less capacity, plus this item's value).
+
+                    Base cases: `dp[0][w] = 0` for every `w` (no items available -> no value, regardless of capacity), and `dp[i][0] = 0` for every `i` (no capacity -> nothing fits, regardless of how many items are available).
+
+                    This is exactly the technique the earlier greedy-algorithm-patterns lesson said you'd need. That lesson showed that sorting items by value-to-weight ratio and greedily grabbing the best ratio first works perfectly for *fractional* knapsack (you can always "top off" with a partial unit of the next item) but silently breaks for *0/1* knapsack, because a high-ratio item might not fit the remaining capacity with no way to take a fraction of it to compensate. The `max(...)` in the recurrence above is precisely the mechanism that recovers correctness: for every single capacity level, it explicitly compares "the combination that includes this item" against "the combination that doesn't" -- the exact comparison a greedy, one-shot ratio sort never makes.
+
+                    **Grid-path DP** ("Unique Paths," "Minimum Path Sum") is a second, very visual flavor of 2D DP: given an `m x n` grid, and movement restricted to right or down, `dp[i][j]` depends on exactly two neighbors -- the cell above (`dp[i-1][j]`) and the cell to the left (`dp[i][j-1]`) -- because those are the only two cells a path could have arrived from. For Unique Paths, `dp[i][j] = dp[i-1][j] + dp[i][j-1]` (sum the ways in from each direction); for Minimum Path Sum, `dp[i][j] = grid[i][j] + min(dp[i-1][j], dp[i][j-1])` (add this cell's cost to the cheaper of the two ways in). The first row and first column are base cases -- there's only one way to reach them, moving straight across or straight down.
+
+                    **Longest Increasing Subsequence (LIS)** is worth seeing right after knapsack and grid-path specifically because it's a counter-example to "2D state means 2D array." LIS's state is `dp[i]` = the length of the longest increasing subsequence that *ends exactly at index `i`* -- still a 1D table -- but the recurrence looks at every earlier index `j < i`, not just a fixed neighbor: `dp[i] = 1 + max(dp[j])` over every `j < i` where `nums[j] < nums[i]` (or just `1` if no such `j` exists). Dimensionality in DP is about **how many independent things the state depends on**, not whether the table happens to be drawn as a 1D array or a 2D grid -- LIS has an `O(n)`-sized table but an `O(n)` scan per cell, giving `O(n^2)` total, a different cost shape than either knapsack or grid-path DP.
+                    """, 1),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **0/1 Knapsack**
+
+                    - `dp[i][w]` = best value using the first `i` items with capacity `w`
+                    - Base cases: `dp[0][w] = 0` for all `w`; `dp[i][0] = 0` for all `i`
+                    - Recurrence: `dp[i][w] = dp[i-1][w]` if `weight[i] > w`, else `max(dp[i-1][w], dp[i-1][w-weight[i]] + value[i])`
+                    - Answer: `dp[n][W]`
+                    - Complexity: `O(n x W)` time and space (collapsible to `O(W)` with a rolling row, scanned right-to-left)
+
+                    **Grid-Path DP (Unique Paths / Minimum Path Sum)**
+
+                    - `dp[i][j]` depends only on `dp[i-1][j]` (above) and `dp[i][j-1]` (left)
+                    - Unique Paths: `dp[i][j] = dp[i-1][j] + dp[i][j-1]`; base case: first row and first column = 1
+                    - Minimum Path Sum: `dp[i][j] = grid[i][j] + min(dp[i-1][j], dp[i][j-1])`; base case: first row/column accumulate along a single direction
+                    - Complexity: `O(m x n)` time and space (collapsible to `O(n)` with a rolling row)
+
+                    **Longest Increasing Subsequence (LIS)**
+
+                    - `dp[i]` = length of the longest increasing subsequence ending exactly at index `i`
+                    - Recurrence: `dp[i] = 1 + max(dp[j])` over every `j < i` with `nums[j] < nums[i]`; `dp[i] = 1` if no such `j`
+                    - Answer: `max(dp[0..n-1])`, not `dp[n-1]` -- the longest subsequence doesn't have to end at the last index
+                    - Complexity: `O(n^2)` time, `O(n)` space (an `O(n log n)` patience-sorting variant exists but is a separate technique)
+
+                    **Spotting which shape you need**
+
+                    - State depends on one changing quantity -> 1D table (`dp[i]`)
+                    - State depends on two changing quantities that must both be tracked (item index + capacity, row + column) -> 2D table (`dp[i][j]`)
+                    - A 1D table can still have an `O(n)` per-cell recurrence (LIS) -- dimensionality of the *state*, not the array shape, is what decides the table's shape
+                    """, 2),
+                Block(BlockType.CodeSnippet, "0/1 Knapsack, Grid Minimum Path Sum, and Longest Increasing Subsequence", BodyFormat.PlainText, """
+                    // --- 0/1 Knapsack: dp[i][w] = best value using the first i items with capacity w ---
+                    public int Knapsack01(int[] weights, int[] values, int capacity)
+                    {
+                        var n = weights.Length;
+                        var dp = new int[n + 1, capacity + 1]; // dp[0, *] and dp[*, 0] default to 0 already
+
+                        for (var i = 1; i <= n; i++)
+                        {
+                            var weight = weights[i - 1];
+                            var value = values[i - 1];
+
+                            for (var w = 0; w <= capacity; w++)
+                            {
+                                if (weight > w)
+                                {
+                                    dp[i, w] = dp[i - 1, w]; // item i doesn't fit -- carry forward the row above
+                                }
+                                else
+                                {
+                                    var skip = dp[i - 1, w];
+                                    var take = dp[i - 1, w - weight] + value;
+                                    dp[i, w] = Math.Max(skip, take);
+                                }
+                            }
+                        }
+
+                        return dp[n, capacity];
+                    }
+
+                    // --- Grid DP: Minimum Path Sum, top-left to bottom-right, moving only right or down ---
+                    public int MinPathSum(int[][] grid)
+                    {
+                        var rows = grid.Length;
+                        var cols = grid[0].Length;
+                        var dp = new int[rows, cols];
+
+                        dp[0, 0] = grid[0][0];
+                        for (var j = 1; j < cols; j++) dp[0, j] = dp[0, j - 1] + grid[0][j]; // first row: only arrives from the left
+                        for (var i = 1; i < rows; i++) dp[i, 0] = dp[i - 1, 0] + grid[i][0]; // first column: only arrives from above
+
+                        for (var i = 1; i < rows; i++)
+                        {
+                            for (var j = 1; j < cols; j++)
+                            {
+                                dp[i, j] = grid[i][j] + Math.Min(dp[i - 1, j], dp[i, j - 1]);
+                            }
+                        }
+
+                        return dp[rows - 1, cols - 1];
+                    }
+
+                    // --- Longest Increasing Subsequence: dp[i] = LIS length ending exactly at index i ---
+                    public int LengthOfLis(int[] nums)
+                    {
+                        var n = nums.Length;
+                        if (n == 0) return 0;
+
+                        var dp = new int[n];
+                        Array.Fill(dp, 1); // every element is at least a subsequence of length 1 by itself
+
+                        var best = 1;
+                        for (var i = 1; i < n; i++)
+                        {
+                            for (var j = 0; j < i; j++)
+                            {
+                                if (nums[j] < nums[i])
+                                {
+                                    dp[i] = Math.Max(dp[i], dp[j] + 1);
+                                }
+                            }
+                            best = Math.Max(best, dp[i]);
+                        }
+
+                        return best;
+                    }
+                    """, 3, language: "csharp"),
+                Block(BlockType.Diagram, "0/1 Knapsack and Minimum Path Sum Tables, Filled In", BodyFormat.AsciiArt, """
+                    0/1 KNAPSACK -- items (weight, value): (1,1) (3,4) (4,5) (5,7), capacity = 7
+
+                                  w=0  1  2  3  4  5  6  7
+                      i=0 (none)   0   0  0  0  0  0  0  0
+                      i=1 (1,1)    0   1  1  1  1  1  1  1
+                      i=2 (3,4)    0   1  1  4  5  5  5  5
+                      i=3 (4,5)    0   1  1  4  5  6  6  9
+                      i=4 (5,7)    0   1  1  4  5  7  8  9
+
+                      dp[4][7] = 9 -> best value is 9, using items (3,4) and (4,5): weight 3+4=7, value 4+5=9.
+                      dp[3][7] already found this combination one row earlier; dp[4][7] just confirms that
+                      adding item 4 (weight 5, value 7) doesn't beat it -- that comparison IS the max(skip, take) step.
+
+                    MINIMUM PATH SUM -- grid cost = [[1,3,1],[1,5,1],[4,2,1]], moving only right or down
+
+                                  j=0  1  2
+                      i=0          1   4  5
+                      i=1          2   7  6
+                      i=2          6   8  7
+
+                      dp[2][2] = 7 -- each cell built from the cell above and the cell to the left:
+                      dp[1][1] = grid[1][1] + min(dp[0][1], dp[1][0]) = 5 + min(4, 2) = 7
+                      dp[2][2] = grid[2][2] + min(dp[1][2], dp[2][1]) = 1 + min(6, 8) = 7
+                    """, 4),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Before writing a single line of DP code, write the state definition as a full sentence -- "`dp[i][w]` is the best value achievable using the first `i` items with capacity `w`" -- not just the recurrence formula. The sentence is what tells you how many dimensions the table needs; the formula falls out naturally once the sentence is right.
+
+                    When a 2D DP recurrence only ever reads the *previous* row (as in 0/1 knapsack and grid-path DP), you can shrink the table from `O(n x m)` space to `O(m)` by keeping just one rolling row -- but for 0/1 knapsack specifically, you must iterate the capacity dimension **right to left** when doing this, or you'll accidentally reuse the current row's already-updated value instead of the previous row's, which silently turns 0/1 knapsack into unbounded knapsack (each item usable more than once).
+                    """, 5),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    When a problem's brute-force recursion takes two independent parameters (an index into a collection *and* a running budget/capacity, or a row *and* a column), say "this needs a 2D DP table" before writing any code, then immediately write the state definition as a sentence. That sentence-first habit is what separates "I recognize this looks like knapsack" from "I can derive the recurrence for a knapsack-shaped problem I haven't seen before."
+
+                    If an interviewer's problem sounds like knapsack (items with independent weight/value, a capacity constraint) and items can't be split, that's your cue to reach for exactly this `dp[i][w]` table -- say so explicitly: "since items can't be split, I can't sort-and-grab greedily here the way fractional knapsack allows; I need to compare taking versus skipping each item at every capacity level."
+                    """, 6),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Building the knapsack table but forgetting the "skip" branch -- writing `dp[i][w] = dp[i-1][w-weight[i]] + value[i]` unconditionally whenever the item fits, instead of `max(dp[i-1][w], ...)`. This silently forces every fitting item to be taken, which solves a different (and wrong) problem.
+
+                    For grid-path DP, forgetting to initialize the first row and first column as base cases before running the general double loop -- `dp[i-1][j]` or `dp[i][j-1]` will read an uninitialized (zero) cell for row/column 0, producing a wrong answer that looks plausible because the array silently defaults to `0` instead of throwing.
+
+                    For LIS, returning `dp[n-1]` instead of `max(dp)` -- the longest increasing subsequence very often does not end at the last element, and this mistake quietly returns a too-short answer that still looks like a real result.
+                    """, 7),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    0/1 knapsack is exactly how a moving company decides what to load into a single truck with a hard weight limit: for every item under consideration, at every possible remaining-capacity level, the foreman compares two plans -- "leave this item behind" versus "take it, and adjust remaining capacity accordingly" -- and keeps whichever plan is worth more. A ratio-based greedy foreman who just grabs the most valuable-per-pound items first can get stuck holding capacity that no remaining item exactly fits, wasting room a smarter combination would have used.
+
+                    Grid-path DP is like planning a delivery route through a city laid out in a strict grid, where you can only ever move east or south -- the cheapest way to reach any intersection is simply the cheaper of "however you got to the intersection just north" plus this block, or "however you got to the intersection just west" plus this block. You never need to consider any other route into that intersection, because right/down movement means those are the only two ways in.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "0/1 knapsack has items with weight and value, and a fixed capacity. Why does dp[i][w] need to be a 2D table instead of a 1D array like the ones used in the earlier dynamic-programming-fundamentals lesson?",
+                    "The state depends on two independently changing quantities -- which items are even available to consider (i) and how much capacity remains (w) -- so answering a single subproblem correctly requires knowing both coordinates at once; a 1D array can only track one changing quantity.",
+                    [
+                        new QuizOptionSeed("Because the state depends on two independently changing quantities at once -- item index and remaining capacity -- and a 1D array can only track one", true),
+                        new QuizOptionSeed("Because C# does not allow arrays larger than a fixed size in one dimension", false),
+                        new QuizOptionSeed("Because the greedy solution to knapsack already requires a 2D array, and DP must match it", false),
+                        new QuizOptionSeed("Because item weights are always two-digit numbers, so two columns are needed", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "In the 0/1 knapsack recurrence, why is dp[i][w] = max(dp[i-1][w], dp[i-1][w-weight[i]] + value[i]) instead of always taking the item whenever it fits?",
+                    "Whether taking item i is actually better than skipping it isn't known in advance -- the max explicitly compares both possibilities for every capacity level, which is exactly the comparison a greedy, ratio-sort approach never makes.",
+                    [
+                        new QuizOptionSeed("Because whether taking item i is better than skipping it isn't known in advance -- the max explicitly compares both options, the comparison a greedy ratio-sort never makes", true),
+                        new QuizOptionSeed("Because dp[i-1][w] is always larger and must be kept as a sanity check", false),
+                        new QuizOptionSeed("Because C# requires every if/else branch to assign the same variable", false),
+                        new QuizOptionSeed("Because value[i] must always be added regardless of whether the item fits", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("0/1 Knapsack Problem (GeeksforGeeks)", "https://www.geeksforgeeks.org/0-1-knapsack-problem-dp-10/", LinkType.FurtherReading),
+                new ReferenceLinkSeed("Longest Increasing Subsequence -- LeetCode", "https://leetcode.com/problems/longest-increasing-subsequence/", LinkType.FurtherReading),
+            ]);
+
+        var lesson1Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson1.Slug,
+        [
+            "Solve 0/1 Knapsack from scratch, building the full dp[i][w] table by hand for a small example before writing the loop",
+            "Solve Unique Paths (LeetCode 62) and Minimum Path Sum (LeetCode 64), and explain out loud why dp[i][j] only ever needs the cell above and the cell to the left",
+            "Solve Longest Increasing Subsequence (LeetCode 300) with the O(n^2) dp[i] approach, then state in one sentence why the answer is max(dp) and not dp[n-1]",
+        ]);
+
+        var lesson2 = BuildLesson(
+            slug: "string-dynamic-programming-lcs-and-edit-distance",
+            title: "String Dynamic Programming: LCS & Edit Distance",
+            summary: "Why comparing two strings naturally calls for a 2D DP table, worked through concretely with Longest Common Subsequence and Edit Distance, plus a repeatable checklist for building any string-DP table from scratch.",
+            estimatedMinutes: 45,
+            objectives:
+            [
+                "Explain why comparing two strings/sequences is a natural fit for 2D DP -- the state must track progress through both strings simultaneously",
+                "Build the Longest Common Subsequence (LCS) dp[i][j] table from its recurrence and read the LCS length off the final cell",
+                "Build the Edit Distance dp[i][j] table as a natural extension of LCS, explaining what each of the insert/delete/replace terms in the recurrence represents",
+                "Apply a repeatable checklist -- define dp[i][j] as a sentence, nail the base cases, then find the recurrence -- to build a brand-new string-DP table from scratch",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    Comparing two strings (or any two sequences) is one of the most natural fits for 2D DP, because the "how much progress have I made" state genuinely has two independent parts: how far into string `A` you are, and how far into string `B` you are. Neither number can be dropped -- you need both to know exactly which characters remain to be compared -- so, just like the earlier knapsack-and-grid-dynamic-programming lesson's (item index, remaining capacity) state, the DP table is naturally `dp[i][j]`.
+
+                    **Longest Common Subsequence (LCS)**: given two strings `A` and `B`, find the length of the longest sequence of characters that appears in both, in the same relative order, but not necessarily contiguously. Define `dp[i][j]` = the length of the LCS of the first `i` characters of `A` and the first `j` characters of `B`.
+
+                    The recurrence asks: do the *next* characters under consideration -- `A[i-1]` and `B[j-1]` -- match?
+
+                    - If they match: `dp[i][j] = dp[i-1][j-1] + 1` -- this matched pair extends whatever LCS the shorter prefixes already had.
+                    - If they don't match: `dp[i][j] = max(dp[i-1][j], dp[i][j-1])` -- keep the better of "drop this character of `A`" or "drop this character of `B`."
+
+                    Base cases: `dp[0][j] = 0` for every `j`, and `dp[i][0] = 0` for every `i` -- the LCS of anything with an empty string is always length 0. The final answer is `dp[A.Length][B.Length]`.
+
+                    **Edit Distance (Levenshtein distance)** is LCS's natural extension: instead of asking "how many characters can I keep," it asks "what's the minimum number of insert/delete/replace operations to transform the first `i` characters of one string into the first `j` characters of another." Define `dp[i][j]` = that minimum operation count.
+
+                    - If the characters match (`A[i-1] == B[j-1]`): `dp[i][j] = dp[i-1][j-1]` -- no operation needed, carry the diagonal forward untouched.
+                    - If they don't match, every operation costs `1`, applied to whichever prior state it corresponds to: `dp[i][j] = 1 + min(dp[i][j-1], dp[i-1][j], dp[i-1][j-1])`, where `dp[i][j-1]` is "insert" (pretend `B[j-1]` was just inserted, and the rest still needs to line up), `dp[i-1][j]` is "delete" (drop `A[i-1]` and see what the remainder costs), and `dp[i-1][j-1]` is "replace" (swap `A[i-1]` for `B[j-1]` directly and move both pointers).
+
+                    Base cases here are different from LCS's: `dp[i][0] = i` (deleting all `i` characters of `A` to reach an empty string) and `dp[0][j] = j` (inserting all `j` characters of `B` into an empty string) -- both cost that many operations, not zero.
+
+                    **The general pattern for building any string-DP table from scratch**, in order:
+
+                    1. **Define `dp[i][j]` as a full sentence** before writing any formula -- e.g., "`dp[i][j]` is the minimum number of operations to turn the first `i` characters of `A` into the first `j` characters of `B`." Get this exactly right first; everything else follows from it.
+                    2. **Nail the base cases** -- typically row `0` and column `0`, i.e. what happens when one string is still empty. These are usually easy to state directly (LCS: `0`; edit distance: `i` or `j`) and get them settled before touching the general recurrence.
+                    3. **Find the recurrence by asking one question**: "what is the last character-level decision, and what does each choice cost or require?" For LCS, the decision is "do these two characters match, and if not, which one do I drop?" For edit distance, it's "do these two characters match, and if not, which single operation resolves the mismatch?"
+                    """, 1),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Longest Common Subsequence (LCS)**
+
+                    - `dp[i][j]` = LCS length of `A[0..i)` and `B[0..j)`
+                    - Base cases: `dp[0][j] = 0`, `dp[i][0] = 0`
+                    - Recurrence: `dp[i][j] = dp[i-1][j-1] + 1` if `A[i-1] == B[j-1]`, else `max(dp[i-1][j], dp[i][j-1])`
+                    - Answer: `dp[A.Length][B.Length]`
+                    - Complexity: `O(m x n)` time and space
+
+                    **Edit Distance (Levenshtein Distance)**
+
+                    - `dp[i][j]` = minimum insert/delete/replace operations to turn `A[0..i)` into `B[0..j)`
+                    - Base cases: `dp[i][0] = i` (delete all of A), `dp[0][j] = j` (insert all of B)
+                    - Recurrence: `dp[i][j] = dp[i-1][j-1]` if `A[i-1] == B[j-1]`, else `1 + min(dp[i][j-1], dp[i-1][j], dp[i-1][j-1])`
+                    - The three terms in the min are insert, delete, replace, respectively
+                    - Complexity: `O(m x n)` time and space
+
+                    **Building a string-DP table from scratch, in order**
+
+                    1. Define `dp[i][j]` as a full sentence
+                    2. Nail row-0 / column-0 base cases first
+                    3. Find the recurrence by asking "what's the last character-level decision, and what does each choice cost or require?"
+                    """, 2),
+                Block(BlockType.CodeSnippet, "Longest Common Subsequence and Edit Distance", BodyFormat.PlainText, """
+                    // --- Longest Common Subsequence: dp[i][j] = LCS length of a[0..i) and b[0..j) ---
+                    public int LongestCommonSubsequence(string a, string b)
+                    {
+                        var dp = new int[a.Length + 1, b.Length + 1]; // row/col 0 default to 0 -- base case
+
+                        for (var i = 1; i <= a.Length; i++)
+                        {
+                            for (var j = 1; j <= b.Length; j++)
+                            {
+                                if (a[i - 1] == b[j - 1])
+                                {
+                                    dp[i, j] = dp[i - 1, j - 1] + 1; // matched character extends the shorter prefixes' LCS
+                                }
+                                else
+                                {
+                                    dp[i, j] = Math.Max(dp[i - 1, j], dp[i, j - 1]); // drop a's char, or drop b's char -- keep the better
+                                }
+                            }
+                        }
+
+                        return dp[a.Length, b.Length];
+                    }
+
+                    // --- Edit Distance (Levenshtein): dp[i][j] = min ops to turn a[0..i) into b[0..j) ---
+                    public int MinDistance(string a, string b)
+                    {
+                        var dp = new int[a.Length + 1, b.Length + 1];
+
+                        for (var i = 0; i <= a.Length; i++) dp[i, 0] = i; // delete all i characters of a
+                        for (var j = 0; j <= b.Length; j++) dp[0, j] = j; // insert all j characters of b
+
+                        for (var i = 1; i <= a.Length; i++)
+                        {
+                            for (var j = 1; j <= b.Length; j++)
+                            {
+                                if (a[i - 1] == b[j - 1])
+                                {
+                                    dp[i, j] = dp[i - 1, j - 1]; // characters already match -- no operation needed
+                                }
+                                else
+                                {
+                                    var insert = dp[i, j - 1];
+                                    var delete = dp[i - 1, j];
+                                    var replace = dp[i - 1, j - 1];
+                                    dp[i, j] = 1 + Math.Min(insert, Math.Min(delete, replace));
+                                }
+                            }
+                        }
+
+                        return dp[a.Length, b.Length];
+                    }
+                    """, 3, language: "csharp"),
+                Block(BlockType.Diagram, "LCS and Edit Distance Tables, Filled In", BodyFormat.AsciiArt, """
+                    LONGEST COMMON SUBSEQUENCE -- A = "ABCB", B = "BDCB"
+
+                                  ""  B  D  C  B
+                          ""       0  0  0  0  0
+                          A        0  0  0  0  0
+                          B        0  1  1  1  1
+                          C        0  1  1  2  2
+                          B        0  1  1  2  3
+
+                      dp[4][4] = 3 -> LCS length 3 ("BCB": B at A[1]/B[0], C at A[2]/B[2], B at A[3]/B[3])
+
+                    EDIT DISTANCE -- A = "horse", B = "ros"
+
+                                  ""  r  o  s
+                          ""       0  1  2  3
+                          h        1  1  2  3
+                          o        2  2  1  2
+                          r        3  2  2  2
+                          s        4  3  3  2
+                          e        5  4  4  3
+
+                      dp[5][3] = 3 -> "horse" -> "rorse" (replace h -> r) -> "rose" (delete r) -> "ros" (delete e): 3 operations
+                    """, 4),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Always size the table `(a.Length + 1) x (b.Length + 1)` and treat row 0 / column 0 as a virtual "empty prefix" -- this lets the main double loop stay uniform (`a[i-1]` vs. `b[j-1]`) instead of special-casing what happens when one string is empty. The `+1` and the `i-1`/`j-1` indexing is the single most common source of off-by-one bugs in string DP, so write it deliberately rather than by feel.
+
+                    If a problem asks you to reconstruct the actual result (the LCS string itself, or the literal sequence of edit operations) rather than just its length/count, fill the whole table first, then **backtrack** from the bottom-right corner by re-deriving which case produced each cell (matched-diagonal, or whichever neighbor was `max`/`min`) -- don't try to track the reconstruction path during the forward fill, which tangles the simple recurrence with bookkeeping it doesn't need.
+                    """, 5),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    State the three-step checklist out loud before filling anything in: "First, `dp[i][j]` means ___. Second, my base cases are row 0 and column 0, which are ___. Third, the recurrence comes from asking what happens to the last character of each string." Interviewers grade string-DP answers heavily on whether you derive the recurrence this way versus recite it from memory -- the checklist transfers to any new string-DP problem, including ones you haven't seen before.
+
+                    Call out edit distance as LCS's extension explicitly if it comes up in the same interview or right after: "same two-pointer-into-two-strings state as LCS, but now every mismatch costs one operation instead of just being skipped" is a strong, concise way to show you understand the family of problems rather than two disconnected formulas.
+                    """, 6),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Mixing up `dp[i-1][j-1]`'s meaning between the two problems -- in LCS it means "drop straight through, no credit" and never applies on a mismatch by itself; in edit distance it means "replace" and applies specifically on a *mismatch* (on a match it's a free carry-forward with no `+1`). Copying one recurrence's structure onto the other from memory instead of re-deriving it from the state definition is the single most common way these two problems get scrambled together.
+
+                    Also common: using LCS's base case (`dp[i][0] = 0`, `dp[0][j] = 0`) for edit distance, where the correct base case is `dp[i][0] = i` and `dp[0][j] = j` -- an empty target string still costs `i` deletions or `j` insertions, it isn't free the way an empty LCS is.
+                    """, 7),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    LCS is what a code-review "diff" tool is actually computing when it shows which lines are unchanged between two versions of a file -- it's finding the longest sequence of lines that appears in both versions, in the same order, so it can highlight only the lines that were genuinely added or removed around that common backbone.
+
+                    Edit distance is what a spellchecker uses to suggest "did you mean...?" -- when you type "recieve," the checker doesn't guess randomly; it measures how many single-character inserts, deletes, and replacements separate "recieve" from every real word in the dictionary, and suggests the words that are cheapest to reach.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "Two strings A and B are being compared to find their Longest Common Subsequence. Why does dp[i][j] need to track both i and j instead of a single combined index?",
+                    "Progress through A and progress through B are independent of each other -- both numbers are needed to know exactly which characters remain to compare in each string, the same reason the earlier knapsack lesson's (item index, capacity) state needed two independent numbers.",
+                    [
+                        new QuizOptionSeed("Because progress through A and progress through B are independent -- both numbers are needed to know which characters remain to compare in each string", true),
+                        new QuizOptionSeed("Because dp arrays in C# cannot be indexed by a single integer larger than a string's length", false),
+                        new QuizOptionSeed("Because LCS only works on strings of equal length, so i and j must be tracked separately to detect a length mismatch", false),
+                        new QuizOptionSeed("Because two indices are only needed when the strings contain repeated characters", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "In the Edit Distance recurrence, when A[i-1] does not equal B[j-1], why is dp[i][j] = 1 + min(dp[i][j-1], dp[i-1][j], dp[i-1][j-1]) instead of always using just the replace term dp[i-1][j-1]?",
+                    "Insert, delete, and replace each resolve the mismatch differently, and the cheapest overall transformation isn't always the replace option -- min compares all three valid single operations and keeps whichever leads to the fewest total operations.",
+                    [
+                        new QuizOptionSeed("Because insert, delete, and replace each resolve the mismatch differently, and the cheapest overall transformation isn't always the replace option -- min compares all three valid single operations", true),
+                        new QuizOptionSeed("Because dp[i-1][j-1] is undefined whenever the characters don't match", false),
+                        new QuizOptionSeed("Because replace operations are not allowed in edit distance, only insert and delete", false),
+                        new QuizOptionSeed("Because C# requires every arithmetic expression to include at least one Math.Min call", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Longest Common Subsequence -- LeetCode", "https://leetcode.com/problems/longest-common-subsequence/", LinkType.FurtherReading),
+                new ReferenceLinkSeed("Edit Distance -- LeetCode", "https://leetcode.com/problems/edit-distance/", LinkType.FurtherReading),
+            ],
+            prerequisites: [lesson1]);
+
+        var lesson2Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson2.Slug,
+        [
+            "Solve Longest Common Subsequence (LeetCode 1143) by filling the dp[i][j] table by hand for two short strings before writing the loop",
+            "Solve Edit Distance (LeetCode 72), then explain out loud which of the three min(...) terms corresponds to insert, delete, and replace",
+            "Pick one new string-comparison problem you haven't solved before and write its dp[i][j] sentence definition and base cases before attempting the recurrence",
+        ]);
+
+        var module = BuildModule(topicId, "two-dimensional-and-string-dynamic-programming", "Two-Dimensional & String Dynamic Programming",
+            "The jump from 1D to 2D DP tables -- 0/1 knapsack and grid-path DP as concrete two-variable-state examples, then Longest Common Subsequence and Edit Distance as the two-string-index DP family, tied together with LIS to show dimensionality is about state, not array shape.",
+            95, [lesson1, lesson2], sortOrder: 6);
+
+        return (module, [lesson1Checklist, lesson2Checklist]);
+    }
+
+    private static (Module, List<ChecklistSeed>) BuildDsaTriesModule(int topicId)
+    {
+        var lesson1 = BuildLesson(
+            slug: "trie-prefix-tree-fundamentals",
+            title: "Trie (Prefix Tree) Fundamentals",
+            summary: "The tree-of-characters structure that answers prefix queries in time proportional only to the prefix's length -- and the one boolean flag that makes it work correctly.",
+            estimatedMinutes: 45,
+            objectives:
+            [
+                "Explain why a Trie answers prefix queries in O(L) time regardless of how many words are stored, while a hash set can only answer by scanning every stored word",
+                "Describe a TrieNode's structure -- child pointers plus an IsEndOfWord flag -- and explain why that flag is necessary to distinguish a complete stored word from a mere prefix of a longer one",
+                "Implement Insert, Search, and StartsWith from scratch, and explain the single flag check that separates Search from StartsWith",
+                "State the O(L) time complexity of all three core Trie operations, where L is the length of the word/prefix being processed",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    A **hash set** answers "have I seen this exact word before?" in O(1). But ask it a slightly different question -- "does *any* word I've stored start with the prefix `ca`?" -- and it has no good answer. A hash set stores complete, opaque keys; the only way to find out which of them start with `ca` is to pull out every single stored word and check its first two characters yourself. That's `O(n)` (or worse, `O(n * L)` if checking each word's prefix isn't `O(1)`), no matter how the hash set is implemented internally, because hashing a word tells you nothing about its characters individually -- it deliberately destroys that structure.
+
+                    A **Trie** (pronounced "try," from re**trie**val, and also called a **prefix tree**) is a data structure built specifically to preserve that character-by-character structure so prefix questions become cheap. It's a tree where every node represents one character position, every edge represents "the next character," and the path from the root down to any node spells out exactly one prefix. Two different words that share a prefix -- `cat` and `car` -- literally share the same nodes for `c` and `a`, only diverging at the third character.
+
+                    Each node holds two things: a set of child pointers (commonly a `Dictionary<char, TrieNode>` for a general alphabet, or a fixed-size array like `TrieNode?[26]` when the alphabet is known to be lowercase English letters only) -- one slot per possible "next character" -- and a boolean flag, usually called `IsEndOfWord`, marking "a complete stored word ends exactly here." That flag is not optional decoration -- it is the only thing that lets a Trie tell the difference between a node that merely lies *along the path to* a longer word and a node that *is itself* a complete word. If the Trie contains both `cat` and `catalog`, the node reached by walking `c -> a -> t` has children (because `catalog` keeps going), but it must still have `IsEndOfWord = true`, because `cat` is also a complete word in its own right. Without the flag, there would be no way to answer "is `cat` itself a stored word?" as distinct from "is `cat` a prefix of something I've stored?" -- those are two different questions with two different correct answers on the exact same node.
+
+                    That distinction is exactly what separates the three core operations:
+
+                    - **`Insert(word)`** -- starting at the root, walk one character at a time; if a child for the current character doesn't exist yet, create it. After processing the last character, mark that final node's `IsEndOfWord = true`.
+                    - **`Search(word)`** -- walk the exact path for every character in `word`. If any character along the way has no matching child, the word was never stored -- return `false` immediately. If the full path exists, return `true` only if the final node's `IsEndOfWord` is set.
+                    - **`StartsWith(prefix)`** -- walk the exact same way, but return `true` the moment the full path exists at all, completely ignoring `IsEndOfWord`. A path existing at all is all `StartsWith` ever needs -- it isn't claiming `prefix` itself was ever inserted as a complete word.
+
+                    `Search` and `StartsWith` are, character-for-character, the identical walk -- they differ by exactly one check at the very end (do we also require `IsEndOfWord`, or not). All three operations -- `Insert`, `Search`, `StartsWith` -- cost `O(L)`, where `L` is the length of the word or prefix being processed. Critically, that cost has nothing to do with how many other words are stored in the Trie -- inserting the millionth word costs exactly the same as inserting the first, which is the entire reason a Trie exists.
+                    """, 1),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **What a Trie solves that a hash set can't**
+
+                    - Hash set: O(1) exact-word lookup, but "does anything start with X?" requires scanning every stored word -- O(n) or worse
+                    - Trie: prefix queries cost O(L) -- the length of the prefix -- regardless of how many words (n) are stored
+
+                    **Structure**
+
+                    - One node per character position; a root-to-node path spells out a prefix
+                    - Each node: child pointers (`Dictionary<char, TrieNode>`, or a fixed array for a known small alphabet) + a boolean `IsEndOfWord` flag
+                    - The flag is required because a node can simultaneously be "on the path to a longer word" AND "a complete word in its own right" (e.g. `cat` inside `catalog`)
+
+                    **Core operations** (L = length of the word/prefix)
+
+                    - `Insert(word)` -- O(L): walk/create one node per character, mark the final node's `IsEndOfWord = true`
+                    - `Search(word)` -- O(L): walk the exact path; `true` only if the path exists AND `IsEndOfWord` is set at the end
+                    - `StartsWith(prefix)` -- O(L): walk the exact path; `true` if the path exists at all, regardless of `IsEndOfWord`
+                    - `Search` and `StartsWith` are the same walk, differing by exactly one flag check at the end
+                    """, 2),
+                Block(BlockType.CodeSnippet, "Trie: Insert, Search, and StartsWith from Scratch", BodyFormat.PlainText, """
+                    public class TrieNode
+                    {
+                        public Dictionary<char, TrieNode> Children { get; } = new();
+                        public bool IsEndOfWord { get; set; }
+                    }
+
+                    public class Trie
+                    {
+                        private readonly TrieNode _root = new();
+
+                        // O(L): walk/create one node per character in the word.
+                        public void Insert(string word)
+                        {
+                            var node = _root;
+                            foreach (var c in word)
+                            {
+                                if (!node.Children.TryGetValue(c, out var next))
+                                {
+                                    next = new TrieNode();
+                                    node.Children[c] = next;
+                                }
+                                node = next;
+                            }
+                            node.IsEndOfWord = true; // mark: a complete word ends exactly here
+                        }
+
+                        // O(L): true only if the exact path exists AND it was marked as a complete word.
+                        public bool Search(string word)
+                        {
+                            var node = FindNode(word);
+                            return node is not null && node.IsEndOfWord;
+                        }
+
+                        // O(L): true if the exact path exists at all, regardless of IsEndOfWord.
+                        // This is the ONLY difference from Search -- no flag check here.
+                        public bool StartsWith(string prefix)
+                        {
+                            return FindNode(prefix) is not null;
+                        }
+
+                        // Shared walk used by both Search and StartsWith.
+                        private TrieNode? FindNode(string text)
+                        {
+                            var node = _root;
+                            foreach (var c in text)
+                            {
+                                if (!node.Children.TryGetValue(c, out var next))
+                                {
+                                    return null; // path breaks here -- text was never stored, and nothing extends it either
+                                }
+                                node = next;
+                            }
+                            return node;
+                        }
+                    }
+
+                    // Usage:
+                    var trie = new Trie();
+                    trie.Insert("cat");
+                    trie.Insert("catalog");
+
+                    trie.Search("cat");        // true  -- "cat" was explicitly inserted and marked IsEndOfWord
+                    trie.Search("cata");       // false -- path exists (leads toward "catalog") but not marked as a word
+                    trie.StartsWith("cata");   // true  -- the path exists at all; StartsWith doesn't care about the flag
+                    trie.Search("dog");        // false -- the path doesn't even exist
+                    """, 3, language: "csharp"),
+                Block(BlockType.Diagram, "Trie Built From cat, car, card, dog", BodyFormat.AsciiArt, """
+                    Words inserted, in order: "cat", "car", "card", "dog"
+                    (*) marks a node where IsEndOfWord = true
+
+                                       (root)
+                                       /     \\
+                                     c         d
+                                     |         |
+                                     a         o
+                                    / \\        |
+                                   t   r       g (*)  <- "dog"
+                                  (*) (*)
+                                       |
+                                       d (*)  <- "card"
+
+                    Reading root -> c -> a -> t   spells "cat"   (* IsEndOfWord: yes -- "cat" is a stored word)
+                    Reading root -> c -> a -> r   spells "car"   (* IsEndOfWord: yes -- "car" is a stored word)
+                    Reading root -> c -> a -> r -> d  spells "card"  (* IsEndOfWord: yes -- "card" is a stored word)
+                    Reading root -> c -> a          spells "ca"   (no *: "ca" was never inserted as its own word,
+                                                                    it only exists as a shared prefix)
+                    Reading root -> d -> o -> g   spells "dog"   (* IsEndOfWord: yes)
+
+                    Notice "cat" and "car" share the exact same "c" and "a" nodes -- that shared
+                    structure is what makes StartsWith("ca") a 2-step walk instead of a scan
+                    across every stored word.
+                    """, 4),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Choose the child-storage type deliberately: a fixed-size array (`TrieNode?[26]`) is faster and lighter when the alphabet is known and small (lowercase English letters), while `Dictionary<char, TrieNode>` is the safer general-purpose default when the alphabet is large, sparse, or unknown up front (Unicode, mixed case, digits). Don't default to a Trie just because a problem involves strings -- if you only ever need exact-word membership checks and never a prefix-style query, a plain `HashSet<string>` is simpler and just as fast; reach for a Trie specifically when "starts with," "prefix," or "every word beginning with X" enters the problem statement.
+
+                    Always set `IsEndOfWord` on the *final* node reached after the last character of `Insert`, never earlier -- setting it prematurely (e.g., on an intermediate node) silently corrupts `Search` for every longer word that shares that prefix.
+                    """, 5),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    The instant a problem statement contains the words "prefix," "starts with," "autocomplete," or "dictionary of words queried repeatedly," say "Trie" out loud. Then state the complexity claim precisely, because it's the detail interviewers are listening for: "Insert, Search, and StartsWith are all O(L), where L is the length of the word or prefix -- notably independent of how many words are already stored." That last clause is the whole point of the data structure, and naming it explicitly (rather than just "it's fast") is what signals real understanding.
+
+                    If asked to compare a Trie to a hash set, don't just say "Trie is better" -- say precisely where: exact-word lookup is O(1) either way, so a hash set is not worse there; the Trie only wins once prefix-based queries enter the picture, where the hash set degrades to scanning every key.
+                    """, 6),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Forgetting the `IsEndOfWord` flag entirely and treating "the path exists" as equivalent to "this word was stored" -- this silently breaks `Search` the moment two words share a prefix relationship (`cat` and `catalog`): `Search("cat")` would incorrectly return `true` just because the path continues toward `catalog`, which happens to be correct by accident here, but breaks the moment you insert `catalog` *without* ever inserting `cat` itself and then call `Search("cat")` -- it should be `false`, but "path exists" alone can't tell you that.
+
+                    A related bug: implementing `Search` by literally calling `StartsWith` and returning its result -- this compiles and passes any test where no word is a strict prefix of another, then fails silently the moment one is, because it skips the one check (`IsEndOfWord`) that actually distinguishes the two operations.
+                    """, 7),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    A Trie is like a library's card catalog organized by shared call-number prefixes rather than one card per book title: every book whose call number starts with `QA76` sits physically near every other `QA76` book, so "show me everything in the `QA76` section" is a matter of walking to that one shelf, not checking every single book in the building one by one. A hash set, by contrast, is like a library where every book's exact title is thrown into one giant unsorted bin, sorted only by a scrambled fingerprint of its full title -- finding an exact title is still instant, but "everything whose title starts with 'The Great'" means checking every single book in the bin, because the fingerprint threw away any notion of "starts with."
+
+                    The `IsEndOfWord` flag is like a small marker on a subject-divider card in that catalog saying "a complete, checkoutable book actually ends its call number right here" -- without it, you couldn't tell a subject divider (just a signpost toward more specific call numbers) from the shelf slot of an actual, real book.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "A hash set stores 1,000,000 words. You need to answer 'does any stored word start with the prefix pre?' What is the time complexity of answering this with the hash set alone, versus with a Trie built over the same 1,000,000 words?",
+                    "A hash set has no notion of shared prefixes -- the only way to check is to examine every stored word individually, which is O(n) (or worse) regardless of how fast exact-match lookup is. A Trie walks directly to the node representing 'pre' in O(L), where L is the prefix's length (3, here) -- completely independent of how many words (n) are stored.",
+                    [
+                        new QuizOptionSeed("Hash set: O(n), checking every stored word; Trie: O(L), the prefix length, independent of n", true),
+                        new QuizOptionSeed("Both are O(1), since hash sets and Tries both support constant-time prefix checks", false),
+                        new QuizOptionSeed("Hash set: O(L); Trie: O(n), since building the Trie requires scanning every word first", false),
+                        new QuizOptionSeed("Both are O(log n), since both structures are balanced trees internally", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "A Trie contains the word 'cat' and also the word 'catalog'. Walking c -> a -> t from the root lands on a node that has children (because 'catalog' continues past it). Why is a separate IsEndOfWord flag necessary on that node, rather than simply checking whether the node has any children?",
+                    "Having children only tells you the path continues toward a longer stored word (catalog) -- it says nothing about whether the shorter word (cat) ending exactly at this node was itself ever inserted as a complete word. The IsEndOfWord flag is the only signal that distinguishes 'this node is merely along the path to something longer' from 'a complete word ends exactly here,' and both can be true on the same node simultaneously.",
+                    [
+                        new QuizOptionSeed("A node can simultaneously have children AND be a complete word's end -- only the flag distinguishes 'complete word ends here' from 'path continues to a longer word'", true),
+                        new QuizOptionSeed("It reduces the total memory used by the Trie's child pointers", false),
+                        new QuizOptionSeed("Without it, Insert would recurse infinitely on words sharing a prefix", false),
+                        new QuizOptionSeed("It allows the Trie to support words containing digits as well as letters", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Trie | Insert and Search (GeeksforGeeks)", "https://www.geeksforgeeks.org/trie-insert-and-search/", LinkType.FurtherReading),
+                new ReferenceLinkSeed("Implement Trie (Prefix Tree) -- LeetCode", "https://leetcode.com/problems/implement-trie-prefix-tree/", LinkType.FurtherReading),
+            ]);
+
+        var lesson1Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson1.Slug,
+        [
+            "Implement a Trie from scratch with Insert, Search, and StartsWith, then insert only \"catalog\" (not \"cat\") and confirm Search(\"cat\") returns false while StartsWith(\"cat\") returns true",
+            "Trace by hand how \"cat\", \"car\", and \"card\" share nodes when inserted into the same Trie, marking on paper exactly which nodes have IsEndOfWord set",
+            "Write out, in one sentence, why a hash set's O(1) exact-lookup speed doesn't help it answer prefix questions the way a Trie's O(L) walk does",
+        ]);
+
+        var lesson2 = BuildLesson(
+            slug: "trie-applications-autocomplete-and-word-search",
+            title: "Trie Applications: Autocomplete & Word Search",
+            summary: "Using a Trie to power autocomplete in O(L) plus a DFS, and combining a Trie with backtracking to solve grid-based Word Search II by pruning entire shared-prefix branches in a single pass.",
+            estimatedMinutes: 45,
+            objectives:
+            [
+                "Apply a Trie to autocomplete: walk to a prefix node in O(L), then DFS below it to collect every complete word reachable from that point",
+                "Explain why a Trie beats a hash set specifically for 'find everything starting with X' queries, where a hash set offers no better option than scanning every key",
+                "Combine a Trie with backtracking to solve the Word Search II pattern -- finding every dictionary word traceable through adjacent grid cells",
+                "Explain precisely why building one Trie over all dictionary words and backtracking through the grid once beats backtracking through the grid independently, once per word",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    **Autocomplete / typeahead** is the most natural Trie application, and it follows directly from the fundamentals lesson: given a prefix the user has typed so far, walk down to the node representing that prefix -- `O(L)`, where `L` is the prefix's length -- and then run a DFS over every node reachable below that single point, collecting a full word every time a node with `IsEndOfWord = true` is encountered. This is precisely where a Trie earns its keep over a hash set: a hash set gives you no efficient way to ask "everything starting with `X`" -- the only option is scanning every stored key and checking each one's prefix. A Trie, by contrast, has already organized every word sharing a prefix underneath one single node, so "everything starting with `X`" is just "everything below this one node" -- work proportional to what's actually found, not to how many words exist elsewhere in the Trie.
+
+                    A second, more advanced application combines a Trie with **backtracking** (the choose/explore/un-choose template from the earlier heaps-and-backtracking lesson) to solve grid-based word search problems -- the classic **"Word Search II"** pattern: given a grid of letters and a dictionary of words, find every dictionary word that can be traced through a path of adjacent grid cells (up/down/left/right, never reusing the same cell twice within one word).
+
+                    The naive approach is to backtrack through the grid **once per dictionary word**, checking whether that specific word exists as a path. This works, but it's wasteful the moment multiple dictionary words share a common prefix: searching for `"cat"`, `"car"`, and `"card"` independently means re-exploring the *exact same* `c -> a` grid path three separate times, only to discover the same divergence (or the same dead end) three separate times.
+
+                    The trick is to build a **single Trie of all the dictionary words first**, then backtrack through the grid **once**, walking the Trie **in lockstep** with the grid path. At each grid cell, instead of asking "does this match the next letter of word `i`?", the search asks "does the current Trie node have a child for this grid cell's letter?" If yes, descend into that Trie node and keep exploring in all four directions; if a Trie node's `IsEndOfWord` is true, a complete dictionary word has just been found along this exact path. If no -- the current grid letter has no matching child in the current Trie node -- the **entire branch of the backtracking search stops immediately**, because no dictionary word still under consideration can possibly continue with that letter. That one pruning check is doing the work of ruling out every remaining word that shared this prefix, in one step, in one grid traversal -- instead of re-discovering the identical dead end separately for every one of those words under the per-word approach.
+
+                    As with any grid backtracking problem, cells must be marked visited before recursing into neighbors (so a word can't reuse the same cell twice) and unmarked immediately after backtracking out of that cell (so a *different* path, starting elsewhere or heading a different direction, can still use it) -- the same "choose, explore, un-choose" discipline covered for backtracking generally, applied here to grid cells specifically.
+                    """, 1),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Autocomplete (Trie + DFS)**
+
+                    - Walk to the node representing the typed prefix: `O(L)`, `L` = prefix length
+                    - DFS every node below that point, collecting a word whenever `IsEndOfWord` is true: cost proportional to the size of the matching subtree, not the whole Trie
+                    - A hash set has no equivalent -- "everything starting with X" requires scanning every stored key
+
+                    **Word Search II (Trie + backtracking)**
+
+                    - Build ONE Trie from the entire dictionary up front -- not one search per word
+                    - Backtrack through the grid once; at each cell, check whether the *current Trie node* has a child for that cell's letter
+                    - No matching child -> stop that branch immediately -- prunes every remaining word sharing that prefix in a single check, instead of re-discovering the same dead end once per word
+                    - `IsEndOfWord` true at the current Trie node -> a complete dictionary word was found along this path
+                    - Mark the grid cell visited before recursing into neighbors, unmark it immediately after backtracking out -- standard grid-backtracking cell hygiene
+                    """, 2),
+                Block(BlockType.CodeSnippet, "Autocomplete via DFS and Word Search II via Trie + Backtracking", BodyFormat.PlainText, """
+                    // ---------- Autocomplete: walk to the prefix node, then DFS below it ----------
+                    public class AutocompleteTrie
+                    {
+                        private readonly TrieNode _root = new();
+
+                        public void Insert(string word)
+                        {
+                            var node = _root;
+                            foreach (var c in word)
+                            {
+                                if (!node.Children.TryGetValue(c, out var next))
+                                {
+                                    next = new TrieNode();
+                                    node.Children[c] = next;
+                                }
+                                node = next;
+                            }
+                            node.IsEndOfWord = true;
+                        }
+
+                        // O(L) to reach the prefix node, then O(size of the matching subtree) to collect results.
+                        public List<string> WordsWithPrefix(string prefix)
+                        {
+                            var results = new List<string>();
+                            var node = _root;
+
+                            foreach (var c in prefix)
+                            {
+                                if (!node.Children.TryGetValue(c, out var next))
+                                {
+                                    return results; // no stored word has this prefix at all
+                                }
+                                node = next;
+                            }
+
+                            Collect(node, prefix, results);
+                            return results;
+                        }
+
+                        private void Collect(TrieNode node, string prefixSoFar, List<string> results)
+                        {
+                            if (node.IsEndOfWord)
+                            {
+                                results.Add(prefixSoFar);
+                            }
+
+                            foreach (var (c, child) in node.Children)
+                            {
+                                Collect(child, prefixSoFar + c, results);
+                            }
+                        }
+                    }
+
+                    // ---------- Word Search II: build one Trie, backtrack the grid once ----------
+                    public class WordSearchTrieNode
+                    {
+                        public Dictionary<char, WordSearchTrieNode> Children { get; } = new();
+                        public string? Word; // non-null exactly at nodes where a dictionary word ends
+                    }
+
+                    public IList<string> FindWords(char[][] board, string[] words)
+                    {
+                        var root = new WordSearchTrieNode();
+                        foreach (var word in words)
+                        {
+                            var node = root;
+                            foreach (var c in word)
+                            {
+                                if (!node.Children.TryGetValue(c, out var next))
+                                {
+                                    next = new WordSearchTrieNode();
+                                    node.Children[c] = next;
+                                }
+                                node = next;
+                            }
+                            node.Word = word;
+                        }
+
+                        var found = new List<string>();
+                        var rows = board.Length;
+                        var cols = board[0].Length;
+
+                        void Backtrack(int r, int c, WordSearchTrieNode node)
+                        {
+                            if (r < 0 || r >= rows || c < 0 || c >= cols || board[r][c] == '#') return;
+
+                            var letter = board[r][c];
+                            if (!node.Children.TryGetValue(letter, out var next))
+                            {
+                                return; // no dictionary word still in play can continue with this letter -- stop now
+                            }
+
+                            if (next.Word is not null)
+                            {
+                                found.Add(next.Word);
+                                next.Word = null; // avoid re-adding the same word via a different overlapping path
+                            }
+
+                            board[r][c] = '#'; // choose: mark this cell visited
+                            Backtrack(r + 1, c, next);
+                            Backtrack(r - 1, c, next);
+                            Backtrack(r, c + 1, next);
+                            Backtrack(r, c - 1, next);
+                            board[r][c] = letter; // un-choose: unmark on backtrack
+                        }
+
+                        for (var r = 0; r < rows; r++)
+                        {
+                            for (var c = 0; c < cols; c++)
+                            {
+                                Backtrack(r, c, root);
+                            }
+                        }
+
+                        return found;
+                    }
+                    """, 3, language: "csharp"),
+                Block(BlockType.Diagram, "Trie-Guided Grid Backtracking Pruning a Shared Prefix", BodyFormat.StructuredSteps, """
+                    [{"label":"Dictionary Trie holds 'cat', 'car', and 'cap', all sharing the prefix 'ca'","note":"per-word backtracking would explore the grid path for c then a THREE separate times, once per word, redoing identical work"},{"label":"Combined approach: backtrack the grid once, walking the Trie alongside it","note":"grid cell 'c' descends into the Trie root's child 'c'; grid cell 'a' descends into that node's child 'a' -- one Trie node now stands in for all three still-possible words at once"},{"label":"From the 'ca' Trie node, the next grid cell in one direction is 't'","note":"the 'ca' node has children 't', 'r', and 'p' -- 't' matches, so descend further; reaching Word != null here means 'cat' was found"},{"label":"From the same 'ca' Trie node, a different grid direction leads to 'z'","note":"the 'ca' node has no child 'z' -- this branch stops immediately in O(1), because no dictionary word can possibly continue as 'caz...', pruning it without ever exploring further"}]
+                    """, 4),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    For Word Search II, always build the Trie **once**, from the entire dictionary, before touching the grid -- never backtrack the grid once per word. The whole performance win comes from letting many words that share a prefix be pruned together in a single traversal, and that only happens if the Trie represents every remaining candidate word simultaneously.
+
+                    Delete a word from the Trie (set `Word = null`, or track a found-count) the moment it's found, rather than leaving it in place -- otherwise a word reachable via more than one overlapping grid path gets added to the results multiple times. Optionally, prune Trie nodes that have no children left and are no longer a word's end, so the backtracking search's `if (!node.Children.TryGetValue(...))` check gets cheaper as words are found -- a nice-to-have, not a correctness requirement.
+                    """, 5),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    When a problem says "find every word from a dictionary that can be formed by a path through a grid," say "Trie plus backtracking" immediately, and explain the pruning argument in one sentence: "instead of backtracking the grid once per word, I'll build one Trie of every word first, so the moment a grid path stops matching any child in the current Trie node, that entire branch is ruled out for every remaining word sharing that prefix, not just one." That sentence is what proves you understand *why* the combination beats per-word search, not just that it's the "known trick."
+
+                    For autocomplete-style questions, be precise about where the cost lives: reaching the prefix node is O(L), but collecting matches is proportional to how many matches exist (the size of the matching subtree) -- not to the total number of words stored in the whole Trie.
+                    """, 6),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Backtracking the grid once per dictionary word instead of building a single Trie up front -- this still produces a correct answer, but throws away the entire point of combining a Trie with backtracking, since it re-explores the same shared-prefix grid paths once per word instead of pruning them together.
+
+                    Forgetting to unmark a visited grid cell after backtracking out of it (`board[r][c] = letter` after the recursive calls) -- without it, every cell used by one found word becomes permanently unusable for every other word's path, silently causing valid words to be missed.
+
+                    Not clearing a Trie node's `Word` field (or otherwise tracking that a word was already found) after adding it to the results -- if the same word is reachable via two different overlapping grid paths, it gets added to the results twice.
+                    """, 7),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    Autocomplete is like a librarian who, the moment you say "I'm looking for something starting with 'Har'," walks directly to the "Har" shelf section and then only needs to glance at that one section to hand you every matching title -- instead of walking past every single book in the entire library checking each one's first three letters.
+
+                    Trie-guided grid backtracking is like a group of friends looking for several different trailheads in a forest that all share their first few turns -- instead of sending one hiker down the shared trail segment for every single trailhead separately (re-checking the same fork in the path three or four times), the group walks the shared segment together once, and only splits up at the exact fork where their remaining destinations actually diverge. The moment a path leads somewhere none of the remaining destinations could possibly be, the whole group turns back together, instead of each hiker discovering that dead end on their own separate trip.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "In the Word Search II pattern, a grid-backtracking path reaches a cell whose letter has no matching child in the current Trie node. What should happen, and why does this matter more here than it would in a plain single-word grid search?",
+                    "That branch should stop immediately -- no dictionary word still under consideration can possibly continue with that letter. Because the Trie node at this point represents every remaining candidate word simultaneously, this one check prunes all of them together in a single traversal, instead of separately re-discovering the same dead end once per word the way independent per-word backtracking would.",
+                    [
+                        new QuizOptionSeed("Stop that branch immediately -- the single check prunes every remaining word sharing that prefix at once, instead of rediscovering the dead end per word", true),
+                        new QuizOptionSeed("Continue exploring anyway, since some other word in the dictionary might still match further along", false),
+                        new QuizOptionSeed("Restart the Trie walk from the root at the current grid cell", false),
+                        new QuizOptionSeed("Only stop if every word in the dictionary has been fully checked already", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "Autocomplete needs to return every stored word starting with a prefix the user typed. Why can a Trie answer this efficiently while a plain HashSet<string> of the same words cannot?",
+                    "A Trie walks to the single node representing the prefix in O(L), then only has to DFS the subtree below that one node to collect matches -- cost proportional to what's actually found. A hash set has no notion of 'everything below a prefix': the only way to find matches is to scan every stored key and individually check whether it starts with the prefix, costing time proportional to the total number of stored words regardless of how many actually match.",
+                    [
+                        new QuizOptionSeed("The Trie walks directly to the prefix's node and only searches the subtree below it; a hash set must scan every stored key to check each one's prefix", true),
+                        new QuizOptionSeed("Hash sets cannot store strings that share a common prefix", false),
+                        new QuizOptionSeed("A Trie sorts its words alphabetically, which is what a hash set is missing", false),
+                        new QuizOptionSeed("HashSet<string> only supports numeric keys internally, so string prefix checks always fail", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Word Search II -- LeetCode", "https://leetcode.com/problems/word-search-ii/", LinkType.FurtherReading),
+                new ReferenceLinkSeed("Design Add and Search Words Data Structure -- LeetCode", "https://leetcode.com/problems/design-add-and-search-words-data-structure/", LinkType.FurtherReading),
+            ],
+            prerequisites: [lesson1]);
+
+        var lesson2Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson2.Slug,
+        [
+            "Implement WordsWithPrefix (autocomplete) using a Trie: walk to the prefix node in O(L), then DFS/collect every complete word reachable below it",
+            "Implement Word Search II end-to-end: build a single Trie from the dictionary, backtrack through the grid while walking the Trie in lockstep, marking and unmarking visited cells",
+            "Explain out loud, in one or two sentences, why building the Trie once and backtracking the grid once beats backtracking the grid separately per dictionary word",
+        ]);
+
+        var module = BuildModule(topicId, "tries-prefix-trees-and-applications", "Tries (Prefix Trees) & Applications",
+            "The Trie data structure for O(L) prefix queries -- Insert, Search, and StartsWith from scratch -- followed by combining Tries with DFS for autocomplete and with backtracking to solve grid-based Word Search II by pruning shared prefixes in a single traversal.",
+            90, [lesson1, lesson2], sortOrder: 7);
 
         return (module, [lesson1Checklist, lesson2Checklist]);
     }
