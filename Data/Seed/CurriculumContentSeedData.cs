@@ -38,6 +38,8 @@ public static class CurriculumContentSeedData
             BuildDotNetProductionReadinessModule(topicIdBySlug["dotnet"]),
             BuildDotNetScalingAndResilienceModule(topicIdBySlug["dotnet"]),
             BuildDotNetIdentityAndMessagingModule(topicIdBySlug["dotnet"]),
+            BuildDotNetApiDesignAndTrafficControlModule(topicIdBySlug["dotnet"]),
+            BuildDotNetDistributedCommunicationAndObservabilityModule(topicIdBySlug["dotnet"]),
             BuildDsaModule(topicIdBySlug["dsa"]),
             BuildDsaGraphsModule(topicIdBySlug["dsa"]),
             BuildDsaLinkedListsAndHeapsModule(topicIdBySlug["dsa"]),
@@ -7313,6 +7315,808 @@ public static class CurriculumContentSeedData
         var module = BuildModule(topicId, "aspnet-core-identity-and-messaging", "Identity, OAuth2 & Distributed Messaging",
             "Going beyond raw JWT issuance into ASP.NET Core Identity's full user-management framework and the OAuth2/OpenID Connect flows behind 'Sign in with' buttons, then reaching past BackgroundService into real message brokers and persistent job schedulers.",
             90, [lesson1, lesson2], sortOrder: 4);
+
+        return (module, [lesson1Checklist, lesson2Checklist]);
+    }
+
+    private static (Module, List<ChecklistSeed>) BuildDotNetApiDesignAndTrafficControlModule(int topicId)
+    {
+        var lesson1 = BuildLesson(
+            slug: "minimal-apis-vs-controllers-versioning-and-validation",
+            title: "Minimal APIs vs. Controllers, Versioning & Validation",
+            summary: "When Minimal APIs are the right call versus when [ApiController] Controllers still earn their keep, organizing endpoints with MapGroup, the real tradeoffs between URL-segment/query-string/header API versioning, and why nullable reference types are not a substitute for real request validation.",
+            estimatedMinutes: 45,
+            objectives:
+            [
+                "Decide when Minimal APIs are the right fit versus when Controllers with [ApiController] still make sense, based on model binding complexity, filter/convention needs, and surface-area size",
+                "Organize minimal API endpoints into logical groups with MapGroup, including shared prefixes, tags, and filters",
+                "Compare URL-segment, query-string, and header-based API versioning strategies and articulate the real tradeoff of each",
+                "Apply request validation with DataAnnotations and/or FluentValidation, and explain why nullable reference type warnings are not real runtime validation",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    Minimal APIs and Controllers are not "the new way" and "the old way" -- they're two different tradeoffs, and picking one is a real design decision, not a formality. Minimal APIs (`app.MapGet`, `app.MapPost`, ...) shine when an endpoint's logic is small, the request/response shapes are simple, and you don't need MVC's heavier conventions -- they start fast, have less ceremony, and make the route-to-handler mapping obvious at a glance. Controllers (`[ApiController]`, inheriting `ControllerBase`) still earn their keep once a surface area gets large and convention-heavy: automatic model binding from complex nested objects, a shared pipeline of action filters and result filters applied consistently across dozens of actions, `[FromForm]`/multipart file upload handling, and content negotiation via `[Produces]` are all things Controllers do out of the box that a large collection of Minimal API lambdas would otherwise have to reinvent as ad hoc filters. Neither is "correct" -- a small, focused service is usually clearer as Minimal APIs; a large, established REST surface with heavy cross-cutting conventions is usually clearer as Controllers. Many real codebases mix both.
+
+                    Minimal APIs also give you `MapGroup`, which exists specifically so a large collection of endpoint lambdas doesn't turn into an unorganized wall of `app.MapGet`/`app.MapPost` calls at the bottom of `Program.cs`. `app.MapGroup("/products")` returns a `RouteGroupBuilder` that acts as a prefix for everything mapped on it, and anything applied to the group -- `.WithTags(...)`, `.RequireAuthorization()`, `.AddEndpointFilter(...)`, `.CacheOutput(...)` -- cascades to every endpoint registered under it, exactly the way applying an attribute or filter at the Controller level cascades to every action inside it. Groups can nest, so a versioned prefix (`/v1/products`) and a policy-scoped prefix (`/admin`) can compose cleanly instead of every individual mapping repeating the same route prefix and the same `.RequireAuthorization()` call by hand.
+
+                    API versioning has three common strategies, and the tradeoff is never "which is technically correct" -- it's how visible and how cache-friendly you need version to be. **URL segment** (`/v1/products`, `/v2/products`) is the most visible: it shows up in every log line, every browser tab, and every CDN/proxy cache key without any extra configuration, but it means the version is baked into the URL itself, so a breaking change is a URL clients must actually go update. **Query string** (`/products?api-version=2.0`) keeps the base path stable and is easy to bolt on later, but it's easy for a client to simply omit it and silently get whatever the server treats as default -- and caching infrastructure has to be told to include the query string in its cache key or it will happily serve the wrong version to the wrong caller. **Header-based** (`Api-Version: 2.0`) keeps URLs version-free entirely, which some API designers prefer philosophically, but it's the least visible (you can't see the version by glancing at a URL or a log line) and some proxies, CDNs, and browser dev tools don't surface or forward custom headers by default, which makes it harder to debug and to cache correctly.
+
+                    Validation is the part it's easy to under-invest in, because the compiler *looks* like it's already doing the job. `DataAnnotations` (`[Required]`, `[Range]`, `[StringLength]`) on a Controller action's parameter type get enforced automatically -- `[ApiController]` wires up automatic `ModelState` validation and short-circuits to a 400 before your action body ever runs. Minimal APIs do **not** do this automatically: a DataAnnotations-decorated request DTO bound to a minimal endpoint is bound, but nothing checks those attributes unless you call `TryValidateModel` yourself or add a validation library/filter. **FluentValidation** is the common choice for anything beyond simple attribute checks -- cross-field rules, conditional rules, rules that depend on injected services -- expressed as ordinary C# in an `AbstractValidator<T>` instead of attributes bolted onto a DTO. Crucially, none of this is what nullable reference types (`string` vs `string?`) give you: NRT annotations are a **compile-time-only** static analysis tool that helps *your own code* avoid null-dereference bugs -- they emit warnings, not runtime checks, and they say nothing whatsoever about what a client's actual HTTP request body contains. A non-nullable `string Name` property on a request DTO can still deserialize to an empty string, or JSON can supply `null` for it anyway (the deserializer doesn't consult NRT metadata by default) -- only real validation logic that runs against the actual deserialized value, at request time, catches that.
+                    """, 1),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Minimal APIs vs. Controllers**
+
+                    - Minimal APIs: small surface area, simple bodies, less ceremony -- `app.MapGet/MapPost/MapPut/MapDelete`
+                    - Controllers (`[ApiController]` + `ControllerBase`): large convention-heavy surfaces, complex model binding, shared filters, automatic ModelState validation
+                    - Mixing both in one app is normal and often the right call
+
+                    **Route groups**
+
+                    - `var products = app.MapGroup("/products").WithTags("Products");`
+                    - Anything applied to the group cascades: `.RequireAuthorization()`, `.AddEndpointFilter(...)`, `.CacheOutput(...)`
+                    - Groups can nest: `app.MapGroup("/v1").MapGroup("/products")`
+
+                    **Versioning strategies**
+
+                    - URL segment (`/v1/products`) -- most visible, most cache-friendly, requires clients to update URLs on breaking changes
+                    - Query string (`?api-version=2.0`) -- easy to add, easy to omit/silently default, caches must key on the query string
+                    - Header (`Api-Version: 2.0`) -- version-free URLs, least visible, some proxies/CDNs strip custom headers by default
+
+                    **Validation**
+
+                    - `[ApiController]` Controllers auto-validate `DataAnnotations` via `ModelState` -- Minimal APIs do not, by default
+                    - FluentValidation: `AbstractValidator<T>`, `RuleFor(x => x.Prop).NotEmpty()`, `services.AddValidatorsFromAssemblyContaining<T>()`
+                    - `result.ToDictionary()` -> `Results.ValidationProblem(errors)` for a Minimal API 400 response
+                    - Nullable reference types are compile-time-only static analysis -- never a runtime guarantee about request content
+                    """, 2),
+                Block(BlockType.CodeSnippet, "Route Groups, Versioned Endpoints & Request Validation", BodyFormat.PlainText, """
+                    // Reusable endpoint filter: runs a FluentValidation validator against the
+                    // matched request DTO before the handler body executes. Minimal APIs need
+                    // this explicitly -- there is no automatic ModelState step like [ApiController].
+                    public static class ValidationFilterExtensions
+                    {
+                        public static RouteHandlerBuilder WithValidation<TRequest>(this RouteHandlerBuilder builder) =>
+                            builder.AddEndpointFilter(async (context, next) =>
+                            {
+                                var argument = context.Arguments.OfType<TRequest>().FirstOrDefault();
+                                if (argument is not null)
+                                {
+                                    var validator = context.HttpContext.RequestServices.GetRequiredService<IValidator<TRequest>>();
+                                    var result = await validator.ValidateAsync(argument);
+                                    if (!result.IsValid)
+                                        return Results.ValidationProblem(result.ToDictionary());
+                                }
+
+                                return await next(context);
+                            });
+                    }
+
+                    public record CreateProductRequest(string Name, decimal Price);
+
+                    public class CreateProductRequestValidator : AbstractValidator<CreateProductRequest>
+                    {
+                        public CreateProductRequestValidator()
+                        {
+                            RuleFor(x => x.Name).NotEmpty().MaximumLength(200);
+                            RuleFor(x => x.Price).GreaterThan(0);
+                        }
+                    }
+
+                    // Program.cs
+                    builder.Services.AddValidatorsFromAssemblyContaining<CreateProductRequestValidator>();
+
+                    // Route groups, one per URL-segment version -- each is just a prefix that
+                    // everything mapped underneath inherits, including tags and future filters.
+                    var v1 = app.MapGroup("/v1/products").WithTags("Products v1");
+                    var v2 = app.MapGroup("/v2/products").WithTags("Products v2");
+
+                    v1.MapGet("/{id:int}", async (int id, ProductDbContext db) =>
+                        await db.Products.FindAsync(id) is { } product
+                            ? Results.Ok(new ProductResponseV1(product.Id, product.Name))
+                            : Results.NotFound());
+
+                    // v2 adds a field v1 clients never asked for -- a real, concrete reason to
+                    // version instead of silently changing v1's response shape underneath them.
+                    v2.MapGet("/{id:int}", async (int id, ProductDbContext db) =>
+                        await db.Products.FindAsync(id) is { } product
+                            ? Results.Ok(new ProductResponseV2(product.Id, product.Name, product.CategoryName))
+                            : Results.NotFound());
+
+                    v1.MapPost("/", async (CreateProductRequest request, ProductDbContext db) =>
+                    {
+                        var product = new Product { Name = request.Name, Price = request.Price };
+                        db.Products.Add(product);
+                        await db.SaveChangesAsync();
+                        return Results.Created($"/v1/products/{product.Id}", product);
+                    })
+                    .WithValidation<CreateProductRequest>(); // never reachable without this -- Minimal APIs skip DataAnnotations/ModelState entirely
+
+                    // Controller comparison: [ApiController] auto-validates DataAnnotations via
+                    // ModelState BEFORE the action body ever runs -- no manual check needed here.
+                    [ApiController]
+                    [Route("v1/legacy-products")]
+                    public class LegacyProductsController(ProductDbContext db) : ControllerBase
+                    {
+                        [HttpPost]
+                        public async Task<IActionResult> Create(CreateLegacyProductRequest request)
+                        {
+                            var product = new Product { Name = request.Name, Price = request.Price };
+                            db.Products.Add(product);
+                            await db.SaveChangesAsync();
+                            return CreatedAtAction(nameof(Create), new { id = product.Id }, product);
+                        }
+                    }
+
+                    public class CreateLegacyProductRequest
+                    {
+                        [Required, StringLength(200, MinimumLength = 1)]
+                        public string Name { get; set; } = string.Empty;
+
+                        [Range(0.01, 100000)]
+                        public decimal Price { get; set; }
+                    }
+                    """, 3, language: "csharp"),
+                Block(BlockType.Diagram, "API Versioning Strategies Compared", BodyFormat.AsciiArt, """
+                    URL segment (/v1/products)      Query string (?api-version=2.0)     Header (Api-Version: 2.0)
+                    ---------------------------     ---------------------------------   -----------------------------
+                    Visible in every log line,      Base path stays stable; easy to     Keeps URLs version-free
+                      URL, and cache key               add without changing routes         entirely
+                    Trivial to organize with        Easy for a client to omit and       Least visible -- can't tell
+                      MapGroup per version              silently get the "default"          the version from a URL
+                    Breaking change = clients        Cache must be told to key on the    Some proxies/CDNs strip
+                      must update the URLs they         query string, or it may serve       custom headers by default
+                      call                              the wrong version                   -- harder to cache safely
+                    Best for: public APIs where      Best for: quick internal toggles,   Best for: teams that value
+                      visibility & caching matter       optional/opt-in previews            version-free URLs most
+                    """, 4),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Default to Minimal APIs for a small, focused set of endpoints, and reach for Controllers deliberately once you actually need what they provide -- heavy model binding, a large shared filter pipeline, or dozens of conventionally-structured actions -- rather than switching styles based on habit alone. Use `MapGroup` from the start once you have more than a handful of related endpoints; retrofitting a shared prefix, shared auth requirement, or shared filter across a dozen already-scattered `app.MapX` calls is far more error-prone than starting with a group.
+
+                    Pick a versioning strategy before you ship v1, not after a breaking change is already forced on existing clients -- URL segment is the safest default for a public API precisely because it's the most visible and the easiest to reason about in logs, caches, and documentation. Validate every request at the boundary with real logic (DataAnnotations for simple attribute checks, FluentValidation for anything conditional or cross-field) and never treat nullable reference type warnings as a substitute -- they catch bugs in your own code at compile time, not malformed input arriving over the wire at runtime.
+                    """, 5),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    If asked "when would you use Controllers over Minimal APIs," don't say "Controllers are legacy" -- name the concrete capability gap: automatic ModelState validation from DataAnnotations, richer model binding for complex nested objects, and a mature shared filter pipeline are things Controllers give you for free that a large collection of Minimal API lambdas would have to reimplement by hand as the surface area grows. That's the actual tradeoff, not old-vs-new.
+
+                    For versioning, be ready to justify a specific choice rather than list all three neutrally: URL segment is usually the strongest default for a public API because it's visible in logs and cache keys without extra configuration, while query-string and header-based versioning trade that visibility for either convenience (easy to bolt on) or aesthetics (version-free URLs) respectively. For validation, the detail interviewers listen for is precisely the one this lesson keeps returning to: nullable reference types are a compile-time tool for your own code, not a runtime check on what a client actually sent -- conflating the two is a real, common gap.
+                    """, 6),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Assuming a Minimal API endpoint automatically enforces `[Required]`/`[Range]` DataAnnotations on its request DTO the same way an `[ApiController]` action does -- it doesn't, and the request reaches the handler with invalid data unless you add validation yourself (`TryValidateModel`, a FluentValidation call, or an endpoint filter). Treating "the property is non-nullable, so the compiler already checked it" as validation -- NRT annotations are compile-time-only static analysis and are not consulted by the JSON deserializer or enforced against the actual bytes a client sent over the wire.
+
+                    Also common: picking query-string or header-based versioning for convenience and then never actually documenting or enforcing a default, so clients that omit the version parameter silently get whichever version the server happens to treat as current -- a change to that default becomes an invisible breaking change for every client that never explicitly opted into a version.
+                    """, 7),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    Minimal APIs versus Controllers is like a food truck versus a full restaurant kitchen: a food truck (Minimal APIs) is fast to set up and perfect for a short, focused menu, but once the menu grows to fifty items with shared prep stations, consistent plating rules, and a dozen cooks who all need the same procedures applied automatically, you want the restaurant's kitchen (Controllers) with its established stations and conventions instead of forty separate food trucks trying to coordinate.
+
+                    Route groups are like organizing that menu into sections with a shared kitchen ticket header -- every item under "Appetizers" automatically gets stamped the same way, instead of writing the same instructions on every single ticket by hand. Versioning strategy is choosing how visibly you label a recipe change: a URL segment is like renaming the dish on the printed menu (everyone sees "v2" immediately), a query string is like a small note a regular has to remember to ask for, and a header is like a secret handshake only the kitchen and a few insiders know about. And skipping real validation because "the type isn't nullable" is like trusting a customer's order slip is correct just because the order form has a blank labeled "required" -- a customer can still hand you a blank slip, and nothing about the label itself stops that from happening.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "A Minimal API endpoint binds requests to a DTO decorated with [Required] and [Range] DataAnnotations attributes -- the same attributes an existing [ApiController] Controller action uses successfully elsewhere in the app. A client posts a request that violates those attributes. What happens?",
+                    "Minimal APIs do not automatically run ModelState/DataAnnotations validation the way [ApiController] Controllers do. The invalid request reaches the handler unchanged unless validation is added explicitly, e.g. via TryValidateModel, a FluentValidation call, or an endpoint filter.",
+                    [
+                        new QuizOptionSeed("The invalid request reaches the handler as-is, because Minimal APIs don't automatically enforce DataAnnotations/ModelState validation the way [ApiController] Controllers do", true),
+                        new QuizOptionSeed("ASP.NET Core automatically returns the same 400 ValidationProblem response that [ApiController] Controllers return", false),
+                        new QuizOptionSeed("The request is rejected at runtime by the nullable reference type checks on the DTO's properties", false),
+                        new QuizOptionSeed("The app fails to start, because DataAnnotations attributes require an [ApiController]-decorated type to be used", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "Which statement correctly matches an API versioning strategy with its most notable real tradeoff?",
+                    "URL-segment versioning is the most visible option -- it shows up in every log line, URL, and cache key -- but it means clients must literally update the URLs they call whenever a breaking version ships. Header-based versioning is actually the LEAST cache-friendly of the three in practice, since many proxies and CDNs don't forward custom headers by default.",
+                    [
+                        new QuizOptionSeed("URL-segment versioning is the most visible in logs and cache keys, but requires clients to update the URLs they call on every breaking change", true),
+                        new QuizOptionSeed("Header-based versioning is the most cache-friendly of the three, because proxies and CDNs always forward custom headers by default", false),
+                        new QuizOptionSeed("Query-string versioning cannot be implemented in ASP.NET Core without a third-party NuGet package", false),
+                        new QuizOptionSeed("URL-segment versioning is incompatible with organizing endpoints via MapGroup", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Minimal APIs overview", "https://learn.microsoft.com/en-us/aspnet/core/fundamentals/minimal-apis", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("Model validation in ASP.NET Core", "https://learn.microsoft.com/en-us/aspnet/core/mvc/models/validation", LinkType.OfficialDocs),
+            ]);
+
+        var lesson1Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson1.Slug,
+        [
+            "Build two MapGroup-organized versions (/v1 and /v2) of the same resource returning different response shapes, and verify both work side by side",
+            "Add a FluentValidation validator and a reusable endpoint filter to a Minimal API POST endpoint, then confirm an invalid request actually gets rejected with a 400 before your handler logic runs",
+            "Write a Controller action with [ApiController] and DataAnnotations, then intentionally submit invalid data and observe the automatic ModelState-driven 400 -- and explain out loud why the same attributes on a Minimal API DTO would not have been enforced",
+        ]);
+
+        var lesson2 = BuildLesson(
+            slug: "rate-limiting-and-output-caching",
+            title: "Rate Limiting & Output Caching",
+            summary: "ASP.NET Core's built-in rate limiting middleware and its four policy kinds (fixed window, sliding window, token bucket, concurrency), and the Output Caching middleware -- a fundamentally different tool from IMemoryCache/IDistributedCache that caches the entire HTTP response, invalidated by tags, and dangerous to apply to personalized responses without careful vary-by configuration.",
+            estimatedMinutes: 45,
+            objectives:
+            [
+                "Configure ASP.NET Core's built-in rate limiting middleware (AddRateLimiter) and choose the correct policy -- fixed window, sliding window, token bucket, or concurrency limiter -- for a given traffic-shaping goal",
+                "Apply the Output Caching middleware (AddOutputCache) to cache full HTTP responses and explain how it fundamentally differs from manually caching data with IMemoryCache/IDistributedCache",
+                "Invalidate cached output correctly using cache tags rather than relying solely on a fixed expiration window",
+                "Recognize when NOT to apply output caching -- personalized or authenticated responses without a deliberate vary-by configuration",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    ASP.NET Core's built-in rate limiting middleware (`AddRateLimiter`) ships four policy kinds, and picking the right one is about matching the shape of the problem, not just picking whichever is simplest. A **fixed window** limiter is the simplest: a hard cap of N requests per resetting time bucket (e.g. 100 per minute) -- easy to reason about, but a client can burst up to 2x the intended rate right at the boundary between two windows (99 requests in the last second of one window, 99 more in the first second of the next). A **sliding window** limiter divides the window into segments and tracks requests across the boundary, smoothing out exactly that boundary-burst problem at the cost of slightly more bookkeeping. A **token bucket** limiter refills tokens steadily over time up to a capped bucket size, and a client can spend a saved-up bucket all at once -- it's the right choice when traffic is legitimately bursty but should average out fairly over time, rather than being smooth request-by-request. A **concurrency limiter** is different in kind from the other three: it caps how many requests are in flight *simultaneously*, not how many arrive per second, which makes it the right tool for protecting an expensive downstream resource (a slow report generator, a third-party API with a small connection pool) regardless of how spread out over time the requests are.
+
+                    The Output Caching middleware (`AddOutputCache`) is a genuinely different tool from `IMemoryCache`/`IDistributedCache`, covered in the earlier "Background Services, Caching & Health Checks" lesson -- not a fancier version of the same idea. `IMemoryCache`/`IDistributedCache` caching is something *your own code* does deliberately: your handler runs, decides a piece of data is expensive to recompute, and stores/retrieves that one piece of data using a key you chose. Output caching operates one level up, in the middleware pipeline itself: it caches the entire serialized HTTP response, keyed by the request (method, path, and any query/header values you configure it to vary by), and on a cache hit it returns that stored response *without your endpoint code, your business logic, or your database calls ever running at all*. That's the core distinction to hold onto -- data caching still executes the endpoint and merely skips expensive work inside it; output caching skips the endpoint entirely.
+
+                    Cache invalidation for output caching is done via **tags**, not by simply waiting out an expiration: `.CacheOutput(policy => policy.Tag("products"))` marks every cached response for that policy with the tag `"products"`, and when the underlying data actually changes (a product is created or updated), calling `IOutputCacheStore.EvictByTagAsync("products", ...)` immediately evicts every cached response carrying that tag -- no need to guess a "safe" expiration short enough to avoid staleness but long enough to be worth caching at all. The sharpest edge of output caching is applying it to a personalized or authenticated response without deliberately configuring what the cache key varies by: output caching has no built-in concept of "who's logged in" -- it only knows the request shape it was told to key on. Cache an endpoint returning the signed-in user's own order history without `.SetVaryByHeader("Authorization")` (or an equivalent), and the first user to hit it gets their response cached and then served to every *other* user who hits the same path afterward -- a real, serious data leak, not a hypothetical one.
+                    """, 1),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Rate limiting (`AddRateLimiter`)**
+
+                    - `options.AddFixedWindowLimiter("name", o => { o.PermitLimit = ...; o.Window = ...; });` -- hard cap per resetting window
+                    - `options.AddSlidingWindowLimiter("name", o => { ...; o.SegmentsPerWindow = 4; });` -- smooths boundary bursts
+                    - `options.AddTokenBucketLimiter("name", o => { o.TokenLimit = ...; o.TokensPerPeriod = ...; o.ReplenishmentPeriod = ...; });` -- allows bursts, refills steadily
+                    - `options.AddConcurrencyLimiter("name", o => { o.PermitLimit = ...; });` -- caps requests IN FLIGHT, not per second
+                    - `options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;`
+                    - `app.UseRateLimiter();` then `.RequireRateLimiting("name")` per endpoint/group
+
+                    **Output caching (`AddOutputCache`)**
+
+                    - `builder.Services.AddOutputCache(o => o.AddBasePolicy(p => p.Expire(TimeSpan.FromSeconds(30))));`
+                    - `o.AddPolicy("name", p => p.Tag("tag").SetVaryByQuery("page").Expire(...));`
+                    - `app.UseOutputCache();` then `.CacheOutput("name")` or `.CacheOutput(policy => ...)` per endpoint/group
+                    - `SetVaryByQuery(...)` / `SetVaryByHeader(...)` -- required whenever the response depends on more than just the path
+                    - `IOutputCacheStore.EvictByTagAsync("tag", token)` -- invalidate on write, don't just wait out expiration
+                    - Fundamentally different from IMemoryCache/IDistributedCache: caches the whole HTTP response, skips the endpoint entirely on a hit
+                    """, 2),
+                Block(BlockType.CodeSnippet, "Rate Limiting Policies & Output Cache with Tag Invalidation", BodyFormat.PlainText, """
+                    // ---- Rate limiting: four policy kinds, each solving a different problem ----
+                    builder.Services.AddRateLimiter(options =>
+                    {
+                        options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+                        // Fixed window: a hard cap per resetting time bucket. Simple, but a client
+                        // can burst up to ~2x the intended rate right at a window boundary.
+                        options.AddFixedWindowLimiter("fixed", opt =>
+                        {
+                            opt.PermitLimit = 100;
+                            opt.Window = TimeSpan.FromMinutes(1);
+                            opt.QueueLimit = 0;
+                        });
+
+                        // Sliding window: the window is divided into segments, smoothing out the
+                        // boundary-burst problem a fixed window is vulnerable to.
+                        options.AddSlidingWindowLimiter("sliding", opt =>
+                        {
+                            opt.PermitLimit = 100;
+                            opt.Window = TimeSpan.FromMinutes(1);
+                            opt.SegmentsPerWindow = 4;
+                            opt.QueueLimit = 0;
+                        });
+
+                        // Token bucket: tokens refill steadily, but a client can spend a saved-up
+                        // bucket all at once -- for traffic that's bursty but fair on average.
+                        options.AddTokenBucketLimiter("token", opt =>
+                        {
+                            opt.TokenLimit = 50;
+                            opt.TokensPerPeriod = 10;
+                            opt.ReplenishmentPeriod = TimeSpan.FromSeconds(10);
+                            opt.QueueLimit = 0;
+                        });
+
+                        // Concurrency limiter: caps requests IN FLIGHT at once, not per second --
+                        // the right tool for protecting a slow downstream resource.
+                        options.AddConcurrencyLimiter("report-concurrency", opt =>
+                        {
+                            opt.PermitLimit = 5;
+                            opt.QueueLimit = 10;
+                            opt.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
+                        });
+                    });
+
+                    app.UseRateLimiter();
+
+                    app.MapGet("/reports/monthly", GenerateMonthlyReportAsync)
+                        .RequireRateLimiting("report-concurrency");
+
+                    // ---- Output caching: caches the FULL HTTP response, not a piece of data ----
+                    builder.Services.AddOutputCache(options =>
+                    {
+                        options.AddBasePolicy(policy => policy.Expire(TimeSpan.FromSeconds(30)));
+
+                        options.AddPolicy("products-list", policy => policy
+                            .Tag("products")
+                            .SetVaryByQuery("category", "page")
+                            .Expire(TimeSpan.FromMinutes(5)));
+                    });
+
+                    app.UseOutputCache();
+
+                    // A cache hit here never touches ProductDbContext or runs any of this handler's
+                    // code -- the middleware serves the previously-stored response verbatim. Compare
+                    // that to IMemoryCache/IDistributedCache (earlier "Background Services, Caching
+                    // & Health Checks" lesson), where YOUR code still runs and decides to reuse a
+                    // cached piece of data instead of hitting the database -- the endpoint still executes.
+                    app.MapGet("/v1/products", async (string? category, int page, ProductDbContext db) =>
+                        Results.Ok(await db.Products
+                            .Where(p => category == null || p.Category == category)
+                            .Skip(page * 20).Take(20)
+                            .ToListAsync()))
+                        .CacheOutput("products-list");
+
+                    // Invalidate by tag the moment underlying data changes -- don't just wait out
+                    // a fixed expiration while stale results keep being served in the meantime.
+                    app.MapPost("/v1/products", async (CreateProductRequest request, ProductDbContext db, IOutputCacheStore cacheStore) =>
+                    {
+                        var product = new Product { Name = request.Name, Price = request.Price };
+                        db.Products.Add(product);
+                        await db.SaveChangesAsync();
+
+                        await cacheStore.EvictByTagAsync("products", default);
+                        return Results.Created($"/v1/products/{product.Id}", product);
+                    });
+
+                    // DANGER: never do this without a VaryBy that includes the caller's identity.
+                    // Output caching has no concept of "who's logged in" -- every user hitting this
+                    // path would be served whichever user's order history happened to be cached first.
+                    app.MapGet("/v1/orders/mine", async (ClaimsPrincipal user, OrderDbContext db) =>
+                        Results.Ok(await db.Orders
+                            .Where(o => o.UserId == user.FindFirstValue(ClaimTypes.NameIdentifier))
+                            .ToListAsync()))
+                        .CacheOutput(policy => policy.SetVaryByHeader("Authorization")); // required, not optional, here
+                    """, 3, language: "csharp"),
+                Block(BlockType.Diagram, "Request Pipeline: Rate Limiter -> Output Cache -> Endpoint", BodyFormat.StructuredSteps, """
+                    [{"label":"Client sends request"},{"label":"Rate Limiter middleware checks the matched policy","note":"rejects immediately with 429 if the permit/concurrency slot is exhausted"},{"label":"Output Cache middleware checks for a stored response matching this request's cache key","note":"method + path + any configured VaryByQuery/VaryByHeader values"},{"label":"Cache HIT -- middleware returns the stored response verbatim","note":"the endpoint's own code, and any DB call inside it, never runs at all"},{"label":"Cache MISS -- request continues to routing and the endpoint executes normally","note":"may itself read from IMemoryCache/IDistributedCache or the database as usual"},{"label":"Output Cache middleware stores the new response under its key and configured tags before returning it to the client"}]
+                    """, 4),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Choose the rate limiter policy to match the actual failure you're preventing, not just habit: fixed window for a simple, generous cap; sliding window when boundary bursts genuinely matter; token bucket when legitimate traffic is bursty but should average out fairly; concurrency limiter specifically to protect a slow or limited-capacity downstream resource, regardless of request timing. Partition limiters by client (API key, user ID, or IP) rather than one shared bucket for every caller -- otherwise a single noisy client exhausts the quota for everyone else hitting the same policy.
+
+                    Only apply output caching to safe, idempotent requests (GET/HEAD) whose response doesn't depend on the caller's identity unless you've deliberately configured `SetVaryByHeader`/`SetVaryByQuery` to account for that. Prefer tag-based invalidation the moment underlying data changes over stretching expiration windows longer and longer to "make caching worth it" -- a short expiration plus reliable tag eviction beats a long expiration serving stale data.
+                    """, 5),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    If asked to justify a specific rate limiter policy, name the mechanism, not just the name: fixed window is vulnerable to a boundary burst because the counter simply resets; sliding window avoids that by tracking segments across the boundary; token bucket explicitly allows a burst up to the bucket's capacity as long as the average rate holds; concurrency limiter is the odd one out because it isn't about a rate at all -- it's about how many requests are in flight simultaneously, which is what actually protects a resource with a small connection pool or a slow response time.
+
+                    If asked "why not just cache this in IMemoryCache instead of using output caching," give the precise distinction: output caching caches the entire HTTP response at the middleware level and skips your endpoint's code (and any DB calls inside it) entirely on a hit, while IMemoryCache/IDistributedCache still requires your endpoint to run -- it just lets your own code substitute a cached value for an expensive computation. And always mention the personalization trap unprompted when discussing output caching -- it's the detail that separates someone who's actually configured it from someone reciting the feature name.
+                    """, 6),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Applying output caching to a personalized or authenticated endpoint without configuring `SetVaryByHeader`/`SetVaryByQuery` to account for who's calling -- output caching has no built-in awareness of authentication, so the first cached response gets served to every subsequent caller regardless of identity, a real data-leak risk rather than a theoretical one. Using a fixed window rate limiter where bursty-but-fair traffic is expected, then being surprised when legitimate clients get throttled right at a window boundary -- a sliding window or token bucket limiter is the actual fix, not simply raising the fixed window's permit limit.
+
+                    Also common: forgetting `app.UseRateLimiter()`/`app.UseOutputCache()` in the middleware pipeline (the policies are configured but never actually applied), and confusing output caching with data caching -- expecting `AddOutputCache` to help an internal, non-HTTP computation, when it only ever caches full HTTP responses at the pipeline level.
+                    """, 7),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    Rate limiting policies are like different kinds of venue entry control: a fixed window is a bouncer who resets a hand-stamp counter every hour on the dot, letting a crowd sneak in right at the stroke of the hour twice as fast as intended; a sliding window is a bouncer who tracks arrivals continuously instead of resetting all at once, so there's no magic instant to exploit; a token bucket is a venue that hands out a stack of re-entry tokens that refill slowly, letting a group use them all at once for one big outing as long as they don't ask for more than they've saved up; a concurrency limiter is a room with a strict fire-code capacity -- it doesn't care how fast people arrive, only how many are inside *right now*.
+
+                    Output caching is like a receptionist who, instead of walking back to ask the same question of the actual staff every time, hands out a photocopied answer sheet for a question that's been asked recently -- nobody in the back office is even paged on a cache hit. That's fine for "what are today's opening hours," which is the same for anyone who asks, but it becomes a serious mistake for "what's in my personal mailbox" -- if the receptionist doesn't check *whose* mailbox is being asked about before handing out that photocopy, the wrong person's mail ends up in a stranger's hands.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "A slow internal report-generation endpoint needs protecting from too many simultaneous long-running requests overwhelming a downstream service with a small connection pool -- but the requests don't necessarily arrive at a high rate per second, just too many at once. Which rate limiter policy fits best?",
+                    "A concurrency limiter caps how many requests are in flight simultaneously, regardless of how spread out over time they arrive -- exactly the protection a slow downstream resource with limited capacity needs, unlike fixed window, sliding window, or token bucket, which all reason about a rate per time period rather than simultaneous in-flight count.",
+                    [
+                        new QuizOptionSeed("A concurrency limiter, because it caps requests in flight at once rather than a rate per time period", true),
+                        new QuizOptionSeed("A fixed window limiter, because it's the simplest policy to configure", false),
+                        new QuizOptionSeed("A token bucket limiter, because it allows the largest bursts of any policy", false),
+                        new QuizOptionSeed("A sliding window limiter, because it only limits requests at window boundaries", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "A team applies output caching to an endpoint that returns the signed-in user's own order history, without configuring SetVaryByHeader for the Authorization header. What is the realistic risk?",
+                    "Output caching has no built-in concept of 'who's logged in' -- the cache key only reflects what it was configured to vary by. Without varying by an auth-relevant header, one user's cached response gets served to every other user who subsequently hits the same path, leaking that user's order history.",
+                    [
+                        new QuizOptionSeed("One user's cached response could be served to a completely different user, because the cache key doesn't account for who's calling", true),
+                        new QuizOptionSeed("The middleware automatically detects the Authorization header and skips caching that response by default", false),
+                        new QuizOptionSeed("The response simply won't be cached at all, since it contains per-user dynamic content", false),
+                        new QuizOptionSeed("This only matters for POST endpoints -- GET endpoints are never affected by output caching", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Rate limiting middleware in ASP.NET Core", "https://learn.microsoft.com/en-us/aspnet/core/performance/rate-limit", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("Output caching middleware in ASP.NET Core", "https://learn.microsoft.com/en-us/aspnet/core/performance/caching/output", LinkType.OfficialDocs),
+            ],
+            prerequisites: [lesson1]);
+
+        var lesson2Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson2.Slug,
+        [
+            "Configure a fixed window and a token bucket rate limiter on two different endpoints and, using a quick script or loop, observe the difference in how each handles a sudden burst of requests",
+            "Add output caching to a GET endpoint with a tag, then trigger a POST that calls IOutputCacheStore.EvictByTagAsync and confirm the next GET reflects the fresh data instead of a stale cached response",
+            "Deliberately output-cache a personalized endpoint without a VaryBy header, reproduce the cross-user cache leak with two different simulated users, then fix it with SetVaryByHeader and confirm the leak is gone",
+        ]);
+
+        var module = BuildModule(topicId, "aspnet-core-api-design-and-traffic-control", "API Design, Versioning & Traffic Control",
+            "Choosing between Minimal APIs and Controllers, organizing endpoints with route groups, versioning and validating requests correctly, then shaping and protecting traffic with ASP.NET Core's built-in rate limiting and output caching middleware.",
+            90, [lesson1, lesson2], sortOrder: 5);
+
+        return (module, [lesson1Checklist, lesson2Checklist]);
+    }
+
+    private static (Module, List<ChecklistSeed>) BuildDotNetDistributedCommunicationAndObservabilityModule(int topicId)
+    {
+        var lesson1 = BuildLesson(
+            slug: "grpc-vs-rest-in-dotnet",
+            title: "gRPC vs. REST in .NET",
+            summary: "What gRPC actually is made of -- Protocol Buffers as the wire format, HTTP/2 as the transport, strongly-typed contracts generated from a .proto file -- versus REST/JSON, and when a real .NET system should reach for each.",
+            estimatedMinutes: 45,
+            objectives:
+            [
+                "Explain what gRPC is made of: Protocol Buffers as the interface-definition language and binary wire format, and HTTP/2 as the transport",
+                "State the concrete tradeoffs between gRPC and REST/JSON in terms of payload size, type safety, streaming support, and tooling/browser compatibility",
+                "Decide when gRPC is the right call for a real .NET system (internal service-to-service calls) versus when REST is still the correct default (public APIs, third-party integrations)",
+                "Read a .proto service definition and match it to the generated C# client and server code it produces",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    **gRPC** is a remote procedure call framework built on two specific technical choices, and both of them are what make it behave so differently from a REST/JSON API. First, it uses **Protocol Buffers** (protobuf) as both its interface-definition language and its wire format: you write a `.proto` file declaring a service's methods and message shapes in a compact schema language, and the protobuf compiler (via the `Grpc.Tools` NuGet package in a .NET project) generates strongly-typed C# classes for every message and an abstract base class for the service -- there is no hand-written DTO or manual JSON (de)serialization anywhere in the loop. Those messages are then serialized to a dense binary format on the wire, not human-readable text. Second, gRPC runs over **HTTP/2** specifically (not HTTP/1.1), which gives it multiplexed requests over a single connection and, critically, support for long-lived bidirectional streams -- something HTTP/1.1 request/response semantics were never built for.
+
+                    REST over JSON makes the opposite set of choices, and each one is a deliberate tradeoff rather than a mistake. JSON is text-based and human-readable, which means you can `curl` an endpoint or paste a response into a browser tab and just read it, and virtually every language, tool, and proxy on the planet already understands both JSON and plain HTTP/1.1 -- there is no special compiler step, no `.proto` file, no code generation pipeline. The cost is that a REST contract is looser by default: nothing stops a client and server from disagreeing about a field's type or an endpoint's shape until a request actually fails at runtime, and JSON's text encoding is meaningfully larger on the wire than protobuf's binary encoding for the same data (field names are repeated in every message; protobuf just uses numbered field tags per its schema).
+
+                    The tradeoffs land squarely on those two design choices. gRPC's strongly-typed, code-generated contract catches a mismatched field or method signature at compile time instead of in production, its binary payloads are typically a fraction of the size of the equivalent JSON, and its HTTP/2 foundation gives it four genuinely native call shapes: unary (one request, one response -- the REST-like default), server streaming (one request, a stream of responses), client streaming (a stream of requests, one response), and bidirectional streaming (both sides stream independently). What it gives up is direct browser support (browsers can't originate raw HTTP/2 trailers-based gRPC calls without a proxy layer like grpc-web) and easy human debugging (you can't just eyeball a binary payload in a network tab the way you can JSON). In practice that pushes gRPC toward internal, service-to-service calls inside a microservices architecture -- where every caller and callee is a .NET (or other gRPC-supported) service you control, streaming is genuinely useful, and raw throughput matters -- and keeps REST/JSON as the right default for public-facing APIs and third-party integrations, where universal tooling, browser compatibility, and human-readable payloads outweigh gRPC's performance edge.
+                    """, 1),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **gRPC building blocks**
+
+                    - `.proto` file -- IDL (interface definition language) declaring `service` methods and `message` shapes
+                    - `Grpc.Tools` NuGet package -- compiles `.proto` into generated C# base classes and message types at build time
+                    - Server: inherit the generated `XyzBase` class, override its RPC methods
+                    - Client: `GrpcChannel.ForAddress(url)` + generated `XyzClient` -- calls look like ordinary async method calls
+
+                    **The four call shapes (all native to gRPC, none native to REST)**
+
+                    - Unary -- one request, one response (`rpc GetOrder (OrderRequest) returns (OrderReply);`)
+                    - Server streaming -- one request, a stream of responses (`returns (stream OrderReply);`)
+                    - Client streaming -- a stream of requests, one response (`(stream OrderRequest) returns (OrderReply);`)
+                    - Bidirectional streaming -- both sides stream independently (`(stream OrderRequest) returns (stream OrderReply);`)
+
+                    **gRPC vs. REST/JSON, at a glance**
+
+                    - Payload: protobuf binary (small, fast to parse) vs. JSON text (larger, human-readable)
+                    - Contract: compile-time-checked, generated from `.proto` vs. loosely typed, checked at runtime (or via an OpenAPI spec, if maintained)
+                    - Transport: HTTP/2 only vs. HTTP/1.1 or HTTP/2
+                    - Browser support: needs a proxy (grpc-web) vs. native `fetch`/`XMLHttpRequest`
+                    - Best fit: internal service-to-service calls vs. public APIs and third-party integrations
+                    """, 2),
+                Block(BlockType.CodeSnippet, "gRPC Service Definition and ASP.NET Core Implementation", BodyFormat.PlainText, """
+                    // Protos/orders.proto -- the IDL. The protobuf compiler (via Grpc.Tools)
+                    // generates OrdersBase (server) and OrdersClient (client) from this file
+                    // at build time -- nothing here is hand-written C#.
+                    syntax = "proto3";
+
+                    option csharp_namespace = "OrderService.Grpc";
+
+                    service Orders {
+                      // Unary: one request in, one response out.
+                      rpc GetOrder (GetOrderRequest) returns (OrderReply);
+
+                      // Server streaming: one request, a stream of responses -- e.g. every
+                      // status update for an order as it progresses toward delivery.
+                      rpc StreamOrderStatus (GetOrderRequest) returns (stream OrderStatusReply);
+                    }
+
+                    message GetOrderRequest {
+                      int32 order_id = 1;
+                    }
+
+                    message OrderReply {
+                      int32 order_id = 1;
+                      string customer_email = 2;
+                      double total = 3;
+                    }
+
+                    message OrderStatusReply {
+                      string status = 1;
+                      string updated_at_utc = 2;
+                    }
+
+                    // Services/OrdersGrpcService.cs -- the generated-style ASP.NET Core
+                    // implementation. OrdersBase comes entirely from the .proto above.
+                    public class OrdersGrpcService(IOrderRepository orderRepository) : Orders.OrdersBase
+                    {
+                        public override async Task<OrderReply> GetOrder(
+                            GetOrderRequest request, ServerCallContext context)
+                        {
+                            var order = await orderRepository.FindAsync(request.OrderId)
+                                ?? throw new RpcException(new Status(StatusCode.NotFound, "Order not found"));
+
+                            return new OrderReply
+                            {
+                                OrderId = order.Id,
+                                CustomerEmail = order.CustomerEmail,
+                                Total = order.Total,
+                            };
+                        }
+
+                        // Server streaming: writes multiple messages to the same call over time --
+                        // no REST/JSON endpoint has a native equivalent of this method signature.
+                        public override async Task StreamOrderStatus(
+                            GetOrderRequest request, IServerStreamWriter<OrderStatusReply> responseStream,
+                            ServerCallContext context)
+                        {
+                            await foreach (var update in orderRepository.WatchStatusAsync(request.OrderId, context.CancellationToken))
+                            {
+                                await responseStream.WriteAsync(new OrderStatusReply
+                                {
+                                    Status = update.Status,
+                                    UpdatedAtUtc = update.UpdatedAtUtc.ToString("O"),
+                                });
+                            }
+                        }
+                    }
+
+                    // Program.cs -- registering the service. gRPC requires HTTP/2, which
+                    // Kestrel enables by default for gRPC endpoints.
+                    builder.Services.AddGrpc();
+                    var app = builder.Build();
+                    app.MapGrpcService<OrdersGrpcService>();
+
+                    // Client: an internal service (or console app) calling the above.
+                    // This reads like an ordinary async method call -- the generated
+                    // client hides the HTTP/2 + protobuf plumbing entirely.
+                    using var channel = GrpcChannel.ForAddress("https://orders-service.internal:5001");
+                    var client = new Orders.OrdersClient(channel);
+
+                    var reply = await client.GetOrderAsync(new GetOrderRequest { OrderId = 42 });
+
+                    using var streamCall = client.StreamOrderStatus(new GetOrderRequest { OrderId = 42 });
+                    await foreach (var update in streamCall.ResponseStream.ReadAllAsync())
+                    {
+                        Console.WriteLine($"{update.Status} at {update.UpdatedAtUtc}");
+                    }
+                    """, 3, language: "csharp"),
+                Block(BlockType.Diagram, "gRPC's Four Call Shapes vs. REST's One", BodyFormat.AsciiArt, """
+                    REST/JSON (HTTP/1.1 or HTTP/2)              gRPC (HTTP/2 only)
+
+                    [Client] --request-->  [Server]             Unary:
+                    [Client] <--response-- [Server]              [Client] --request-->   [Server]
+                                                                  [Client] <--response--  [Server]
+
+                    Only this one shape exists natively --       Server streaming:
+                    "streaming" means polling, long-polling,      [Client] --request-->   [Server]
+                    or a separate protocol like SignalR/SSE       [Client] <--response--  [Server]
+                    bolted on top.                                [Client] <--response--  [Server]
+                                                                   [Client] <--response--  [Server] (stream)
+
+                                                                  Client streaming:
+                                                                   [Client] --request-->   [Server]
+                                                                   [Client] --request-->   [Server]
+                                                                   [Client] --request-->   [Server] (stream)
+                                                                   [Client] <--response-- [Server]
+
+                                                                  Bidirectional streaming:
+                                                                   [Client] <--messages both ways--> [Server]
+                                                                   (independent, concurrent streams)
+                    """, 4),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Default to REST/JSON for anything public-facing -- a partner integration, a mobile client you don't fully control, or any API documented for external consumers -- because universal HTTP/1.1 and JSON tooling, browser compatibility, and human-readable payloads matter more there than gRPC's raw performance edge. Reach for gRPC specifically for internal, service-to-service calls inside a microservices architecture you control end to end, especially when a call genuinely needs streaming or the payload size/latency difference actually matters at your request volume.
+
+                    Keep `.proto` files as the single source of truth and check them into source control alongside the services that implement them -- both client and server regenerate their code from the same file, so a `.proto` change is a contract change for every consumer, the same discipline you'd apply to a shared OpenAPI spec.
+                    """, 5),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    If asked "when would you use gRPC over REST," resist naming "it's faster" as the whole answer -- lead with the concrete reason: gRPC is the right tool for internal service-to-service calls where you control both ends, want a compile-time-checked contract instead of a runtime-checked one, and might actually need one of its four native call shapes (especially streaming, which REST has no built-in equivalent for). Then name the actual cost: gRPC needs a proxy layer for browser clients and its binary payloads aren't human-inspectable, which is exactly why public APIs still default to REST/JSON.
+
+                    Be ready to explain the two things gRPC is actually built from -- Protocol Buffers (the IDL and binary wire format) and HTTP/2 (the transport) -- rather than describing it as "REST but faster," which understates that the performance and streaming gains come directly from those two specific choices, not from gRPC being a generically better-optimized REST.
+                    """, 6),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Reaching for gRPC on a public-facing API because it's "faster," then discovering browser clients can't call it directly without standing up a grpc-web proxy, and that third-party integrators now need protobuf tooling and a `.proto` file just to talk to the API -- REST/JSON's universal compatibility was very likely worth more there than the payload-size win. The opposite mistake: keeping REST/JSON for high-volume internal service-to-service calls that would clearly benefit from a native streaming contract (e.g. a live feed of order-status updates), and bolting SignalR or long-polling on top of REST to fake streaming that gRPC already provides natively.
+
+                    Also common: treating a `.proto` file as a private implementation detail of one service and changing a field's type or number without coordinating with every consumer -- protobuf field numbers are part of the wire contract, and reusing or renumbering one can silently corrupt deserialization on the other side instead of failing loudly.
+                    """, 7),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    REST/JSON is like sending a handwritten letter through the public postal service: anyone, anywhere, with any mail carrier can read the address and open the envelope, and the contents are plain language any recipient can understand without special training -- but the envelope and the paper add real bulk, and there's no built-in way to have an ongoing back-and-forth conversation through the mail slot. gRPC is like a dedicated intercom line installed between two offices in the same building: both ends were built to the same exact spec ahead of time (the `.proto` file), messages travel as compact coded signals instead of full sentences, and the line supports an open two-way conversation for as long as both parties want -- but you can't hand that intercom handset to a random visitor off the street and expect them to know how to use it the way they instinctively know how to address an envelope.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "A team is deciding between gRPC and REST/JSON for a new internal API that will only ever be called by other .NET services the team also owns, and one endpoint needs to push a continuous stream of live status updates to the caller. Which factor most directly favors gRPC here?",
+                    "gRPC runs on HTTP/2 and has native server-streaming and bidirectional-streaming call shapes -- exactly what's needed for a continuous stream of updates -- while REST/JSON has no built-in streaming contract and would need something bolted on top (long-polling, SignalR, SSE) to fake it.",
+                    [
+                        new QuizOptionSeed("gRPC's HTTP/2 transport gives it native streaming call shapes (server streaming, bidirectional) that REST/JSON has no built-in equivalent for", true),
+                        new QuizOptionSeed("gRPC endpoints are automatically load-balanced by Kestrel, while REST endpoints are not", false),
+                        new QuizOptionSeed("REST/JSON cannot run over HTTPS, so it is unsuitable for internal traffic", false),
+                        new QuizOptionSeed("gRPC does not require any code generation, unlike REST, which always needs an OpenAPI spec", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "Why is REST/JSON typically still the right default for a public-facing API consumed by third-party integrators, even though gRPC produces smaller, faster binary payloads?",
+                    "Public consumers need universal, low-friction access: browsers can call a JSON REST endpoint directly with fetch, and any language or tool can read a human-readable JSON payload without a protobuf toolchain or a .proto file. gRPC needs a grpc-web proxy for browser clients and isn't human-inspectable, which outweighs its payload-size advantage for a broad, uncontrolled set of consumers.",
+                    [
+                        new QuizOptionSeed("REST/JSON's universal browser support and human-readable payloads matter more to broad, uncontrolled third-party consumers than gRPC's smaller/faster binary payloads", true),
+                        new QuizOptionSeed("gRPC cannot be secured with HTTPS/TLS, making it unsafe for public traffic", false),
+                        new QuizOptionSeed("JSON payloads are always smaller than the equivalent protobuf-encoded message", false),
+                        new QuizOptionSeed("Public APIs are not allowed to use HTTP/2 under the REST architectural style", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("gRPC services with ASP.NET Core", "https://learn.microsoft.com/en-us/aspnet/core/grpc/", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("Comparing gRPC services with HTTP APIs", "https://learn.microsoft.com/en-us/aspnet/core/grpc/comparison", LinkType.OfficialDocs),
+            ]);
+
+        var lesson1Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson1.Slug,
+        [
+            "Write a .proto file with one unary RPC and one server-streaming RPC, and inspect the C# classes Grpc.Tools generates from it at build time",
+            "Implement the generated service base class in an ASP.NET Core project and call it from a generated GrpcChannel-based client, including consuming the streaming call with await foreach",
+            "For a real API you've built (or one you use daily), argue out loud whether gRPC or REST/JSON is the better fit, naming the specific tradeoff (streaming need, consumer type, payload size) that decides it",
+        ]);
+
+        var lesson2 = BuildLesson(
+            slug: "distributed-tracing-and-opentelemetry",
+            title: "Distributed Tracing & OpenTelemetry",
+            summary: "Why ILogger<T> logging stops being enough once one user request fans out across several services, and how OpenTelemetry's traces, spans, and W3C trace-context propagation let you reconstruct that request's full timeline across every service and database call it touched.",
+            estimatedMinutes: 45,
+            objectives:
+            [
+                "Explain why per-service ILogger<T> logging (from the earlier Configuration, Logging & the Options Pattern lesson) breaks down once a request spans multiple services",
+                "Define a Trace and a Span, and describe how spans nest to form a single request's trace tree",
+                "Explain how TraceId/SpanId/ParentSpanId correlate spans across services, and how the W3C traceparent header propagates that context across an HTTP call boundary",
+                "Wire OpenTelemetry into an ASP.NET Core app with AddOpenTelemetry/WithTracing and auto-instrumentation, and export it to a real tracing backend",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    The earlier lesson **"Configuration, Logging & the Options Pattern"** covered `ILogger<T>`, log levels, and structured logging -- but every one of those log lines lives inside a single service's own log stream, tagged with nothing more than a timestamp and whatever context that one method happened to include. That's fine when a request never leaves one process. It falls apart the moment a single user action fans out across several services -- an API gateway calls an orders service, which calls a payments service and an inventory service, each hitting its own database -- because now the evidence of *why* that request was slow, or where it actually failed, is scattered across several completely separate log streams with no shared identifier connecting a line in one service's log to the matching line in another's. Grepping five services' logs by approximate timestamp and hoping you've found the right request is not a debugging strategy that scales.
+
+                    **OpenTelemetry** solves this by giving a request's journey a durable, structured identity as it crosses process and service boundaries. A **Trace** represents the entire journey of one logical request from start to finish, however many services it touches. A **Span** represents one unit of work within that trace -- one HTTP call, one database query, one call to an external API -- and every trace is made of one or more spans. Spans nest: the span for "handle incoming HTTP request" is the parent of the span for "call the payments service," which is itself the parent of the span for "run this SQL query," and so on, forming a tree that mirrors the actual call graph of the request. Each span has a start time and duration, so the resulting tree isn't just a structural map -- laid out on a timeline, it visually shows exactly which piece of the request was slow and which pieces ran in parallel versus in sequence.
+
+                    The correlation mechanism that makes this work is a `TraceId` (shared by every span in the same trace), a `SpanId` (unique to that one span), and a `ParentSpanId` (pointing to the span that caused this one to start). The part that makes this actually usable in a distributed system is that this context propagates *automatically* across an HTTP call boundary via the **W3C Trace Context** standard's `traceparent` header -- when Service A calls Service B over HTTP, the OpenTelemetry instrumentation in A's `HttpClient` attaches a `traceparent` header (encoding the current `TraceId` and the calling span's `SpanId`) to the outgoing request, and B's ASP.NET Core instrumentation reads that header on the way in and starts its own span as a child of A's, rather than starting a brand-new, disconnected trace. Neither service's code has to manually forward an ID through a custom header -- the instrumentation libraries handle it.
+
+                    Wiring this into ASP.NET Core means calling `builder.Services.AddOpenTelemetry().WithTracing(tracing => { ... })`, then adding the auto-instrumentation packages for the pieces that matter: `AddAspNetCoreInstrumentation()` creates the root span for each incoming request and reads incoming `traceparent` headers, `AddHttpClientInstrumentation()` creates a child span for every outgoing `HttpClient` call and attaches the outgoing `traceparent` header, and EF Core's instrumentation (via `AddEntityFrameworkCoreInstrumentation()` from the `OpenTelemetry.Instrumentation.EntityFrameworkCore` package) creates a span per database command. An exporter then ships the finished spans to a backend -- Jaeger, Azure Monitor/Application Insights, or generically any OTLP-compatible backend via `AddOtlpExporter()` -- where the whole trace renders as a single timeline you can open and visually inspect, showing exactly which service and which database call a slow request actually spent its time in.
+                    """, 1),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Core concepts**
+
+                    - `Trace` -- the entire journey of one logical request, end to end, across every service it touches
+                    - `Span` -- one unit of work inside a trace (one HTTP call, one DB query); spans nest to form the trace tree
+                    - `TraceId` -- shared by every span in the same trace
+                    - `SpanId` / `ParentSpanId` -- identify a span and the span that caused it, forming the parent/child tree
+
+                    **Propagation**
+
+                    - W3C Trace Context -- the `traceparent` HTTP header standard: `version-traceId-spanId-flags`
+                    - Propagated automatically by instrumentation libraries -- no manual header-forwarding code needed
+
+                    **Wiring it into ASP.NET Core**
+
+                    - `builder.Services.AddOpenTelemetry().WithTracing(tracing => { ... });`
+                    - `.AddAspNetCoreInstrumentation()` -- root span per incoming request, reads incoming `traceparent`
+                    - `.AddHttpClientInstrumentation()` -- child span per outgoing HttpClient call, writes outgoing `traceparent`
+                    - `.AddEntityFrameworkCoreInstrumentation()` -- span per EF Core database command
+                    - `.AddOtlpExporter(o => o.Endpoint = new Uri("http://otel-collector:4317"))` -- ship spans out (or `.AddJaegerExporter()`, Azure Monitor)
+                    """, 2),
+                Block(BlockType.CodeSnippet, "Wiring OpenTelemetry Tracing into ASP.NET Core", BodyFormat.PlainText, """
+                    // Program.cs -- an ASP.NET Core service that calls a downstream service
+                    // and a database, all under one trace.
+                    builder.Services.AddOpenTelemetry()
+                        .ConfigureResource(resource => resource.AddService(serviceName: "orders-api"))
+                        .WithTracing(tracing =>
+                        {
+                            tracing
+                                // Root span per incoming HTTP request; reads an incoming
+                                // traceparent header if one is already present.
+                                .AddAspNetCoreInstrumentation()
+                                // Child span per outgoing HttpClient call; writes the
+                                // outgoing traceparent header automatically.
+                                .AddHttpClientInstrumentation()
+                                // Child span per EF Core database command.
+                                .AddEntityFrameworkCoreInstrumentation()
+                                // Ship finished spans to any OTLP-compatible backend --
+                                // an OpenTelemetry Collector, Jaeger, or a hosted service.
+                                .AddOtlpExporter(otlp =>
+                                {
+                                    otlp.Endpoint = new Uri("http://otel-collector:4317");
+                                });
+                        });
+
+                    var app = builder.Build();
+
+                    // No manual tracing code needed here at all -- the instrumentation
+                    // above creates and closes spans around this handler, the downstream
+                    // HttpClient call, and the EF Core query automatically.
+                    app.MapGet("/orders/{id}", async (int id, OrdersDbContext db, HttpClient paymentsClient) =>
+                    {
+                        var order = await db.Orders.FindAsync(id);
+                        if (order is null)
+                            return Results.NotFound();
+
+                        // This outgoing call carries a traceparent header derived from the
+                        // current span, so the payments service's own AspNetCore
+                        // instrumentation starts its span as a CHILD of this one.
+                        var paymentStatus = await paymentsClient.GetFromJsonAsync<PaymentStatus>(
+                            $"https://payments-service.internal/status/{order.PaymentId}");
+
+                        return Results.Ok(new { order, paymentStatus });
+                    });
+
+                    // Manually adding a custom span/attribute when you need extra detail
+                    // beyond what auto-instrumentation captures.
+                    private static readonly ActivitySource ActivitySource = new("OrdersApi.Custom");
+
+                    public async Task<Order> ApplyDiscountAsync(Order order, string promoCode)
+                    {
+                        using var activity = ActivitySource.StartActivity("ApplyDiscount");
+                        activity?.SetTag("promo.code", promoCode);
+
+                        order.Total *= await pricingEngine.GetDiscountMultiplierAsync(promoCode);
+
+                        activity?.SetTag("order.total_after_discount", order.Total);
+                        return order;
+                    }
+                    """, 3, language: "csharp"),
+                Block(BlockType.Diagram, "One Trace, Nested Spans Across Three Services", BodyFormat.AsciiArt, """
+                    TraceId: 4bf92f3577b34da6a3ce929d0e0e4736  (shared by every span below)
+
+                    [Span: HTTP GET /orders/42]                 SpanId=a1  ParentSpanId=(none, root)   0ms -----------------> 180ms
+                      gateway-service
+
+                      [Span: HTTP GET orders-service]            SpanId=b2  ParentSpanId=a1     10ms --------------> 170ms
+                        (traceparent header carries TraceId + SpanId=b2 to orders-service)
+
+                        [Span: SELECT * FROM Orders WHERE Id=42]  SpanId=c3  ParentSpanId=b2   15ms --> 40ms
+
+                        [Span: HTTP GET payments-service/status]  SpanId=d4  ParentSpanId=b2       45ms ------------> 160ms
+                          (traceparent propagated again, one hop further)
+
+                          [Span: SELECT * FROM Payments WHERE...] SpanId=e5  ParentSpanId=d4   50ms --> 155ms  <-- the slow one
+
+                    A tracing backend (Jaeger/Azure Monitor/OTLP) renders this tree as a single
+                    timeline: the 105ms gap between SpanId=d4 starting and SpanId=e5 finishing is
+                    immediately visible as the actual bottleneck, across a service boundary ILogger
+                    alone could never have connected.
+                    """, 4),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Turn on the auto-instrumentation packages (`AddAspNetCoreInstrumentation`, `AddHttpClientInstrumentation`, EF Core's instrumentation) before reaching for manual `ActivitySource`/span code -- they cover the overwhelming majority of what you need (incoming requests, outgoing HTTP calls, database commands) with zero custom code, and W3C trace-context propagation across `HttpClient` calls only works automatically because that instrumentation is wired up. Reserve manual spans (via `ActivitySource.StartActivity`) for genuinely business-meaningful units of work that auto-instrumentation can't see, like "apply a discount" or "run a pricing calculation" -- and tag them with attributes that would actually help someone debugging a slow trace later.
+
+                    Configure a sampling strategy deliberately once traffic volume is non-trivial (tracing every single request in a high-throughput production service is often unnecessary overhead and cost) rather than either tracing 100% of requests forever or not thinking about sampling at all until an exporter bill or storage volume forces the issue.
+                    """, 5),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    If asked "why isn't logging enough for a microservices architecture," don't just say "it doesn't scale" -- name the specific gap: each service's `ILogger<T>` output is an isolated stream with no shared identifier connecting a log line in one service to the matching line in another, so reconstructing one request's path across five services means manually correlating by approximate timestamp. A `Trace`/`Span` model with a propagated `TraceId` gives every service touched by the same request a shared key to filter and reassemble by, which is the actual capability gap logging alone doesn't close.
+
+                    Be ready to explain propagation concretely, not just conceptually: it's the W3C `traceparent` HTTP header, attached automatically by the sending service's `HttpClient` instrumentation and read automatically by the receiving service's ASP.NET Core instrumentation -- that's precisely why a downstream service's span shows up as a *child* of the calling service's span instead of starting a brand-new, unrelated trace.
+                    """, 6),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Assuming tracing "just works" across services without checking that every hop in the chain actually has the relevant auto-instrumentation registered -- if one service in the middle of a call chain doesn't have `AddAspNetCoreInstrumentation`/`AddHttpClientInstrumentation` wired up, the `traceparent` header either isn't read on the way in or isn't propagated on the way out, and the trace silently splits into two disconnected pieces instead of erroring loudly. Another common one: reaching for manual `ActivitySource` spans (or worse, going back to correlating raw log timestamps) for HTTP calls and database queries that the built-in instrumentation packages already cover for free, duplicating spans or missing the automatic parent/child relationship auto-instrumentation would have given for nothing.
+
+                    Also common: treating trace data as a replacement for logs and metrics rather than a complement to them -- a trace shows you *where* time went across a request's path, but detailed error context, business-event logs, and aggregate metrics (error rates, percentile latencies over time) are still separate signals a trace alone doesn't provide.
+                    """, 7),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    Per-service `ILogger<T>` logging without tracing is like five separate security desks in five different buildings each keeping their own visitor logbook, with no shared visitor ID between them -- if someone wants to know exactly how one visitor moved through all five buildings and how long they spent in each, they're stuck cross-referencing timestamps by hand and hoping the clocks agree. A `Trace` with propagated `TraceId`s is that same visitor being issued one badge with a single ID number at the front door, scanned at every desk they pass through in every building -- now anyone can pull every scan of that one badge number and lay it out as a single timeline of exactly where that visitor went and how long each stop took, spans and all, without ever needing to guess which logbook entries belong together.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "A user reports a slow request. The API gateway, orders service, and payments service each log the request separately with ILogger<T>, but nothing connects the three log entries to each other. What specifically does adding OpenTelemetry distributed tracing fix here?",
+                    "OpenTelemetry gives every span across all three services the same TraceId, propagated automatically via the W3C traceparent header on each outgoing HTTP call. That shared TraceId is exactly what per-service ILogger<T> logging lacks -- without it, correlating log lines across services means guessing by approximate timestamp.",
+                    [
+                        new QuizOptionSeed("It gives every span in the request the same TraceId, propagated automatically across services via the traceparent header, letting you reconstruct the full cross-service timeline", true),
+                        new QuizOptionSeed("It replaces ILogger<T> entirely so no service needs to log anything anymore", false),
+                        new QuizOptionSeed("It speeds up each individual service's database queries automatically", false),
+                        new QuizOptionSeed("It merges all three services into a single deployable process", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "Service A calls Service B over HTTP. Service A has AddHttpClientInstrumentation registered, but Service B is missing AddAspNetCoreInstrumentation. What is the most likely observable result?",
+                    "AddHttpClientInstrumentation on Service A still attaches an outgoing traceparent header, but without AddAspNetCoreInstrumentation, Service B never reads it -- so Service B's work for that call either isn't traced at all or starts as a disconnected, unrelated trace instead of a child span of Service A's call.",
+                    [
+                        new QuizOptionSeed("Service B never reads the incoming traceparent header, so its work either isn't traced or starts a new, disconnected trace instead of continuing Service A's", true),
+                        new QuizOptionSeed("The HTTP call between A and B will fail with an error because the header is missing instrumentation", false),
+                        new QuizOptionSeed("Service B automatically infers the correct TraceId from the request's timestamp", false),
+                        new QuizOptionSeed("Nothing changes -- AddAspNetCoreInstrumentation only affects logging, not tracing", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed(".NET distributed tracing", "https://learn.microsoft.com/en-us/dotnet/core/diagnostics/distributed-tracing", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("Getting Started with OpenTelemetry .NET", "https://opentelemetry.io/docs/languages/net/getting-started/", LinkType.OfficialDocs),
+            ],
+            prerequisites: [lesson1]);
+
+        var lesson2Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson2.Slug,
+        [
+            "Wire AddOpenTelemetry().WithTracing(...) into an ASP.NET Core app with AspNetCore, HttpClient, and EF Core instrumentation, and export to a local Jaeger instance (or the OTLP console exporter) to see spans appear",
+            "Make one service call a second service over HttpClient, then find both services' spans in the tracing backend and confirm the second service's span is a child of the first's via the shared TraceId",
+            "Add one manual ActivitySource span around a business-meaningful operation (not already covered by auto-instrumentation) with a custom tag, and locate it in the resulting trace tree",
+        ]);
+
+        var module = BuildModule(topicId, "aspnet-core-distributed-communication-and-observability", "Distributed Communication & Observability",
+            "gRPC's Protocol Buffers/HTTP2 foundation versus REST/JSON and when a real .NET system should reach for each, followed by OpenTelemetry's traces and spans and how W3C trace-context propagation lets you reconstruct one request's full timeline across every service and database call it touched.",
+            90, [lesson1, lesson2], sortOrder: 6);
 
         return (module, [lesson1Checklist, lesson2Checklist]);
     }
