@@ -31,6 +31,9 @@ public static class CurriculumContentSeedData
             BuildCSharpDesignPatternsModule(topicIdBySlug["csharp"]),
             BuildCSharpDependencyInjectionAndModernSyntaxModule(topicIdBySlug["csharp"]),
             BuildCSharpFileIoAndRegexModule(topicIdBySlug["csharp"]),
+            BuildCSharpPerformanceAndLowLevelModule(topicIdBySlug["csharp"]),
+            BuildCSharpTuplesLocalFunctionsAndModernSyntaxModule(topicIdBySlug["csharp"]),
+            BuildCSharpJsonSerializationModule(topicIdBySlug["csharp"]),
             BuildDotNetModule(topicIdBySlug["dotnet"]),
             BuildDotNetProductionReadinessModule(topicIdBySlug["dotnet"]),
             BuildDotNetScalingAndResilienceModule(topicIdBySlug["dotnet"]),
@@ -4630,6 +4633,1112 @@ public static class CurriculumContentSeedData
         var module = BuildModule(topicId, "csharp-file-io-and-regex", "File I/O, Streams & Regular Expressions",
             "The Stream abstraction unifying files, sockets, and memory buffers, sync vs. async file I/O and why buffering matters, plus pattern matching with Regex: groups, compiled/source-generated regex for hot paths, and the catastrophic backtracking (ReDoS) pitfall.",
             90, [lesson1, lesson2], sortOrder: 12);
+
+        return (module, [lesson1Checklist, lesson2Checklist]);
+    }
+
+    private static (Module, List<ChecklistSeed>) BuildCSharpPerformanceAndLowLevelModule(int topicId)
+    {
+        var lesson1 = BuildLesson(
+            slug: "span-memory-and-low-allocation-patterns",
+            title: "Span<T>, Memory<T> & Low-Allocation Patterns",
+            summary: "What Span<T> actually is, why it must be a ref struct, Memory<T> as its heap-safe counterpart, stackalloc, and rewriting allocation-heavy parsing to slice instead of copy.",
+            estimatedMinutes: 40,
+            objectives:
+            [
+                "Explain what Span<T> is -- a ref struct view over a contiguous region of memory that allocates nothing of its own",
+                "Explain why Span<T> must be a ref struct, and name the specific restrictions that guarantee (no field of a class, no boxing, no capture in a lambda, no crossing await)",
+                "Choose Memory<T> over Span<T> when a slice needs to be stored in a field or passed across an async boundary",
+                "Rewrite an allocation-heavy string- or buffer-parsing routine using ReadOnlySpan<char>/stackalloc slicing instead of substrings and arrays",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    A `Span<T>` is a lightweight, ref struct wrapper around a **contiguous region of memory** -- it doesn't own or allocate any memory itself. That region can be a slice of an existing managed array (`array.AsSpan(2, 5)`), a stack-allocated buffer (`stackalloc int[64]`), or unmanaged memory. A `Span<T>` is really just a pointer plus a length; slicing it (`span.Slice(1, 3)` or `span[1..3]`) produces another `Span<T>` over the *same* memory, with zero copying and zero heap allocation.
+
+                    `Span<T>` is declared as a **ref struct**, which the compiler enforces with hard restrictions: it cannot be boxed, cannot be a field of an ordinary (heap-allocated) class, cannot be a type parameter, and -- critically -- cannot be captured by a lambda or used across an `await` point. That restriction isn't arbitrary: a `Span<T>` might be pointing at stack memory (from `stackalloc`) that's only valid for the lifetime of the current method's stack frame. If the compiler let a `Span<T>` be stored in a heap object, captured in a closure, or survive across an `await` (where the continuation could resume at a later point, possibly after the original stack frame is gone), you'd end up with a reference to memory that no longer exists. Making it a `ref struct` lets the compiler catch that at compile time instead of producing a memory-corruption bug at runtime.
+
+                    `Memory<T>` is the heap-safe counterpart for exactly the cases `Span<T>` can't cover: it can be stored as a field, passed into an `async` method, or captured in a lambda, because it's an ordinary (non-ref) struct that references heap memory (or a wrapped array) rather than potentially-stack memory. The common pattern is to hold state as `Memory<T>` and call `.Span` to get a `Span<T>` only for the duration of a synchronous, non-escaping operation.
+
+                    `stackalloc` allocates a buffer directly on the stack (`Span<byte> buffer = stackalloc byte[256];`) instead of the managed heap. For small, short-lived, method-local buffers, this means the memory needs no garbage collection at all -- it's reclaimed the instant the method returns, the same way any other stack frame is, with none of the generational-GC bookkeeping already covered in the memory-management-and-garbage-collection lesson. This is the core payoff of `Span<T>`/`Memory<T>`: they let everyday code (parsing, formatting, slicing) avoid heap allocations it would otherwise be forced to make just to hand off a "smaller piece" of an existing array or string.
+                    """, 1),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Span<T> basics**
+
+                    - `Span<T>` / `ReadOnlySpan<T>` -- a ref struct view over a contiguous region of memory; no allocation of its own
+                    - `array.AsSpan()`, `array.AsSpan(start, length)` -- slice an existing array with zero copying
+                    - `"hello".AsSpan(1, 3)` -- a `ReadOnlySpan<char>` slice of a string, no substring allocation
+                    - `span[1..3]` / `span.Slice(1, 2)` -- re-slice, still zero allocation, still the same backing memory
+
+                    **ref struct restrictions (why Span<T> is safe)**
+
+                    - Cannot be a field of an ordinary heap-allocated class
+                    - Cannot be boxed, used as a generic type argument, or stored in an array of `object`
+                    - Cannot be captured by a lambda or local function that outlives the current call
+                    - Cannot be used across an `await` point in an async method
+
+                    **Memory<T> -- the heap-safe counterpart**
+
+                    - `Memory<T>` -- ordinary (non-ref) struct, safe to store as a field or pass into `async` methods
+                    - `memory.Span` -- get a `Span<T>` for a synchronous, non-escaping slice of work
+                    - Use `Memory<T>` at rest (fields, async signatures); use `Span<T>` only in the innermost synchronous hot loop
+
+                    **stackalloc**
+
+                    - `Span<byte> buffer = stackalloc byte[256];` -- stack-allocated, zero GC pressure, gone when the method returns
+                    - Only safe for small, short-lived, method-local buffers -- a large or unbounded stackalloc risks a stack overflow
+                    """, 2),
+                Block(BlockType.CodeSnippet, "From Allocating Substrings to Slicing with Span<char>", BodyFormat.PlainText, """
+                    // BEFORE: every Split() call and every element allocates a brand-new
+                    // string on the heap -- for a hot path parsing millions of lines, that's
+                    // millions of short-lived heap allocations just to look at a key and a value.
+                    public static (string Key, string Value) ParseKeyValueAllocating(string line)
+                    {
+                        string[] parts = line.Split('='); // allocates a new string[] AND two new strings
+                        return (parts[0].Trim(), parts[1].Trim()); // Trim() allocates again if there's whitespace
+                    }
+
+                    // AFTER: ReadOnlySpan<char> slices the original string in place. No
+                    // substring, no array, no intermediate allocations -- just index math
+                    // over the same backing memory the original string already occupies.
+                    public static (string Key, string Value) ParseKeyValueSpan(ReadOnlySpan<char> line)
+                    {
+                        int separatorIndex = line.IndexOf('=');
+                        ReadOnlySpan<char> keySpan = line[..separatorIndex].Trim();
+                        ReadOnlySpan<char> valueSpan = line[(separatorIndex + 1)..].Trim();
+
+                        // Only allocate a real string at the very end, once, for the two small
+                        // results the caller needs to keep -- not for every intermediate step.
+                        return (keySpan.ToString(), valueSpan.ToString());
+                    }
+
+                    // stackalloc: build a small formatting buffer entirely on the stack, with
+                    // zero heap allocation and therefore zero GC involvement for this buffer.
+                    public static string FormatCoordinate(int x, int y)
+                    {
+                        Span<char> buffer = stackalloc char[32];
+                        int pos = 0;
+
+                        buffer[pos++] = '(';
+                        x.TryFormat(buffer[pos..], out int xWritten);
+                        pos += xWritten;
+                        buffer[pos++] = ',';
+                        buffer[pos++] = ' ';
+                        y.TryFormat(buffer[pos..], out int yWritten);
+                        pos += yWritten;
+                        buffer[pos++] = ')';
+
+                        return new string(buffer[..pos]);
+                    }
+
+                    // Processing a large byte buffer (e.g. a network read) without slicing it
+                    // into copied arrays -- header and payload are just windows over the same
+                    // underlying byte[], never a new allocation.
+                    public static int CountNonZero(ReadOnlySpan<byte> data)
+                    {
+                        int count = 0;
+                        foreach (byte b in data)
+                            if (b != 0) count++;
+                        return count;
+                    }
+
+                    void ProcessPacket(byte[] rawPacket)
+                    {
+                        ReadOnlySpan<byte> header = rawPacket.AsSpan(0, 8);
+                        ReadOnlySpan<byte> payload = rawPacket.AsSpan(8);
+                        int nonZeroBytes = CountNonZero(payload); // no copy of payload was ever made
+                    }
+                    """, 3, language: "csharp"),
+                Block(BlockType.Diagram, "A Span Slicing an Existing String, No Copies Made", BodyFormat.AsciiArt, """
+                    string source = "name=Ada Lovelace"          (one heap-allocated string)
+                    +--------------------------------------------+
+                    | n  a  m  e  =  A  d  a     L  o  v  e  l  a  c  e |
+                    +--------------------------------------------+
+                      ^________^    ^_________________________^
+                       keySpan               valueSpan
+
+                    ReadOnlySpan<char> keySpan   = source.AsSpan(0, 4);    // same backing memory, no copy
+                    ReadOnlySpan<char> valueSpan = source.AsSpan(5, 13);   // same backing memory, no copy
+
+                    Only ONE new string gets created per side (keySpan.ToString() /
+                    valueSpan.ToString()) -- at the point the caller actually needs to keep
+                    a value, not once per Split() element and not again per Trim().
+                    """, 4),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Prefer `Span<T>`/`ReadOnlySpan<T>` for method parameters that only need to *read* or *scan* a contiguous chunk of data (parsing, searching, comparing) -- it lets callers pass a slice of an array, a slice of a string, or a stack buffer through the exact same API, with no allocation forced by the API shape itself. Reach for `Memory<T>` only when the slice genuinely needs to outlive the current synchronous call -- stored in a field, queued for later, or passed into an `async` method -- and pull a `Span<T>` from it via `.Span` only at the point you're actually about to use it synchronously.
+
+                    Keep `stackalloc` buffers small and bounded (a few hundred bytes to a few KB) and only for genuinely short-lived, method-local work -- an unbounded or attacker-influenced size passed to `stackalloc` risks a stack overflow, which crashes the process rather than throwing a catchable exception.
+                    """, 5),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    A common question is "why is `Span<T>` a `ref struct` -- what would break if it weren't?" The expected answer: `Span<T>` can point at stack memory (from `stackalloc` or a local variable), and `ref struct` is the mechanism the compiler uses to guarantee that reference can never escape past the stack frame's lifetime -- onto the heap, into a closure, or across an `await`. Naming the *specific* restrictions (no field of a class, no boxing, no capture in a lambda, no crossing `await`) shows you understand the mechanism, not just the buzzword.
+
+                    A strong answer to "how would you reduce allocations in a hot parsing path?" names `Span<T>`/`ReadOnlySpan<char>` slicing directly, with a concrete before/after (e.g., `string.Split` plus substrings vs. `IndexOf` plus slicing) -- interviewers are listening for the specific mechanism, not just "make it more efficient."
+                    """, 6),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Trying to store a `Span<T>` as a field on a class, pass it into an `async` method, or capture it in a lambda that outlives the current call -- the compiler rejects all of these outright (`ref struct` cannot be used this way), which is by design, not a bug to work around. If the value genuinely needs to live past the current synchronous call, the fix is `Memory<T>`, not fighting the compiler.
+
+                    Also common: assuming any use of `Span<T>` automatically makes code faster. Slicing an existing array or string is free, but a `Span<T>` obtained by first calling `.ToArray()` or `.ToCharArray()` on a copy has already paid the allocation cost the pattern was supposed to avoid -- the benefit only shows up when the span is a *view* over memory you already had, not a copy taken solely to get a span.
+                    """, 7),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    A `Span<T>` is like a viewfinder frame you hold up over a photograph -- it lets you look at just one section of the picture without cutting it out, copying it, or moving it; slicing a span is just moving the frame to a different part of the same photo, never printing a new one.
+
+                    Because that frame is only meaningful while you're physically holding it up to that specific photo, it makes no sense to mail the frame to someone else (capture it in a closure) or leave it lying on a desk after the photo's been put away in another room (store it past the method's stack frame) -- the compiler's `ref struct` restriction is exactly that "don't let this frame leave your hands" rule, enforced at compile time.
+
+                    `Memory<T>` is a Polaroid you're allowed to actually put in an envelope and mail (store in a field, pass across an `await`) -- because unlike the viewfinder frame, it's a self-contained reference to memory that's guaranteed to still be there whenever you eventually look at it again.
+
+                    `stackalloc` is scratch paper you grab from a pad on your own desk for a quick calculation and throw away the second you stand up -- nobody has to be called in to clear it away later, because it was never anyone's job but yours, and it's gone the moment you leave.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "Why must Span<T> be declared as a ref struct?",
+                    "Span<T> may point at stack-allocated memory (from stackalloc or a local variable) whose lifetime is tied to the current stack frame. Declaring it a ref struct lets the compiler forbid storing it on the heap, boxing it, capturing it in a lambda, or using it across an await -- all of which could otherwise outlive that memory.",
+                    [
+                        new QuizOptionSeed("Because ref struct types execute faster at runtime than ordinary structs", false),
+                        new QuizOptionSeed("Because it may reference stack memory that becomes invalid once the method returns, so the compiler must prevent it from escaping the stack frame", true),
+                        new QuizOptionSeed("Because Span<T> implements an interface that only ref structs are allowed to implement", false),
+                        new QuizOptionSeed("Because it prevents multiple threads from reading the same span at the same time", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "When should you use Memory<T> instead of Span<T>?",
+                    "Memory<T> is an ordinary (non-ref) struct, so it can be stored as a field, passed across an await, or captured in a closure -- exactly the situations Span<T>'s ref struct restrictions don't allow. The usual pattern is to hold Memory<T> at rest and pull a Span<T> from it via .Span only for a synchronous, non-escaping operation.",
+                    [
+                        new QuizOptionSeed("When you need better raw performance than Span<T> provides", false),
+                        new QuizOptionSeed("When the slice must be stored in a field, passed into an async method, or captured in a closure -- places Span<T> cannot be used at all", true),
+                        new QuizOptionSeed("When working with value types instead of reference types", false),
+                        new QuizOptionSeed("When you want the CLR to automatically synchronize concurrent readers", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Memory<T> and Span<T> usage guidelines", "https://learn.microsoft.com/en-us/dotnet/standard/memory-and-spans/memory-t-usage-guidelines", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("Span<T> Struct", "https://learn.microsoft.com/en-us/dotnet/api/system.span-1", LinkType.OfficialDocs),
+            ]);
+
+        var lesson1Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson1.Slug,
+        [
+            "Rewrite one string-splitting or substring-heavy parsing routine in your own code to use ReadOnlySpan<char> slicing instead, and confirm it no longer allocates intermediate strings",
+            "Write a small method that builds a short buffer with stackalloc and formats a value into it using int.TryFormat instead of string interpolation",
+            "Explain out loud why Span<T> cannot be stored as a field on a class or used across an await, tying the answer back to stack-memory lifetime",
+        ]);
+
+        var lesson2 = BuildLesson(
+            slug: "task-parallel-library-parallel-and-plinq",
+            title: "Task Parallel Library: Parallel & PLINQ",
+            summary: "A third concurrency model beyond Thread/lock and async/await -- Parallel.For/ForEach for CPU-bound data parallelism, ParallelOptions.MaxDegreeOfParallelism, shared-state safety inside parallel bodies, and PLINQ's declarative alternative.",
+            estimatedMinutes: 40,
+            objectives:
+            [
+                "Explain how Parallel.For/Parallel.ForEach differ from both raw Thread/lock and async/await/Task: CPU-bound data parallelism across cores, not I/O waiting",
+                "Use ParallelOptions.MaxDegreeOfParallelism to bound how many cores a parallel operation is allowed to use",
+                "Apply the correct synchronization tool (lock/Interlocked/a Concurrent* collection) when parallel iterations write to shared state",
+                "Use PLINQ's .AsParallel() for declarative data parallelism, and recognize when its overhead makes it a net loss",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    The Task Parallel Library's `Parallel.For`/`Parallel.ForEach` is a **third, distinct concurrency model** from the two already covered on this platform. Raw `Thread`/`lock`/`Monitor` is manual, low-level thread management you reach for when you need direct control. `async`/`await`/`Task` is about *not occupying a thread* while waiting on I/O -- no CPU work is actually happening in parallel while an HTTP call or a database round-trip is in flight. `Parallel.For`/`Parallel.ForEach`, by contrast, is specifically for **CPU-bound data parallelism**: you already have the data (an in-memory collection or a numeric range) and real computation to do on every element, and you want that computation to run genuinely simultaneously across multiple CPU cores.
+
+                    Internally, `Parallel.For(0, count, body)` partitions the range `[0, count)` into chunks and runs those chunks concurrently on multiple thread-pool threads, then waits (blocks the calling thread) until every chunk finishes -- it's inherently a blocking, synchronous-from-the-caller's-perspective operation, unlike `await`, which frees the calling thread instead. `Parallel.ForEach(collection, body)` does the same thing over an `IEnumerable<T>`, using an internal partitioner to divide the source among worker threads. `ParallelOptions.MaxDegreeOfParallelism` caps how many threads/cores a given `Parallel.For`/`ForEach` call is allowed to use at once -- useful when you don't want one CPU-bound loop to monopolize every core on a machine that's also serving other work (an ASP.NET Core process handling requests concurrently, for instance).
+
+                    Because each iteration of a `Parallel.For`/`ForEach` body genuinely runs on a different thread at the same time as the others, writing to any shared state from inside the body reintroduces exactly the same race conditions covered in the multithreading-fundamentals-thread-lock-monitor lesson -- and needs the same fixes covered there and in the concurrent-collections-thread-safety-patterns lesson: `lock` around a shared multi-field invariant, `Interlocked` for a single shared counter, or a `Concurrent*` collection instead of a plain `List<T>`/`Dictionary<TKey,TValue>`. The Parallel class doesn't provide any new synchronization primitives of its own -- it just creates more opportunities to need the ones you already have.
+
+                    **PLINQ** (`.AsParallel()` on a LINQ query) gives you the same underlying data parallelism *declaratively*: instead of hand-writing a `Parallel.For` loop, you describe the query (`Where`, `Select`, `OrderBy`, ...) and PLINQ's query engine decides how to partition the source and merge results back together. That convenience has a real cost, though -- partitioning the data, distributing it across threads, and merging results back (in order, if `.AsOrdered()` is used) all add overhead. For a small collection or cheap per-item work (a quick arithmetic check on a few thousand items), that overhead can easily exceed whatever time was saved by parallelizing, making the parallel version *slower* than a plain sequential LINQ query -- PLINQ is a net win only when there's genuinely substantial, independent per-item work and enough items to amortize the partitioning cost.
+                    """, 1),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Three concurrency models on this platform**
+
+                    - `Thread`/`lock`/`Monitor` -- manual, low-level thread control (multithreading-fundamentals-thread-lock-monitor)
+                    - `async`/`await`/`Task` -- non-blocking I/O concurrency, frees the thread while waiting (async-await-task-based-concurrency)
+                    - `Parallel`/PLINQ -- CPU-bound data parallelism across cores, blocks the caller until all work completes (this lesson)
+
+                    **Parallel.For / Parallel.ForEach**
+
+                    - `Parallel.For(0, n, i => { ... })` -- partitions the numeric range across thread-pool threads
+                    - `Parallel.ForEach(source, item => { ... })` -- partitions an IEnumerable<T> across thread-pool threads
+                    - Both block the calling thread until every partition finishes -- there's no `await` here
+                    - `new ParallelOptions { MaxDegreeOfParallelism = n }` -- caps how many threads/cores are used at once
+
+                    **Shared state inside a parallel body**
+
+                    - Same tools as the concurrency module: `lock` for multi-step invariants, `Interlocked` for a single counter, `Concurrent*` for a shared collection
+                    - Thread-local overloads (`localInit`, `body`, `localFinally`) give each thread its own accumulator, merged once at the end -- avoids contention entirely
+
+                    **PLINQ**
+
+                    - `collection.AsParallel().Where(...).Select(...)` -- declarative data parallelism
+                    - `.AsOrdered()` -- preserve input order in the output, at extra cost
+                    - `.WithDegreeOfParallelism(n)` -- PLINQ's equivalent of MaxDegreeOfParallelism
+                    - Net loss for small collections or cheap-per-item work -- partitioning/merging overhead can exceed the time saved
+                    """, 2),
+                Block(BlockType.CodeSnippet, "Parallel.For/ForEach, Shared-State Safety, and PLINQ", BodyFormat.PlainText, """
+                    // CPU-bound work: compute something nontrivial for every item in a large
+                    // in-memory collection. This is exactly what Parallel.For/ForEach is for --
+                    // there's no I/O here, just computation that can genuinely run on multiple
+                    // cores at once.
+                    public static long[] ComputeChecksums(byte[][] documents)
+                    {
+                        var results = new long[documents.Length];
+
+                        Parallel.For(0, documents.Length,
+                            new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount },
+                            i =>
+                            {
+                                results[i] = ComputeChecksum(documents[i]); // each index is written by exactly
+                            });                                             // one iteration -- no shared-state race
+
+                        return results;
+                    }
+
+                    // UNSAFE: every iteration increments the same shared field. Parallel.For runs
+                    // iterations on multiple real threads at once, so this reintroduces the exact
+                    // race condition covered in the multithreading-fundamentals lesson.
+                    int unsafeMatchCount = 0;
+                    Parallel.ForEach(documents, doc =>
+                    {
+                        if (IsMatch(doc)) unsafeMatchCount++; // read-modify-write race across threads
+                    });
+
+                    // FIXED: use the same tools already covered for shared mutable state --
+                    // Interlocked for a single counter, here, instead of a full lock.
+                    int safeMatchCount = 0;
+                    Parallel.ForEach(documents, doc =>
+                    {
+                        if (IsMatch(doc)) Interlocked.Increment(ref safeMatchCount);
+                    });
+
+                    // Thread-local accumulation avoids contention entirely: each thread sums into
+                    // its own local total, and only the final per-thread totals are merged.
+                    long total = 0;
+                    Parallel.ForEach(
+                        source: documents,
+                        localInit: () => 0L,
+                        body: (doc, state, localTotal) => localTotal + ComputeChecksum(doc),
+                        localFinally: localTotal => Interlocked.Add(ref total, localTotal));
+
+                    // PLINQ: the same data parallelism, described declaratively.
+                    IEnumerable<string> flaggedIds = documents
+                        .AsParallel()
+                        .WithDegreeOfParallelism(Environment.ProcessorCount)
+                        .Where(doc => IsMatch(doc))
+                        .Select(doc => GetDocumentId(doc));
+
+                    // For a handful of cheap items, plain sequential LINQ beats PLINQ -- the
+                    // partitioning and thread-coordination overhead costs more than it saves:
+                    IEnumerable<int> squares = Enumerable.Range(1, 20).Select(n => n * n); // don't parallelize this
+                    """, 3, language: "csharp"),
+                Block(BlockType.Diagram, "How Parallel.For Partitions and Blocks the Caller", BodyFormat.StructuredSteps, """
+                    [{"label":"Parallel.For(0, n, body) called on the calling thread","note":"the calling thread itself takes part in the work, plus additional thread-pool threads"},{"label":"The range [0, n) is split into partitions","note":"an internal partitioner decides chunk sizes -- not simply one iteration per thread"},{"label":"Each partition's iterations run body(i) concurrently","note":"genuine parallel execution across cores, bounded by MaxDegreeOfParallelism"},{"label":"Parallel.For blocks the caller until every partition completes","note":"unlike await, the calling thread is not freed to do other work meanwhile"},{"label":"Control returns to the caller only after all iterations finish","note":"exceptions from any iteration are aggregated into a single AggregateException"}]
+                    """, 4),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Reach for `Parallel.For`/`Parallel.ForEach`/PLINQ only when there's real, independent, CPU-bound work per item and enough items (or expensive-enough work per item) to be worth the partitioning and coordination overhead -- for I/O-bound work, `async`/`await` and `Task.WhenAll` are still the right tool, not `Parallel.ForEach`. Set `MaxDegreeOfParallelism` deliberately in a server process (like ASP.NET Core) that's also handling other concurrent work, rather than letting a background job silently claim every core on the machine.
+
+                    Prefer the thread-local accumulator overloads (`localInit`/`body`/`localFinally`) for aggregation instead of having every iteration contend on one shared `Interlocked` field or lock -- letting each thread accumulate independently and merging once at the end scales far better under high iteration counts.
+                    """, 5),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    A common framing question is "what's the difference between async/await and Parallel.For -- aren't they both concurrency?" Lead with: `async`/`await` is about not blocking a thread while waiting on I/O (no extra computation happening at once), while `Parallel.For` is about running genuine CPU-bound computation simultaneously across multiple cores, and it blocks the calling thread until all the work finishes. Reaching for `Parallel.ForEach` over a collection of HTTP calls, for instance, is a real anti-pattern interviewers listen for you to flag.
+
+                    Also expect "when would PLINQ make something slower?" -- the expected answer names the partitioning/coordination overhead directly and gives a concrete case (a small collection, or trivial per-item work) rather than a vague "sometimes parallelism has overhead."
+                    """, 6),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Using `Parallel.ForEach` to run a collection of I/O-bound operations (HTTP calls, database queries) instead of `Task.WhenAll` -- this ties up thread-pool threads for the entire duration of each call, defeating the point of async I/O and often performing worse than either pure `async`/`await` or a bounded sequential loop.
+
+                    Writing to shared state inside a `Parallel.For`/`ForEach` body without any synchronization, on the assumption that "it's just a loop" -- each iteration can run on a genuinely different thread at the same time as the others, so an unprotected shared counter or list is exactly as racy as the same code written by hand with raw `Thread`s. And reaching for `.AsParallel()` reflexively on every LINQ query regardless of collection size or per-item cost, which frequently makes small or cheap queries slower, not faster, once partitioning overhead is accounted for.
+                    """, 7),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    Raw `Thread`/`lock` is hand-assembling a single production line yourself, station by station, and personally deciding who's allowed to touch the shared parts bin and when. `async`/`await` is a single waiter who takes an order, drops it off in the kitchen, and goes to serve other tables instead of standing at the pass -- no extra cooking capacity, just not wasting the waiter's time waiting. `Parallel.For`/`Parallel.ForEach` is calling in a second, third, and fourth chef, each independently working through their own stack of the same pile of ingredients (the data) at the same time, so the total prep time actually shrinks -- but now all four chefs reaching into the same single spice rack (shared state) at once need the exact same traffic-control rules (locks/Interlocked) as before.
+
+                    PLINQ is handing the head chef a recipe and a pile of ingredients and saying "organize as many cooks as makes sense for this" instead of personally assigning stations yourself -- convenient, but if the dish is trivial (chop one onion), the time spent organizing four cooks to split that single onion costs more than one cook would have taken to just chop it alone.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "How does Parallel.For/Parallel.ForEach differ fundamentally from async/await as a concurrency model?",
+                    "Parallel.For/ForEach runs genuine CPU-bound computation simultaneously across multiple cores and blocks the calling thread until all partitions finish. async/await instead frees the calling thread while waiting on I/O, with no extra computation happening in parallel.",
+                    [
+                        new QuizOptionSeed("Parallel.For can only be called from inside an async method", false),
+                        new QuizOptionSeed("Parallel.For/ForEach runs real work across multiple cores at once and blocks the caller until it's done; async/await frees the calling thread while waiting on I/O instead", true),
+                        new QuizOptionSeed("async/await also distributes computation across multiple cores, just with different syntax", false),
+                        new QuizOptionSeed("Parallel.For only works over numeric ranges, never over collections", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "A team parallelizes a LINQ query with .AsParallel() over a 10-item collection where each item's transformation takes only a few nanoseconds, and the parallel version runs slower than the plain sequential one. What's the most likely explanation?",
+                    "PLINQ's overhead for partitioning the source across threads and merging the results back exceeds the tiny amount of time that could possibly be saved parallelizing such cheap, small-scale work -- for small or cheap-per-item workloads, plain sequential LINQ wins.",
+                    [
+                        new QuizOptionSeed("PLINQ's overhead for partitioning and coordinating threads exceeds the negligible time saved on such a small, cheap workload", true),
+                        new QuizOptionSeed("AsParallel() requires the source to implement IProducerConsumerCollection or it silently runs sequentially with extra overhead", false),
+                        new QuizOptionSeed("AsParallel() always runs strictly slower than Parallel.For, regardless of workload size", false),
+                        new QuizOptionSeed("Small collections cause AsParallel() to throw and fall back to a retry loop", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Data Parallelism (Task Parallel Library)", "https://learn.microsoft.com/en-us/dotnet/standard/parallel-programming/data-parallelism-task-parallel-library", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("Parallel LINQ (PLINQ)", "https://learn.microsoft.com/en-us/dotnet/standard/parallel-programming/introduction-to-plinq", LinkType.OfficialDocs),
+            ]);
+
+        var lesson2Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson2.Slug,
+        [
+            "Rewrite a CPU-bound foreach loop over a large in-memory collection in your own code using Parallel.ForEach, and measure whether it's actually faster",
+            "Introduce a shared counter inside a Parallel.ForEach body, confirm it produces a wrong count, then fix it with Interlocked.Increment",
+            "Run the same query both as plain LINQ and with .AsParallel() over a small collection, and explain out loud why the parallel version is slower",
+        ]);
+
+        var module = BuildModule(topicId, "csharp-performance-and-low-level", "Performance & Low-Level C#",
+            "Span<T>/Memory<T> and stackalloc for low-allocation parsing and buffer handling, plus the Task Parallel Library's Parallel.For/ForEach and PLINQ as a third, CPU-bound data-parallelism concurrency model distinct from Thread/lock and async/await.",
+            80, [lesson1, lesson2], sortOrder: 13);
+
+        return (module, [lesson1Checklist, lesson2Checklist]);
+    }
+
+    private static (Module, List<ChecklistSeed>) BuildCSharpTuplesLocalFunctionsAndModernSyntaxModule(int topicId)
+    {
+        var lesson1 = BuildLesson(
+            slug: "tuples-and-local-functions",
+            title: "Tuples & Local Functions",
+            summary: "System.Tuple's old, heap-allocated Item1/Item2 shape versus lightweight C# tuple syntax with named elements, tuple deconstruction, when a tuple beats a real named type, and local functions as a closure-capturing alternative to a private method or a lambda.",
+            estimatedMinutes: 40,
+            objectives:
+            [
+                "Explain the difference between System.Tuple (a heap-allocated reference type) and System.ValueTuple/C# tuple syntax (a lightweight value type with named elements)",
+                "Deconstruct a tuple with var (a, b) = ... and explain how that differs from deconstructing a record",
+                "Decide when a tuple is the right lightweight multi-value return versus when a dedicated record or class is the better choice",
+                "Write a local function that captures its enclosing method's locals directly, and decide when a local function beats a private method or a lambda",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    **`System.Tuple<T1, T2, ...>`** is the original .NET tuple type, and it's largely obsolete in new code. It's a reference type — every `Tuple.Create(...)` call allocates a genuinely new object on the heap — and its members are always the generic, non-descriptive `Item1`, `Item2`, `Item3`, and so on, no matter what the values actually represent. It's also immutable but clunky to construct and even clunkier to read at a call site, since `result.Item1` and `result.Item2` carry zero information about what those values mean.
+
+                    **`System.ValueTuple`**, backing the C# tuple *syntax* `(T1, T2)` introduced in C# 7, fixes both problems. It's a `struct` — a value type, stored inline wherever the tuple variable itself lives, with no separate heap allocation for the tuple itself — and it supports **named tuple elements**: `(int Count, string Label) stats = (3, "apples");` gives you `stats.Count` and `stats.Label` instead of `Item1`/`Item2`. Those names exist purely as compiler-tracked metadata for source-level convenience — the underlying runtime type is still the same `ValueTuple<int, string>` either way, and the friendly names don't survive things like reflection over the raw runtime type.
+
+                    **Tuple deconstruction** — `var (count, label) = GetStats();` — is built directly into the language for tuple types: any `(T1, T2, ..., Tn)` tuple can be deconstructed into that many variables in one statement, with no extra method required. This is a different mechanism from **record deconstruction**, already covered in `records-and-advanced-pattern-matching`: a positional record deconstructs via a compiler-*generated* `Deconstruct(out ...)` method that has to exist on the type, whereas tuple deconstruction is a language feature that applies to the `ValueTuple` shape itself, with nothing to generate or opt into.
+
+                    **When a tuple is the right call, and when it isn't**: a tuple is a great fit for a quick, private, method-local multi-value return — a helper that computes both a min and a max and hands them straight back to its one caller gains nothing from a dedicated type. Reach for a real named type (a record or class) instead once the values need their own identity, get passed around publicly across API or module boundaries, or need behavior of their own (validation, formatting, methods) — a tuple can't carry a method, and its named elements are a compile-time convenience, not a contract the runtime enforces the way a type's public API is.
+
+                    **Local functions** are a function declared inside another method's body, callable only from within that one enclosing method. The key reason to reach for one instead of a private helper method: a local function can capture the enclosing method's local variables **directly**, like a closure, without them having to be threaded through as parameters — and it's scoped so no other member of the class can call it, unlike a private method, which any method in the class can call. Compare that to a lambda assigned to a `Func<>`/`Action<>` variable: a local function supports **direct recursion** cleanly (it can call itself by name, with no forward-declaration dance), and calling a local function directly — without ever converting it to a delegate — doesn't allocate a delegate object at all; the compiler emits a plain method call. A lambda assigned to a variable, by contrast, is always compiled as an actual delegate instance, and recursive lambdas need the awkward "declare the variable, then assign a lambda that references that same variable" pattern to even self-reference. Reach for a lambda/`Func`/`Action` instead when the logic genuinely needs to be passed around as a value — handed to `Where`, stored in a field, attached to an event — which is exactly the shape a local function isn't built for.
+                    """, 1),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **System.Tuple vs. C# tuple syntax / ValueTuple**
+
+                    - `Tuple.Create(3, "apples")` — reference type, heap-allocated, members are always `Item1`/`Item2`
+                    - `(3, "apples")` / `(int Count, string Label)` — value type (`ValueTuple`), no separate heap allocation, can carry real names
+                    - Named elements are compile-time metadata only — the runtime type is still plain `ValueTuple<int, string>` either way
+
+                    **Deconstruction**
+
+                    - `var (count, label) = GetStats();` — built into the language for any tuple shape, no method required
+                    - Record deconstruction (see `records-and-advanced-pattern-matching`) instead relies on a compiler-generated `Deconstruct` method
+
+                    **Tuple vs. a real type**
+
+                    - Tuple: quick, private, method-local multi-value return that never leaves the method
+                    - Record/class: values need identity, cross a public boundary, or need their own behavior
+
+                    **Local functions vs. private methods vs. lambdas**
+
+                    - Local function — captures enclosing locals directly (no parameters needed), callable only from its one enclosing method
+                    - Private method — needs every value passed in as a parameter, callable from anywhere else in the class
+                    - Local function called directly — no delegate allocated; supports clean, natural recursion
+                    - Lambda assigned to `Func`/`Action` — always a real delegate instance; self-recursion needs a declare-then-assign dance
+                    - Reach for a lambda instead when the logic must be passed around as a value (LINQ operators, event handlers, stored delegates)
+                    """, 2),
+                Block(BlockType.CodeSnippet, "Tuple vs. System.Tuple, Deconstruction, and Local Functions vs. Private Methods/Lambdas", BodyFormat.PlainText, """
+                    // --- System.Tuple: old, heap-allocated reference type (largely obsolete) ---
+                    Tuple<int, string> oldTuple = Tuple.Create(3, "apples");
+                    Console.WriteLine(oldTuple.Item1); // 3 - only generic Item1/Item2 names, no domain meaning
+                    Console.WriteLine(oldTuple.Item2); // "apples"
+                    // oldTuple lives on the heap; every Tuple.Create allocates a new reference-type object
+
+                    // --- ValueTuple / C# tuple syntax: lightweight value type, can carry real names ---
+                    (int Count, string Label) stats = (3, "apples");
+                    Console.WriteLine(stats.Count); // 3 - a real, self-documenting field name
+                    Console.WriteLine(stats.Label); // "apples"
+                    // stats is a struct: stored inline, copied by value, no heap allocation for the tuple itself
+
+                    (int Count, string Label) GetStats() => (3, "apples");
+
+                    // --- Deconstruction: built directly into the language for tuple types ---
+                    var (count, label) = GetStats();
+                    Console.WriteLine($"{count} {label}"); // 3 apples
+                    // Compare: a positional record deconstructs via a compiler-GENERATED Deconstruct
+                    // method (see records-and-advanced-pattern-matching) - tuple deconstruction needs
+                    // no such method at all; it's built-in language support for any (T1, T2, ...) shape.
+
+                    // --- Tuple vs. a real type: when each is the right choice ---
+                    // Good tuple use: quick, private, method-local multi-value return, never leaves this method
+                    (int Min, int Max) FindRange(int[] values)
+                    {
+                        int lo = values[0], hi = values[0];
+                        foreach (var v in values) { lo = Math.Min(lo, v); hi = Math.Max(hi, v); }
+                        return (lo, hi);
+                    }
+
+                    // Better as a record: these values have identity, cross an API boundary, and
+                    // grow behavior of their own (validation) that a tuple could never carry.
+                    public record PriceRange(decimal Min, decimal Max)
+                    {
+                        public bool Contains(decimal price) => price >= Min && price <= Max;
+                    }
+
+                    // --- Local functions: declared inside another method, capture its locals directly ---
+                    void ProcessOrder(Order order)
+                    {
+                        decimal discount = order.IsVipCustomer ? 0.1m : 0m; // a local variable...
+
+                        decimal ApplyDiscount(decimal amount) => amount - amount * discount; // ...captured directly, no parameter needed
+
+                        order.Total = ApplyDiscount(order.Subtotal);
+                    }
+                    // A private method could NOT reach `discount` without it being passed in explicitly.
+                    // ApplyDiscount here is also scoped so ONLY ProcessOrder can call it, unlike a
+                    // private method, which is callable from anywhere else in the class too.
+
+                    // --- Local functions support clean recursion and skip delegate allocation ---
+                    int Fibonacci(int n) => n <= 1 ? n : Fibonacci(n - 1) + Fibonacci(n - 2);
+                    Console.WriteLine(Fibonacci(10));
+                    // Called directly like this, the compiler emits a plain method call - no
+                    // delegate object is allocated unless Fibonacci is actually converted to a Func<int,int>.
+
+                    // Equivalent recursion via a lambda needs an awkward two-step, self-referencing dance:
+                    Func<int, int> fib = null!;
+                    fib = n => n <= 1 ? n : fib(n - 1) + fib(n - 2); // must declare `fib` before it can reference itself
+                    // fib IS a real delegate here - a heap-allocated Func<int,int> instance.
+
+                    // --- When a lambda/Func/Action IS the better choice: passed around as a value ---
+                    IEnumerable<Order> expensiveOrders = orders.Where(o => o.Total > 100m); // passed AS a delegate to Where
+                    button.Click += (sender, e) => Console.WriteLine("clicked"); // stored/attached as a value
+                    """, 3, language: "csharp"),
+                Block(BlockType.Diagram, "Tuple/ValueTuple Memory Shape, and Local Function Capture vs. a Private Method", BodyFormat.AsciiArt, """
+                    System.Tuple<int,string>              (int, string) / ValueTuple
+                       var t = Tuple.Create(3, "x");         var t = (3, "x");
+
+                       Stack           Heap                  Stack (inline - no separate heap allocation)
+                       t ----------> [Tuple object]           t = [ Item1: 3 | Item2: "x" ]
+                                     Item1: 3
+                                     Item2: "x"
+                       (a real heap allocation,               (just fields living wherever the
+                        like any other reference type)         tuple variable itself lives)
+
+                    Local function capture vs. a private method:
+
+                       void ProcessOrder(Order order)          class OrderProcessor
+                       {                                        {
+                           decimal discount = ...;                  private decimal ApplyDiscount(decimal amount, decimal discount)
+                                                                         => amount - amount * discount; // discount must be PASSED IN
+                           decimal ApplyDiscount(decimal amount)
+                               => amount - amount * discount;           // callable from ANYWHERE else in the class -
+                                        ^                                // no scoping to just one caller
+                            captures `discount` directly, no
+                            parameter needed - but ONLY
+                            callable from inside ProcessOrder
+                       }
+                    """, 4),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Reach for a tuple the moment the multi-value return is quick, private, and consumed immediately by its one caller — a helper computing a min/max pair, a min/max together with a count. Reach for a record (or class, if it needs mutable reference semantics) the moment those values need identity, cross a public method's boundary into other parts of the codebase, or need behavior attached to them beyond just holding data.
+
+                    Reach for a local function when a small piece of logic only makes sense inside one method and needs several of that method's own locals — it captures them directly instead of forcing an awkward parameter list, and it can't accidentally be called from anywhere else in the class. Reach for a lambda assigned to `Func`/`Action` instead when the logic itself needs to be handed off somewhere else as a value — a LINQ predicate, an event handler, a callback stored in a field.
+                    """, 5),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    If asked "why not just use System.Tuple," lead with the concrete cost: it's a heap allocation on every construction, and `Item1`/`Item2` carry no domain meaning, whereas `(int Count, string Label)` is a value type with real names and no extra allocation. If asked to justify a local function over a private method, the sharpest answer is capture: "it can reach the enclosing method's locals directly, without me passing them in, and it can't be called from anywhere else in the class" — that's a stronger answer than a vague "it's more modern-looking."
+                    """, 6),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Still reaching for `System.Tuple`/`Tuple.Create` in new code out of habit, paying for a heap allocation and `Item1`/`Item2`-only naming when the C# tuple syntax with named elements is strictly better for the same job. Also common: assuming a named tuple element like `Count` is a runtime feature — it's compile-time metadata only, and the underlying runtime type is still plain `ValueTuple<int, string>` either way, so reflecting over the raw type (or passing it somewhere that doesn't preserve that metadata) loses the friendly names entirely.
+
+                    On local functions: writing a local function when nothing is actually captured from the enclosing method (a plain private method would do, with no downside), or the reverse — writing a private helper method that has to thread through three or four parameters that are already sitting right there as locals in the one caller that needs it, when a local function would let it just capture them directly.
+                    """, 7),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    `System.Tuple` is like renting a storage locker across town every time you need to hand someone two items — a real trip, real overhead, and the items only ever come back labeled "Item 1" and "Item 2." A C# tuple with named elements is a small labeled tray you set right on your own desk — no trip required, and the labels actually say "Count" and "Label."
+
+                    A local function is a sticky note you write to yourself in the middle of a task, referencing whatever's already sitting on your desk without having to photocopy and hand it to anyone — useful only to you, for that one task. A private method is more like paging a coworker in the next office: they can be reached by anyone on the team at any time, but you have to hand them printed copies of everything they need, since they don't sit at your desk and can't see your notes directly.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "What's the key practical difference between System.Tuple<int, string> and the C# tuple syntax (int, string)?",
+                    "System.Tuple is a reference type - every Tuple.Create call allocates a new heap object, and its members are always the generic Item1/Item2. The C# tuple syntax compiles to System.ValueTuple, a value type with no separate heap allocation for the tuple itself, and it supports real named elements like (int Count, string Label).",
+                    [
+                        new QuizOptionSeed("System.Tuple is a heap-allocated reference type accessed via Item1/Item2; the C# tuple syntax compiles to ValueTuple, a lightweight value type that can carry real named elements", true),
+                        new QuizOptionSeed("They compile to the exact same IL with no difference at all besides syntax", false),
+                        new QuizOptionSeed("System.Tuple supports named elements while the C# tuple syntax only supports Item1/Item2", false),
+                        new QuizOptionSeed("The C# tuple syntax is a reference type, while System.Tuple is a value type", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "A method computes several local variables and then needs a small piece of logic that combines three of them, only ever called from that one method. Why would a local function be preferable to a private method here?",
+                    "A local function can capture the enclosing method's locals directly, without them being passed in as parameters, and it's scoped so only that one enclosing method can call it. A private method would need all three values threaded through explicitly as parameters, and would remain callable from anywhere else in the class.",
+                    [
+                        new QuizOptionSeed("It can capture the enclosing method's locals directly with no parameters needed, and is only callable from within that one method", true),
+                        new QuizOptionSeed("Local functions always execute faster than private methods in every scenario", false),
+                        new QuizOptionSeed("Local functions support public/private access modifiers, letting you control visibility more precisely than a private method", false),
+                        new QuizOptionSeed("A lambda assigned to a variable never allocates a delegate, so it would be strictly better than either option", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Tuple types (C# reference)", "https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/builtin-types/value-tuples", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("Local functions (C# programming guide)", "https://learn.microsoft.com/en-us/dotnet/csharp/programming-guide/classes-and-structs/local-functions", LinkType.OfficialDocs),
+            ]);
+
+        var lesson1Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson1.Slug,
+        [
+            "Rewrite a Tuple.Create<int, string>(...) call to the (int Count, string Label) syntax with named elements, and deconstruct it with var (count, label) = ...",
+            "Write a method with 3-4 local variables it needs for one small piece of logic, then refactor that logic into a local function so those locals are captured directly instead of passed as parameters",
+            "Convert a self-referencing recursive lambda (declare-then-assign to a Func<>) into a local function and confirm it compiles without the two-step declaration",
+        ]);
+
+        var lesson2 = BuildLesson(
+            slug: "operator-overloading-indexers-and-required-members",
+            title: "Operator Overloading, Indexers & Required Members",
+            summary: "Overloading operators like + and == for a genuine domain value type, the consistency rule that == demands != plus Equals/GetHashCode, custom single- and multi-parameter indexers, and C# 11 required members enforced at every construction site.",
+            estimatedMinutes: 45,
+            objectives:
+            [
+                "Overload an operator like + for a custom value type, and explain why overloading == requires also overloading != and overriding Equals/GetHashCode",
+                "Recognize when overloading an operator is genuinely appropriate versus when it becomes a readability trap",
+                "Write a custom indexer, including a multi-parameter indexer, for a type that logically behaves like a collection",
+                "Use a required property (C# 11) instead of a required constructor parameter, and explain how required interacts with nullable reference types",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    **Operator overloading** lets a type define what a built-in operator means for it: `public static Money operator +(Money a, Money b) => new(a.Amount + b.Amount);`. Overload operators must be declared `public static`, taking the operand(s) as parameters, with at least one operand of the enclosing type for a binary operator.
+
+                    **The consistency rule**: if you overload `==`, the compiler *requires* you to also overload `!=` — leaving it out is a compile error (CS0216), since a type can't sensibly answer "are these equal" without also being able to answer "are these not equal." Beyond what the compiler enforces, you should also override `Equals(object)`/`GetHashCode()` to match — otherwise `==` can report two values as equal by value while `Dictionary` lookups, `List.Contains`, or a boxed `.Equals()` call still fall back to reference-based comparison, giving genuinely inconsistent answers to what looks like the same question asked two different ways.
+
+                    **When overloading is appropriate versus a trap**: it's a great fit for a type that behaves like a mathematical or domain value — `Money`, `Vector2D`, `Duration` — where `+`/`-`/`==` already have an obvious, universally understood meaning, and using them makes the code read exactly like the math it represents. It becomes a readability trap the moment the meaning isn't obvious from the operator alone — overloading `+` to mean "merge two `Employee` objects into a `Team`," for instance, forces every reader to go look up what `+` actually does here, which defeats the entire point of an operator (that its meaning is supposed to be guessable on sight).
+
+                    **Custom indexers** — `public T this[int index] { get; set; }` — let a type be accessed with `[]` syntax, appropriate for any type that logically behaves like a collection: a custom collection wrapper, a sparse array backed by a dictionary, and so on. Indexers aren't limited to a single `int` parameter: a **multi-parameter indexer** — `public double this[int row, int col] { get; set; }` — fits a matrix-like type naturally, and indexers can be overloaded with different parameter lists just like an ordinary method.
+
+                    **`required` members (C# 11)** mark a property as mandatory at every construction site: `public required string Name { get; init; }` forces every `new Person { ... }` call to set `Name`, enforced by the compiler (CS9035 if it's omitted). This differs from a positional record's required-parameter approach in an important way: a positional record ties "required-ness" to one specific constructor's parameter list and order (`new Person(string name)`), while a `required` property carries its own obligation independently of which constructor is used — it works with any constructor, including a parameterless one, and doesn't need a matching constructor parameter at all. `required` also interacts cleanly with **nullable reference types**: pairing `required` with a non-nullable reference property removes the need for a nullable-warning suppression (like `= null!;`) at construction time, since the compiler can prove the property will always be set by the time construction completes, satisfying NRT's definite-assignment analysis without an extra escape hatch. It's worth being precise about what `required` actually guarantees, though: it enforces that the property is *set*, not that a non-null value was provided — `new Person { Name = null! }` still compiles and still leaves `Name` genuinely null at runtime, exactly like any other NRT suppression.
+                    """, 1),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Operator overloading**
+
+                    - `public static Money operator +(Money a, Money b) => ...;` — public static, at least one operand of the enclosing type
+                    - Overload `==` -> MUST also overload `!=` (CS0216 otherwise) -> also override `Equals`/`GetHashCode` for consistency
+                    - Appropriate: a genuine math/domain value type (Money, Vector2D, Duration)
+                    - A trap: overloading an operator to mean something non-obvious (`Employee + Employee` = `Team`)
+
+                    **Indexers**
+
+                    - `public T this[int index] { get; set; }` — for a type that logically behaves like a collection
+                    - `public double this[int row, int col] { get; set; }` — multi-parameter indexer, e.g. a matrix
+                    - Indexers can be overloaded with different parameter lists, just like a method
+
+                    **required members (C# 11)**
+
+                    - `public required string Name { get; init; }` — must be set at every construction site (CS9035 otherwise)
+                    - Works with ANY constructor, including a parameterless one — unlike a positional record's constructor-parameter coupling
+                    - Paired with a non-nullable reference property, removes the need for `= null!;` at construction time
+                    - Guarantees the property is SET, not that it's non-null — `Name = null!` still compiles
+                    """, 2),
+                Block(BlockType.CodeSnippet, "Operator Overloading, Indexers, and required Members", BodyFormat.PlainText, """
+                    // --- Operator overloading: a genuine domain value type ---
+                    public readonly struct Money
+                    {
+                        public decimal Amount { get; }
+                        public Money(decimal amount) => Amount = amount;
+
+                        public static Money operator +(Money a, Money b) => new(a.Amount + b.Amount);
+                        public static Money operator -(Money a, Money b) => new(a.Amount - b.Amount);
+
+                        // Overload == -> C# REQUIRES you also overload != (CS0216 otherwise)
+                        public static bool operator ==(Money a, Money b) => a.Amount == b.Amount;
+                        public static bool operator !=(Money a, Money b) => !(a == b);
+
+                        // ...and override Equals/GetHashCode so Dictionary<Money,_>/Contains/etc. stay consistent with ==
+                        public override bool Equals(object? obj) => obj is Money other && this == other;
+                        public override int GetHashCode() => Amount.GetHashCode();
+                    }
+
+                    var total = new Money(10.00m) + new Money(5.00m); // reads naturally - Money genuinely behaves like a number
+
+                    // --- A readability trap: overloading + with a non-obvious meaning ---
+                    public class Employee { }
+                    public class Team
+                    {
+                        public Team(Employee a, Employee b) { }
+
+                        // BAD: what does adding two Employees even mean? Readers must go look this up -
+                        // operator overloading should make code MORE obvious, not less.
+                        public static Team operator +(Employee a, Employee b) => new(a, b);
+                    }
+
+                    // --- Custom indexer: a type that behaves like a collection ---
+                    public class SparseArray<T>
+                    {
+                        private readonly Dictionary<int, T> _values = new();
+
+                        public T this[int index]
+                        {
+                            get => _values.TryGetValue(index, out var v) ? v : default!;
+                            set => _values[index] = value;
+                        }
+                    }
+
+                    var sparse = new SparseArray<string>();
+                    sparse[1000] = "far apart"; // reads like array access, backed by a dictionary underneath
+
+                    // --- Multi-parameter indexer: a matrix-like type ---
+                    public class Matrix
+                    {
+                        private readonly double[,] _cells;
+                        public Matrix(int rows, int cols) => _cells = new double[rows, cols];
+
+                        public double this[int row, int col]
+                        {
+                            get => _cells[row, col];
+                            set => _cells[row, col] = value;
+                        }
+                    }
+
+                    var matrix = new Matrix(3, 3);
+                    matrix[0, 0] = 1.0; // reads naturally as row/column access
+
+                    // --- required members (C# 11): enforced at every construction site ---
+                    public class Person
+                    {
+                        public required string Name { get; init; } // must be set - no constructor parameter needed
+                        public int? Age { get; init; }
+
+                        public Person() { } // an ordinary parameterless constructor works fine
+                    }
+
+                    var person = new Person { Name = "Ann" }; // compiles - Name was set
+                    // var broken = new Person();             // CS9035: required member 'Person.Name' must be set
+
+                    // Contrast: a positional record ties "required" to ONE constructor's parameter list/order
+                    public record PersonRecord(string Name);
+                    var viaRecord = new PersonRecord("Ann"); // must match the constructor signature exactly
+
+                    // required + NRT: no nullable-warning suppression needed at construction time
+                    public class Order
+                    {
+                        public required string CustomerName { get; init; } // non-nullable, required -> no `= null!;` needed
+                    }
+                    """, 3, language: "csharp"),
+                Block(BlockType.Diagram, "Equality Consistency, and required Properties vs. a Positional Record", BodyFormat.AsciiArt, """
+                    Operator == overloaded  -->  compiler REQUIRES != also overloaded (CS0216 otherwise)
+                            |
+                            v
+                    Also override Equals(object)/GetHashCode() so every equality path agrees:
+
+                       a == b                      (operator ==)      -> value comparison
+                       a.Equals(b)                  (Equals override) -> SAME value comparison
+                       dict[a] / list.Contains(a)   (uses GetHashCode + Equals) -> SAME value comparison
+
+                       If only == is overloaded and Equals/GetHashCode are left as default (reference-based):
+                       a == b            -> true  (values match)
+                       a.Equals(b)       -> false (still comparing references!)   <- inconsistent, confusing bugs
+
+                    required property vs. positional record parameter:
+
+                       record PersonRecord(string Name);        class Person { public required string Name { get; init; } }
+                       new PersonRecord("Ann")                  new Person { Name = "Ann" }
+                            ^                                        ^
+                       coupled to ONE constructor's                  required-ness lives on the PROPERTY -
+                       parameter list & order                        works with ANY constructor, any order,
+                                                                      including a parameterless one
+                    """, 4),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Overload operators only for types that already behave like a value in the domain sense — something a reader would naturally expect to add, subtract, or compare without needing a comment to explain it. The moment an operator's meaning needs a comment to justify it, that's the signal to use a named method instead (`team.Merge(employee)` beats an unexplainable `+`). Whenever you overload `==`, treat overloading `!=` and overriding `Equals`/`GetHashCode` as one atomic unit of work, not an optional follow-up.
+
+                    Reach for `required` properties over a long required-constructor-parameter list when a type is mostly used via object-initializer syntax (DTOs, configuration objects, request/response shapes) — it keeps construction order-independent and doesn't force every future constructor overload to repeat the same parameter just to satisfy "required-ness."
+                    """, 5),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    If asked when operator overloading is appropriate, anchor the answer on "does this operator's meaning need to be explained, or is it obvious on sight" — `Money + Money` needs no explanation, `Employee + Employee` does, and that's the entire test. If asked about `required`, be ready to contrast it precisely with a positional record's constructor parameter: a `required` property is enforced independently of which constructor runs, while a positional record's requirement is really just "this constructor's parameter list," which is a narrower, more rigid mechanism.
+                    """, 6),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Overloading `==` without also overriding `Equals(object)`/`GetHashCode()` — the compiler forces `!=` alongside `==`, but it does NOT force the `Equals`/`GetHashCode` override, so it's entirely possible to end up with `==` reporting value equality while `Dictionary`/`HashSet`/`List.Contains` still silently fall back to reference equality underneath.
+
+                    Also common: assuming `required` guarantees a non-null value rather than merely a *set* value — `new Person { Name = null! }` still compiles and produces a genuinely null `Name` at runtime, since `required` only enforces that the property was explicitly assigned, not that the assigned value passed any non-null check. And: overloading an operator for a type where the operation's meaning isn't obvious, forcing every reader to go find the operator's definition just to understand a single line of ordinary-looking code.
+                    """, 7),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    Overloading `+` for `Money` is like using a universal currency symbol everyone already recognizes — nobody needs an explanation to know what "$10 + $5" means. Overloading `+` for `Employee + Employee = Team` is like inventing a private hand signal and expecting strangers to know what it means on sight — technically it works, but only for the person who invented it.
+
+                    A custom indexer is a labeled set of pigeonholes: reach in with a key (or, for a matrix, a row and a column) and get exactly the slot you asked for, without needing to know what's actually organizing the pigeonholes behind the wall. A `required` property is like a form that a clerk physically cannot file away until one particular box is filled in — no matter which counter (constructor) you walked up to, that one box is checked before the form is accepted.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "A type overloads == but doesn't override Equals(object)/GetHashCode(). What's the resulting risk?",
+                    "The compiler only forces you to also overload != alongside ==; it does not force Equals/GetHashCode to be overridden. Code paths that use those (Dictionary lookups, HashSet, List.Contains) can still fall back to reference-based comparison, disagreeing with what == reports for the exact same two values.",
+                    [
+                        new QuizOptionSeed("Code paths that rely on Equals/GetHashCode (like Dictionary lookups or List.Contains) can disagree with what == reports, since they may still use default reference-based comparison", true),
+                        new QuizOptionSeed("The code fails to compile, since C# always requires Equals/GetHashCode overrides whenever == is overloaded", false),
+                        new QuizOptionSeed("== silently stops compiling correctly and always returns false", false),
+                        new QuizOptionSeed("There is no risk - Equals and GetHashCode are automatically synchronized with any overloaded == operator", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "A class declares `public required string Name { get; init; }`. Which statement about construction is true?",
+                    "A required property's obligation is independent of any particular constructor - it can be satisfied through any constructor, including a parameterless one, as long as Name is set via object-initializer syntax at that construction site. This differs from a positional record, where 'required-ness' is tied to one specific constructor's parameter list and order.",
+                    [
+                        new QuizOptionSeed("Any constructor, including a parameterless one, can be used as long as Name is set via object-initializer syntax at that construction site", true),
+                        new QuizOptionSeed("required only works on positional records, never on an ordinary class", false),
+                        new QuizOptionSeed("Name may be left unset as long as at least one other property on the type is set", false),
+                        new QuizOptionSeed("required inserts a runtime check that throws if Name is ever assigned a null value", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Operator overloading (C# reference)", "https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/operators/operator-overloading", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("required modifier (C# reference)", "https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/keywords/required", LinkType.OfficialDocs),
+            ],
+            prerequisites: [lesson1]);
+
+        var lesson2Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson2.Slug,
+        [
+            "Write a small value type (Money or Vector2D) that overloads + and ==, then add the matching != overload and Equals/GetHashCode overrides the compiler and consistency both require",
+            "Write a custom indexer (single-parameter) for a small wrapper type, then extend it (or write a second type) with a multi-parameter indexer like a matrix's this[row, col]",
+            "Convert a class with a long required-constructor-parameter list into one using required properties instead, and confirm object-initializer syntax at every call site still compiles",
+        ]);
+
+        var module = BuildModule(topicId, "csharp-tuples-local-functions-and-member-syntax", "Tuples, Local Functions & Modern Member Syntax",
+            "Lightweight multi-value returns with tuples versus a dedicated record/class, local functions that capture enclosing state directly instead of a private helper or lambda, plus operator overloading, custom indexers, and C# 11 required members enforced at every construction site.",
+            85, [lesson1, lesson2], sortOrder: 14);
+
+        return (module, [lesson1Checklist, lesson2Checklist]);
+    }
+
+    private static (Module, List<ChecklistSeed>) BuildCSharpJsonSerializationModule(int topicId)
+    {
+        var lesson1 = BuildLesson(
+            slug: "system-text-json-fundamentals-and-custom-converters",
+            title: "System.Text.Json Fundamentals & Custom Converters",
+            summary: "JsonSerializer.Serialize/Deserialize, the JsonSerializerOptions that matter in practice, member-level attributes, and writing a custom JsonConverter<T> for a type that doesn't serialize correctly by default.",
+            estimatedMinutes: 45,
+            objectives:
+            [
+                "Serialize and deserialize objects with JsonSerializer, and configure JsonSerializerOptions (PropertyNamingPolicy, WriteIndented, DefaultIgnoreCondition, PropertyNameCaseInsensitive)",
+                "Control the JSON shape of individual members with [JsonPropertyName], [JsonIgnore], and [JsonInclude]",
+                "Write a custom JsonConverter<T> for a type (a Money value object) that doesn't serialize correctly using the default object shape",
+                "Register a custom converter either via JsonSerializerOptions.Converters or a [JsonConverter(typeof(...))] attribute on the type itself",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    `JsonSerializer.Serialize(value)` turns an object graph into a JSON string; `JsonSerializer.Deserialize<T>(json)` turns it back. Both have overloads taking a `JsonSerializerOptions` instance, which is where almost all real-world tuning happens. A `JsonSerializerOptions` is relatively expensive to build and is designed to be created **once** and reused (a `static readonly` field, or the options ASP.NET Core already builds for you) rather than constructed fresh on every call.
+
+                    The options that come up constantly in practice:
+
+                    - `PropertyNamingPolicy = JsonNamingPolicy.CamelCase` — writes/reads `firstName` instead of the C# property's own `FirstName`; leaving it `null` (the default) keeps property names exactly as declared.
+                    - `WriteIndented = true` — pretty-prints output for logs/debugging; leave it `false` (default) for wire traffic, since indentation is pure overhead nobody parses.
+                    - `DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull` — omits a property from the output entirely when its value is `null`, instead of emitting `"middleName": null`. `JsonIgnoreCondition.WhenWritingDefault` goes further and also omits value-type properties sitting at their default (`0`, `false`, etc.).
+                    - `PropertyNameCaseInsensitive = true` — makes *deserialization* tolerate a payload whose casing doesn't match your C# properties exactly (matching is case-sensitive by default), which matters a lot when consuming a third-party API you don't control.
+
+                    Attributes give you the same control per-member, in code, without touching global options:
+
+                    - `[JsonPropertyName("product_name")]` — override the JSON name for one specific property, independent of whatever `PropertyNamingPolicy` is configured.
+                    - `[JsonIgnore]` — never serialize or deserialize this member at all (e.g. an internal-only field).
+                    - `[JsonInclude]` — the opposite problem: by default `System.Text.Json` only touches **public** members with accessible getters/setters. `[JsonInclude]` opts a non-public setter (or non-public field) back in, so a property with `{ get; private set; }` can still be populated on deserialize.
+
+                    Sometimes none of this is enough, because a type's *natural* member layout isn't the JSON shape you want at all. A `Money` value object with an `Amount` and a `Currency` would serialize by default as `{ "Amount": 19.99, "Currency": "USD" }` — technically correct, but not how most APIs actually represent money. A **custom `JsonConverter<T>`** lets you replace that entire shape: override `Write(Utf8JsonWriter, T, JsonSerializerOptions)` to emit whatever JSON you want (here, the single string `"19.99 USD"`), and `Read(ref Utf8JsonReader, Type, JsonSerializerOptions)` to parse it back into a `T`. You register the converter either per-call via `options.Converters.Add(new MoneyJsonConverter())`, or once, permanently, with `[JsonConverter(typeof(MoneyJsonConverter))]` placed directly on the `Money` type — every caller gets the custom shape automatically, with no options setup required at all.
+                    """, 1),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Core calls**
+
+                    - `JsonSerializer.Serialize(value, options)` — object -> JSON string
+                    - `JsonSerializer.Deserialize<T>(json, options)` — JSON string -> object
+                    - Build one `JsonSerializerOptions` and reuse it (`static readonly`) — don't allocate a new one per call
+
+                    **JsonSerializerOptions that matter**
+
+                    - `PropertyNamingPolicy = JsonNamingPolicy.CamelCase` — camelCase in JSON regardless of PascalCase C# names
+                    - `WriteIndented = true` — pretty-print (debugging only, not for wire traffic)
+                    - `DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull` — drop null properties from output
+                    - `PropertyNameCaseInsensitive = true` — tolerate mismatched casing when deserializing
+
+                    **Member attributes**
+
+                    - `[JsonPropertyName("name")]` — rename one property's JSON key
+                    - `[JsonIgnore]` — exclude a member entirely
+                    - `[JsonInclude]` — opt a non-public setter/field back into (de)serialization
+
+                    **Custom converters**
+
+                    - Define: `class FooConverter : JsonConverter<Foo> { override Read(...); override Write(...); }`
+                    - Register per-call: `options.Converters.Add(new FooConverter())`
+                    - Register permanently: `[JsonConverter(typeof(FooConverter))]` on the type itself
+                    """, 2),
+                Block(BlockType.CodeSnippet, "Options, Attributes, and a Custom JsonConverter<Money>", BodyFormat.PlainText, """
+                    // --- Configuring the options that come up constantly in practice ---
+                    var options = new JsonSerializerOptions
+                    {
+                        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+                        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+                        PropertyNameCaseInsensitive = true,
+                        WriteIndented = true, // fine for logging; leave false for wire traffic
+                    };
+
+                    // --- Member-level attributes ---
+                    public class Product
+                    {
+                        [JsonPropertyName("product_name")]
+                        public string Name { get; set; } = "";
+
+                        public string? MiddleNote { get; set; } // omitted from output when null, via DefaultIgnoreCondition
+
+                        [JsonIgnore]
+                        public string InternalNotes { get; set; } = "";
+
+                        // Public getter, PRIVATE setter -- would be silently skipped on deserialize
+                        // without [JsonInclude], because the setter isn't publicly accessible.
+                        [JsonInclude]
+                        public int Sku { get; private set; }
+                    }
+
+                    // --- A value object that needs a custom JSON shape entirely ---
+                    public sealed record Money(decimal Amount, string Currency);
+
+                    public sealed class MoneyJsonConverter : JsonConverter<Money>
+                    {
+                        public override Money Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+                        {
+                            var text = reader.GetString()
+                                ?? throw new JsonException("Expected a Money string like 19.99 USD.");
+
+                            var parts = text.Split(' ', 2);
+                            if (parts.Length != 2 || !decimal.TryParse(parts[0], out var amount))
+                            {
+                                throw new JsonException($"Cannot parse '{text}' as Money.");
+                            }
+
+                            return new Money(amount, parts[1]);
+                        }
+
+                        public override void Write(Utf8JsonWriter writer, Money value, JsonSerializerOptions options)
+                        {
+                            writer.WriteStringValue($"{value.Amount} {value.Currency}");
+                        }
+                    }
+
+                    // Option A: register the converter per-call via JsonSerializerOptions
+                    var moneyOptions = new JsonSerializerOptions { Converters = { new MoneyJsonConverter() } };
+                    string json = JsonSerializer.Serialize(new Money(19.99m, "USD"), moneyOptions); // "19.99 USD"
+
+                    // Option B: attach [JsonConverter] to the type -- applies everywhere automatically,
+                    // with no per-call options setup required at all.
+                    [JsonConverter(typeof(MoneyJsonConverter))]
+                    public sealed record Price(decimal Amount, string Currency);
+                    """, 3, language: "csharp"),
+                Block(BlockType.Diagram, "Serializing a Money Value Through a Custom Converter", BodyFormat.StructuredSteps, """
+                    [{"label":"new Money(19.99m, USD)","note":"a plain .NET object - the default object converter would emit an Amount/Currency JSON object for this"},{"label":"JsonSerializer.Serialize(money, options)","note":"options has MoneyJsonConverter registered, so the custom converter is selected instead of the default object converter"},{"label":"MoneyJsonConverter.Write(writer, money, options)","note":"writes a single JSON string token: 19.99 USD, not an object"},{"label":"JsonSerializer.Deserialize<Money>(json, options)","note":"the SAME converter's Read(ref Utf8JsonReader, ...) parses that string back into a Money instance"}]
+                    """, 4),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Build one `JsonSerializerOptions` instance per distinct configuration and reuse it as a `static readonly` field (or rely on the single instance ASP.NET Core already wires up for you) instead of constructing a new one on every request or every call — it's meant to be shared, and internally caches type metadata across calls.
+
+                    Prefer `[JsonPropertyName]`/`[JsonIgnore]`/`[JsonInclude]` for one-off, per-member decisions, and reserve `PropertyNamingPolicy`/`DefaultIgnoreCondition` on `JsonSerializerOptions` for conventions you want applied consistently across an entire API surface. Keep a custom `JsonConverter<T>`'s `Write` and `Read` genuinely symmetric — whatever `Write` emits must be exactly what `Read` can parse back, or a round-trip through your own converter will silently corrupt data.
+                    """, 5),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    If asked "when do you reach for a custom `JsonConverter<T>` instead of just renaming properties with attributes?", the precise answer is: attributes (`[JsonPropertyName]`, `[JsonIgnore]`, `[JsonInclude]`) only ever adjust individual members of the *existing* object shape — they can't change the fact that the JSON is still an object. A converter is for when the JSON shape itself needs to be fundamentally different from the type's member layout: a value object that should serialize as a single scalar (`Money` as `"19.99 USD"`), an enum that needs a non-default string mapping, or a type that needs to read multiple legacy JSON shapes into one C# type. Naming that distinction (member-level tweak vs. whole-shape replacement) is what shows real understanding rather than a memorized attribute list.
+                    """, 6),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Forgetting that property name matching is **case-sensitive by default** on deserialize — consuming a third-party API that sends `productName` into a C# `ProductName` property silently leaves it at its default value (`null`/`0`) instead of throwing, unless `PropertyNameCaseInsensitive = true` is set. That silence is exactly what makes it easy to miss until a field is mysteriously always empty in production.
+
+                    Also common: writing a custom converter's `Read` without validating the incoming token (calling `reader.GetString()` and assuming it's never null, or assuming a specific format with no error handling), which turns a malformed payload into a confusing low-level exception instead of a clear `JsonException`. And forgetting `[JsonInclude]` on a property with a private setter, then being surprised that deserialization "worked" (no exception) but the property is left at its default — `System.Text.Json` silently skips non-public members it isn't told to include, rather than failing loudly.
+                    """, 7),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    Attributes like `[JsonPropertyName]` and `[JsonIgnore]` are like sticky notes on individual drawers of a filing cabinet: "call this drawer 'invoices' instead of 'Invoices'," "don't let anyone open this drawer." They adjust one drawer at a time, but the cabinet is still fundamentally the same cabinet with the same drawers.
+
+                    A custom `JsonConverter<T>` is what you reach for when the whole cabinet is the wrong container for the job — when what you actually need isn't a labeled drawer at all, but a single index card that says "19.99 USD." You throw out the cabinet's default filing scheme entirely and hand-write the one card that represents the same information in the shape everyone downstream actually expects.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "Which JsonSerializerOptions setting makes JsonSerializer.Deserialize tolerate a JSON payload whose property names use different casing than your C# properties?",
+                    "PropertyNameCaseInsensitive = true relaxes property-name matching during deserialization, which is case-sensitive by default. PropertyNamingPolicy controls how names are written/expected in a specific casing convention (like camelCase) rather than making matching case-insensitive, WriteIndented only affects formatting, and DefaultIgnoreCondition controls which properties are omitted when writing, not case matching.",
+                    [
+                        new QuizOptionSeed("PropertyNameCaseInsensitive = true", true),
+                        new QuizOptionSeed("PropertyNamingPolicy = JsonNamingPolicy.CamelCase", false),
+                        new QuizOptionSeed("WriteIndented = true", false),
+                        new QuizOptionSeed("DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "Why write a custom JsonConverter<Money> for a Money type with Amount and Currency properties, rather than relying on default serialization?",
+                    "The default object converter would serialize Money as a { Amount, Currency } JSON object, reflecting its actual member layout. A custom converter replaces that entire shape -- e.g. producing a single string like '19.99 USD' -- which member-level attributes like [JsonPropertyName] can't do, since they only rename or hide individual members without changing whether the JSON is an object at all. JsonSerializer has no trouble serializing records with multiple properties by default, and [JsonPropertyName] applies fine to records.",
+                    [
+                        new QuizOptionSeed("To control the JSON shape of the type itself (e.g. a single 19.99 USD string) instead of the default per-property object shape", true),
+                        new QuizOptionSeed("Because JsonSerializer cannot serialize C# records without a custom converter", false),
+                        new QuizOptionSeed("Because any type with more than one property requires a custom converter", false),
+                        new QuizOptionSeed("Because [JsonPropertyName] cannot be applied to properties on a record", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("How to serialize and deserialize JSON in .NET", "https://learn.microsoft.com/en-us/dotnet/standard/serialization/system-text-json/how-to", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("Write custom converters for JSON serialization", "https://learn.microsoft.com/en-us/dotnet/standard/serialization/system-text-json/converters-how-to", LinkType.OfficialDocs),
+            ]);
+
+        var lesson1Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson1.Slug,
+        [
+            "Serialize and deserialize a small object graph using JsonSerializerOptions with PropertyNamingPolicy, DefaultIgnoreCondition, and PropertyNameCaseInsensitive set, and confirm each option's effect on the output",
+            "Add [JsonPropertyName], [JsonIgnore], and [JsonInclude] (on a property with a private setter) to a class, and confirm deserialization behaves as expected for each",
+            "Write a custom JsonConverter<T> for a value object (e.g. Money) that serializes as a single string, register it both via JsonSerializerOptions.Converters and via [JsonConverter(typeof(...))], and round-trip a value through Serialize then Deserialize",
+        ]);
+
+        var lesson2 = BuildLesson(
+            slug: "source-generated-serialization-and-performance",
+            title: "Source-Generated Serialization & Performance",
+            summary: "How System.Text.Json's Roslyn source generator emits real serialization code at build time via JsonSerializerContext, eliminating runtime reflection entirely rather than just caching it, plus the throughput, startup, and Native AOT tradeoffs.",
+            estimatedMinutes: 45,
+            objectives:
+            [
+                "Declare a partial class inheriting JsonSerializerContext with [JsonSerializable(typeof(...))] per type that needs serializing",
+                "Explain precisely how the source generator eliminates the runtime reflection lookups described in the earlier reflection lesson, rather than merely caching them",
+                "Wire a generated context into JsonSerializer calls via JsonSerializerOptions.TypeInfoResolver",
+                "Weigh the tradeoffs: startup/throughput/Native AOT benefits versus needing to declare every serializable type up front",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    The earlier reflection lesson established the general shape of the problem: reflection lookups (`GetProperties`, `GetMethod`, `GetCustomAttribute`) walk type metadata, that cost is real on a hot path, and frameworks avoid paying it repeatedly either by caching the lookup once or by compiling it away entirely into a delegate or generated code. Reflection-based `System.Text.Json` (everything from the previous lesson) sits on the "cache it" side of that spectrum: the first time it serializes a given type, it reflects over that type's properties to build up internal metadata describing how to read/write it, and caches that metadata so later calls for the same type skip re-reflecting. That's already the caching pattern from the reflection lesson, applied to serialization.
+
+                    **Source generation** sits on the other side of that spectrum: it doesn't cache a reflection lookup at all, because it removes the reflection call itself. Declare a `partial class` that inherits `JsonSerializerContext`, and mark it with one `[JsonSerializable(typeof(SomeType))]` attribute per type you need to (de)serialize. At **build time** — not at runtime — a Roslyn source generator inspects your code and emits a second half of that partial class into a generated `.g.cs` file, containing real, literal C# that reads and writes each registered type's properties directly, the same way you would have hand-written it yourself. There is no `GetProperties()` call anywhere in that generated code, at any point, for any request — not a cached one, not a fresh one. The lookup the reflection lesson said to cache simply doesn't exist here; it was replaced by ordinary compiled code before the program ever ran.
+
+                    To use a generated context, wire it into `JsonSerializerOptions.TypeInfoResolver` (it implements the resolver interface the serializer needs), or call through it directly: `JsonSerializer.Serialize(product, AppJsonContext.Default.Product)`. `JsonSerializerOptions.TypeInfoResolverChain` lets you combine a generated context with the default reflection-based resolver as a fallback, for types you haven't gotten around to registering yet.
+
+                    The practical payoff is faster startup (no metadata graph to build via reflection the first time a type is used) and lower steady-state allocation on hot paths — genuinely valuable for a high-throughput API. It matters even more under **Native AOT** or trimmed deployments: trimming can remove the very metadata reflection-based serialization depends on, so reflection-based `System.Text.Json` can fail outright at runtime in a trimmed app, while source-generated serialization needs none of that metadata to exist and keeps working. The cost is real too: every type that needs (de)serializing must be explicitly declared with `[JsonSerializable]` up front, the context has to be kept in sync as types change, and there's a genuine extra build step (the generator runs as part of compilation) rather than "it just works" on any object handed to `JsonSerializer`.
+                    """, 1),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Declaring a source-generated context**
+
+                    - `[JsonSerializable(typeof(Product))]` — one attribute per type that needs (de)serializing
+                    - `internal partial class AppJsonContext : JsonSerializerContext { }` — the generator fills in the other half at build time
+                    - Generated members: `AppJsonContext.Default` (a ready-made instance) and per-type `JsonTypeInfo<T>` accessors like `AppJsonContext.Default.Product`
+
+                    **Wiring it in**
+
+                    - `options.TypeInfoResolver = AppJsonContext.Default;` — use the generated context for all calls made with these options
+                    - `options.TypeInfoResolverChain.Add(AppJsonContext.Default);` — combine with other resolvers (e.g. reflection-based, as a fallback)
+                    - `JsonSerializer.Serialize(product, AppJsonContext.Default.Product);` — call through the generated context directly, no options needed
+
+                    **What happens when**
+
+                    - BUILD time: Roslyn source generator reads your `[JsonSerializable]` attributes and emits real serialize/deserialize code
+                    - RUN time: `JsonSerializer` calls that generated code directly -- zero reflection, zero metadata lookup, for that type
+
+                    **Why it matters**
+
+                    - Faster startup, lower steady-state allocation on hot paths
+                    - Required (not just faster) for Native AOT / heavily trimmed apps, where reflection metadata may not survive trimming
+                    - Tradeoff: every serializable type must be declared up front; adds a build-time step
+                    """, 2),
+                Block(BlockType.CodeSnippet, "Declaring and Wiring a JsonSerializerContext", BodyFormat.PlainText, """
+                    public record Product(int Id, string Name, decimal Price);
+
+                    // One attribute per type this app needs to serialize or deserialize.
+                    // At BUILD time, a Roslyn source generator emits the other half of this
+                    // partial class -- real serialize/deserialize code for Product and List<Product>,
+                    // not a reflection call.
+                    [JsonSerializable(typeof(Product))]
+                    [JsonSerializable(typeof(List<Product>))]
+                    internal partial class AppJsonContext : JsonSerializerContext
+                    {
+                    }
+
+                    var product = new Product(1, "Keyboard", 49.99m);
+
+                    // --- Option A: wire the generated context into JsonSerializerOptions ---
+                    var options = new JsonSerializerOptions
+                    {
+                        TypeInfoResolver = AppJsonContext.Default,
+                    };
+                    string json = JsonSerializer.Serialize(product, options);
+                    Product? roundTripped = JsonSerializer.Deserialize<Product>(json, options);
+
+                    // --- Option B: call straight through the generated context, no options needed ---
+                    string json2 = JsonSerializer.Serialize(product, AppJsonContext.Default.Product);
+
+                    // --- Combining with a reflection-based fallback for types not yet registered ---
+                    var combinedOptions = new JsonSerializerOptions();
+                    combinedOptions.TypeInfoResolverChain.Add(AppJsonContext.Default);
+                    combinedOptions.TypeInfoResolverChain.Add(new DefaultJsonTypeInfoResolver());
+
+                    // --- Wiring into ASP.NET Core's own JSON options (Minimal API responses/requests) ---
+                    // builder.Services.ConfigureHttpJsonOptions(o =>
+                    //     o.SerializerOptions.TypeInfoResolverChain.Insert(0, AppJsonContext.Default));
+                    """, 3, language: "csharp"),
+                Block(BlockType.Diagram, "Reflection-Based vs. Source-Generated: Where the Type Info Comes From", BodyFormat.AsciiArt, """
+                    REFLECTION-BASED (default JsonSerializer)
+                    ------------------------------------------
+                    RUNTIME, first Serialize(product) call for Product
+                      -> reflects over Product via GetProperties()
+                      -> builds a JsonTypeInfo describing how to read/write it
+                      -> caches that JsonTypeInfo for reuse on later calls
+                      (this is the "cache the reflection lookup" pattern from the reflection lesson)
+
+                    SOURCE-GENERATED (JsonSerializerContext)
+                    ------------------------------------------
+                    BUILD TIME, because you wrote [JsonSerializable(typeof(Product))]
+                      -> Roslyn source generator emits real C# serialize/deserialize
+                         code for Product into AppJsonContext (a .g.cs file)
+                    RUNTIME, every Serialize(product, AppJsonContext.Default.Product) call
+                      -> runs that generated code directly
+                      -> NO GetProperties() call, cached or otherwise -- there is
+                         no reflection lookup left to cache, because it never happens
+                    """, 4),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Reach for source generation specifically for high-throughput hot paths (an API endpoint serializing on every request) and for anything published as Native AOT or aggressively trimmed — in the trimmed case it's frequently not just an optimization but the difference between the app working at all. For ordinary CRUD apps and prototypes, the default reflection-based serializer is simpler and perfectly adequate; don't reach for a `JsonSerializerContext` before you have a concrete reason to.
+
+                    Keep the context's `[JsonSerializable]` list in sync with the types you actually serialize — when you add a new DTO, add it to the context in the same change, not as an afterthought once something fails under AOT. If you're not fully committed to source generation everywhere yet, `TypeInfoResolverChain` lets you register the generated context first and fall back to the default reflection-based resolver for anything you haven't migrated, so adoption can be incremental.
+                    """, 5),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    If asked "how does System.Text.Json's source generator improve on reflection-based serialization?", don't just say "it's faster" — say precisely *why*, tying it back to the general reflection-vs-caching argument: reflection-based serialization still caches a `JsonTypeInfo` per type after reflecting over it once, which is the same "look it up once, cache the result" pattern used everywhere reflection shows up. Source generation doesn't cache that lookup — it removes it, because a build-time Roslyn generator emits literal serialize/deserialize code for each `[JsonSerializable]` type before the program ever runs. Being able to say "it closes the loop by eliminating the lookup instead of caching it" is what distinguishes understanding the mechanism from repeating "source gen is faster."
+                    """, 6),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Forgetting to add a new DTO to the `JsonSerializerContext` with `[JsonSerializable]` — if you're using `TypeInfoResolverChain` with a reflection-based fallback, this fails quietly (that type just falls back to reflection, silently losing the AOT-safety and performance benefit you thought you had); with *only* a generated context and no fallback, serializing an unregistered type throws `NotSupportedException` instead.
+
+                    Also common: assuming a source-generated context automatically applies just by existing in the project — it does nothing until you actually set `JsonSerializerOptions.TypeInfoResolver` (or call through the context directly), and forgetting that a fresh `JsonSerializerOptions()` with no resolver configured still uses ordinary reflection-based serialization. And conflating "faster" with "automatically AOT-safe": a context that itself references a type with unsupported members (e.g. certain polymorphic or dynamically-shaped members) can still hit limitations that reflection-based serialization would have quietly worked around at runtime.
+                    """, 7),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    Reflection-based serialization, even with caching, is like a translator who meets a new document, works out how to translate its structure the first time by carefully reading through it, writes their notes on an index card, and then flips to that same card for every later document of the same shape. Fast the second time, but the card and the "did I already meet this shape" check both still exist at translation time.
+
+                    Source generation is like having the translation pre-printed at the publisher before the book ever ships — by the time a reader opens it, there's no translator in the room at all, just the finished text. It's the fastest possible option, but it only works for the exact set of documents someone told the publisher about in advance; a document nobody registered still needs an actual translator standing by.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "What actually happens when you declare [JsonSerializable(typeof(Product))] on a partial class inheriting JsonSerializerContext?",
+                    "At build time, a Roslyn source generator reads that attribute and emits real, literal serialization/deserialization code for Product into the other half of the partial class. That generated code runs directly at runtime with no reflection lookup involved for that type at all -- it doesn't just mark properties [JsonIgnore], disable converters, or defer to a one-time startup reflection pass.",
+                    [
+                        new QuizOptionSeed("At build time, a source generator emits real serialize/deserialize code for Product, so no reflection lookup happens for it at runtime", true),
+                        new QuizOptionSeed("It marks all of Product's properties as [JsonIgnore] by default", false),
+                        new QuizOptionSeed("It reflects over Product once at application startup and caches the result for the rest of the run", false),
+                        new QuizOptionSeed("It disables any custom JsonConverters registered on JsonSerializerOptions", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "Compared to caching a reflection lookup in a static field (the pattern from the earlier reflection lesson), how does System.Text.Json's source generator remove that same per-call cost?",
+                    "It doesn't cache a reflection result at all -- it generates literal, ahead-of-time serialize/deserialize C# code at build time via a Roslyn source generator, so there is no GetProperties()-style metadata lookup left to perform or cache at runtime. This is a stronger fix than caching: caching still requires the lookup to happen once; source generation means the lookup never happens.",
+                    [
+                        new QuizOptionSeed("It generates literal serialize/deserialize code at build time, eliminating the reflection lookup entirely rather than caching it", true),
+                        new QuizOptionSeed("It calls Type.GetProperties() once per application lifetime and stores the array in a static dictionary", false),
+                        new QuizOptionSeed("It replaces JsonSerializer.Serialize calls with Convert.ChangeType calls", false),
+                        new QuizOptionSeed("It moves the reflection calls from the serializing process to the deserializing process", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("How to use source generation in System.Text.Json", "https://learn.microsoft.com/en-us/dotnet/standard/serialization/system-text-json/source-generation-how-to", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("System.Text.Json source generation overview", "https://learn.microsoft.com/en-us/dotnet/standard/serialization/system-text-json/source-generation", LinkType.OfficialDocs),
+            ],
+            prerequisites: [lesson1]);
+
+        var lesson2Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson2.Slug,
+        [
+            "Declare a JsonSerializerContext partial class with [JsonSerializable] for two of your own types, wire it in via JsonSerializerOptions.TypeInfoResolver, and confirm serialization still produces identical JSON",
+            "In your own words, explain why source generation eliminates reflection entirely rather than just caching it, explicitly referencing the earlier reflection lesson's caching argument",
+            "Look up why reflection-based JSON serialization can fail under Native AOT/trimmed publishing, and how a source-generated JsonSerializerContext avoids that failure mode",
+        ]);
+
+        var module = BuildModule(topicId, "csharp-serialization-with-system-text-json", "Serialization with System.Text.Json",
+            "JsonSerializer fundamentals -- key JsonSerializerOptions, member attributes, and writing a custom JsonConverter<T> for a value object -- followed by source-generated serialization via JsonSerializerContext, which eliminates the reflection lookups the earlier Reflection & Custom Attributes lesson said to cache, and the throughput / Native AOT tradeoffs that come with it.",
+            90, [lesson1, lesson2], sortOrder: 15);
 
         return (module, [lesson1Checklist, lesson2Checklist]);
     }
