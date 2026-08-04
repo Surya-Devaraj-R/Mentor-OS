@@ -52,6 +52,8 @@ public static class CurriculumContentSeedData
             BuildApiGatewayAndCdnModule(topicIdBySlug["system-design"]),
             BuildConsistentHashingAndCaseStudiesModule(topicIdBySlug["system-design"]),
             BuildDistributedCoordinationModule(topicIdBySlug["system-design"]),
+            BuildDistributedTransactionsAndRealTimeCommunicationModule(topicIdBySlug["system-design"]),
+            BuildBloomFiltersAndChatSystemCaseStudyModule(topicIdBySlug["system-design"]),
             BuildSqlModule(topicIdBySlug["sql"]),
             BuildSqlAdvancedModule(topicIdBySlug["sql"]),
             BuildSqlViewsAndOptimizationModule(topicIdBySlug["sql"]),
@@ -13020,6 +13022,701 @@ public static class CurriculumContentSeedData
         var module = BuildModule(topicId, "distributed-coordination-locks-and-rate-limiting", "Distributed Coordination: Locks, Leader Election & Rate Limiting at Scale",
             "How to coordinate exclusive access and elect a single leader across multiple server instances using externally-held locks and renewable leases, and how to design a rate limiter whose counter state is correctly shared across a fleet of instances instead of trapped in any one process's memory.",
             85, [lesson1, lesson2], sortOrder: 4);
+
+        return (module, [lesson1Checklist, lesson2Checklist]);
+    }
+
+    private static (Module, List<ChecklistSeed>) BuildDistributedTransactionsAndRealTimeCommunicationModule(int topicId)
+    {
+        var lesson1 = BuildLesson(
+            slug: "distributed-transactions-and-the-saga-pattern",
+            title: "Distributed Transactions: The Saga Pattern",
+            summary: "Why a single ACID transaction can't span multiple microservices' databases, why Two-Phase Commit is a poor fit for that world, and how the Saga pattern replaces one atomic operation with a sequence of local transactions plus explicit compensating actions.",
+            estimatedMinutes: 40,
+            objectives:
+            [
+                "Explain why 'place an order' touching three services' databases can't be wrapped in one ACID transaction",
+                "Describe how Two-Phase Commit works and why holding locks across a slow or crashed coordinator makes it a poor fit for microservices",
+                "Explain how a Saga replaces one atomic transaction with a sequence of local transactions plus compensating actions",
+                "Distinguish choreography from orchestration as the two ways to coordinate a saga, and state the tradeoff between them",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    A single-database transaction gives you a guarantee that's easy to take for granted: `BEGIN`, do a handful of writes, then either `COMMIT` (all of them take effect) or `ROLLBACK` (none of them do). There is no in-between state anyone else can observe. That guarantee comes from the database engine itself -- it holds locks, writes to a transaction log, and coordinates everything internally.
+
+                    That guarantee quietly disappears the moment "place an order" stops being one service writing to one database. In a microservices architecture, placing an order typically means the orders service writes a row to its own database, the payments service charges a card and writes a row to a completely different database, and the inventory service decrements a count in yet another database -- three separate services, each owning its own data store, each with no visibility into the others' internal transactions. There is no single `BEGIN ... COMMIT` that can wrap all three, because no single database engine is involved in all three writes. If the payment succeeds but the inventory write fails, there's no built-in rollback that undoes the charge -- nothing is watching all three operations as one unit the way a single database's transaction manager would.
+
+                    **Two-Phase Commit (2PC)** is the classical, database-theory answer to this problem, and it's worth understanding precisely so you can explain why it's rarely used in modern microservices. A coordinator drives two phases: in the *prepare* phase, it asks every participant (every service/database involved) "can you commit this?" and each participant does everything short of actually committing -- it validates the operation, writes it durably, and takes out a lock on the affected rows -- then replies yes or no. Only once every participant has replied yes does the coordinator move to the *commit* phase and tell everyone to actually commit; if anyone replied no, it tells everyone to abort instead.
+
+                    The correctness problem isn't the two phases themselves -- it's what those locks cost while they're held. Every participant holds its lock from the moment it replies "yes" in the prepare phase until it receives the final commit-or-abort instruction, which means a single slow participant (a network hiccup, a loaded database) or a fully down participant stalls the entire transaction -- and every other participant sits there holding its own lock, blocking any other operation on those same rows, for as long as the slow one takes. Worse, if the *coordinator itself* crashes after collecting "yes" votes but before sending the final commit-or-abort decision, participants are left holding their locks indefinitely -- they've already promised they *can* commit, so they can't unilaterally abort, but they have no way to learn what the coordinator decided. This is exactly the "blocked" state 2PC is famous for, and it's why 2PC is generally avoided across services owned by different teams, running at internet scale, where partial failures and slow participants are the normal case rather than the exception.
+
+                    The **Saga pattern** is the standard alternative that microservices architectures actually reach for. Instead of one atomic operation spanning every service, a saga breaks the whole thing into a sequence of **local transactions**, each one entirely inside a single service's own database -- the orders service commits its own local transaction, then publishes an event; the payments service reacts to that event with its own local transaction, then publishes its own event; the inventory service reacts to that, and so on. Each step is a normal, fast, single-database ACID transaction. Nothing holds a lock across service boundaries at any point.
+
+                    The catch is what happens when a later step fails. There's no rollback in the traditional sense, because each earlier step already committed for real in its own database -- there's nothing left "in progress" to undo automatically. Instead, the saga defines an explicit **compensating transaction** for each step: a separate, deliberately-written operation whose job is to semantically undo that step's effect. If `ChargePayment` succeeded but a later step fails, the saga runs `CancelPayment` (a refund) -- it doesn't erase the original charge from history, it applies a new operation that reverses its effect. If `ReserveInventory` needs undoing, the saga runs `ReleaseInventory`. Every step in a saga that has a real-world effect needs a corresponding compensating action designed up front, not bolted on later.
+
+                    A saga can be coordinated two ways. **Choreography** has no central coordinator at all: each service simply listens for the event the previous step published, does its own local transaction, and publishes its own event for whoever's listening next -- inventory service listens for "payment charged," reacts, and publishes "inventory reserved" for the next interested service. For a short saga this is simple and avoids building any new component. But as more services join the flow, the sequence of "who reacts to what" becomes implicit, scattered across every service's event handlers, and genuinely hard to trace -- there's no one place you can look to see the whole saga's shape. **Orchestration** puts a dedicated **saga orchestrator** in charge: it explicitly calls "charge payment," waits for success, explicitly calls "reserve inventory," and if any step fails, it's the orchestrator that explicitly calls the compensating actions in reverse order. The flow is now an explicit, readable sequence in one place -- at the cost of building and operating a new central component that has to be reliable itself.
+
+                    Either way, sagas accept a real tradeoff that a true ACID transaction doesn't have: there's a window of time where a step's effects are visible to the rest of the system *before* the saga has finished (or before compensation has run). Inventory can briefly show as reserved even though payment ultimately fails and gets compensated a moment later. Downstream consumers reading that inventory state during the window see something that will shortly be undone. This is a genuinely different consistency model from "nothing is visible until commit" -- it's not a bug to be engineered away, it's the actual cost of giving up a single atomic cross-service transaction, and any system built on sagas has to be designed with that visible-then-compensated window in mind.
+                    """, 1),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Why one ACID transaction can't span services**
+                    - Each microservice owns its own database; no single transaction manager sees writes to all of them
+                    - "Place an order" = separate local writes in orders, payments, and inventory databases
+
+                    **Two-Phase Commit (2PC)**
+                    - Prepare phase: coordinator asks every participant "can you commit?"; each locks the affected rows and replies yes/no
+                    - Commit phase: only if everyone said yes, coordinator tells everyone to commit (else, abort)
+                    - Problem 1: every participant holds its lock for the ENTIRE round trip -- one slow/down participant blocks all the others
+                    - Problem 2: if the coordinator crashes after prepare, participants are stuck indefinitely -- can't commit or abort on their own
+
+                    **Saga pattern**
+                    - Sequence of local transactions, each in one service's own database, each committing normally and publishing an event
+                    - No lock is ever held across a service boundary
+                    - Failure -> undo already-completed steps with explicit COMPENSATING transactions (CancelPayment, ReleaseInventory), not a rollback
+
+                    **Choreography vs. orchestration**
+                    - Choreography: each service listens for the prior event and reacts, publishing its own event; no central coordinator -- simple for few steps, implicit/hard to trace as more services join
+                    - Orchestration: a central saga orchestrator explicitly calls each step and explicitly triggers compensations on failure -- explicit and traceable, but a new component to build/run
+
+                    **The real tradeoff**
+                    - A window exists where partial effects (e.g., a reservation) are visible before compensation runs
+                    - Downstream consumers must tolerate that temporary inconsistency -- a different consistency model than "nothing visible until commit"
+                    """, 2),
+                Block(BlockType.CodeSnippet, "Order Saga: Forward Steps and Compensations", BodyFormat.PlainText, """
+                    // Orchestration-style saga (simplified). Each step is a normal local
+                    // transaction inside its own service; failure triggers compensations
+                    // for every step that already succeeded, in reverse order.
+                    public async Task<OrderResult> RunOrderSagaAsync(OrderRequest request)
+                    {
+                        var completedSteps = new Stack<Func<Task>>();
+
+                        try
+                        {
+                            await orderService.CreateOrderAsync(request); // local transaction #1
+                            completedSteps.Push(() => orderService.CancelOrderAsync(request.OrderId));
+
+                            await paymentService.ChargePaymentAsync(request); // local transaction #2
+                            completedSteps.Push(() => paymentService.CancelPaymentAsync(request.OrderId));
+
+                            await inventoryService.ReserveInventoryAsync(request); // local transaction #3
+                            completedSteps.Push(() => inventoryService.ReleaseInventoryAsync(request.OrderId));
+
+                            return OrderResult.Success(request.OrderId);
+                        }
+                        catch (Exception ex)
+                        {
+                            // Undo everything that already committed, in reverse order --
+                            // this is compensation, not a rollback: each of these is a real,
+                            // separate operation that semantically reverses the earlier one.
+                            while (completedSteps.Count > 0)
+                            {
+                                var compensate = completedSteps.Pop();
+                                await compensate();
+                            }
+
+                            return OrderResult.Failed(ex.Message);
+                        }
+                    }
+                    """, 3, language: "csharp"),
+                Block(BlockType.Diagram, "Saga: Forward Steps, Then Compensating Rollback on Failure", BodyFormat.StructuredSteps, """
+                    [{"label":"CreateOrder (orders DB)","note":"local transaction #1 commits normally"},{"label":"ChargePayment (payments DB)","note":"local transaction #2 commits normally -- money is actually charged"},{"label":"ReserveInventory (inventory DB)","note":"local transaction #3 FAILS -- e.g. item out of stock"},{"label":"Compensate: CancelPayment","note":"a new, real refund operation -- not a rollback of the earlier commit"},{"label":"Compensate: CancelOrder","note":"marks the order cancelled -- undoes step 1's effect"},{"label":"Saga ends in a consistent 'cancelled' state","note":"reached via forward steps plus compensations, never a single atomic undo"}]
+                    """, 4),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Design the compensating action for every saga step at the same time you design the step itself, not after the saga is already in production -- a step with a real-world effect (charging a card, reserving stock, sending an email) needs its undo path decided up front, because "we'll add a compensation later" usually means discovering the gap during an actual incident.
+
+                    Make every saga step (and every compensation) idempotent -- retries after a timeout or a crash are normal in a saga, and a non-idempotent step run twice (charging a card twice, reserving inventory twice) silently corrupts state in a way that's much harder to notice than an outright failure.
+
+                    Default to orchestration once a saga has more than a couple of steps or more than two or three services involved -- the explicit, single-place view of the flow is worth the cost of the extra component as soon as tracing "who reacts to what" in a choreographed flow starts requiring you to read code in four different repositories.
+                    """, 5),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    When a system design question involves a multi-service write (checkout, booking, any "do these three things together or not at all" flow), say explicitly that a single ACID transaction can't span the services involved, and name the Saga pattern as the alternative before being prompted -- then immediately volunteer that failure is handled by compensating transactions, not a rollback. Naming a concrete compensating action (CancelPayment for ChargePayment) makes the answer concrete instead of abstract. If asked to go deeper, raise the choreography-vs-orchestration tradeoff yourself and state the visible-before-compensated window as the real cost being accepted -- that's the detail that shows you understand sagas trade off consistency, not just implementation complexity.
+                    """, 6),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Reaching for Two-Phase Commit as "the" way to do a distributed transaction across microservices without naming its actual failure mode -- locks held by every participant for the full round trip, and an indefinite blocked state if the coordinator crashes mid-protocol. Interviewers notice when 2PC is named as a solution rather than as the thing sagas were invented to avoid.
+
+                    Also common: describing a saga's failure handling as a "rollback," which implies the original operation never happened. A saga's compensating transaction is a new, separate operation that reverses an already-committed effect -- the charge genuinely happened and is genuinely being refunded, which is a different (and messier) thing than a transaction that never took effect at all.
+                    """, 7),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    A single-database ACID transaction is like paying for a multi-item order at one register with one card swipe -- either the whole purchase goes through, or the cashier voids the entire thing and you walk out having paid for nothing. One person, one register, one all-or-nothing moment.
+
+                    Two-Phase Commit is like trying to buy items from three separate stores in a mall for one combined purchase, where a mall manager first calls each store and makes every one of them physically hold the item aside with your name on it -- not selling it to anyone else -- while waiting to hear back from all three. If one store is slow to answer, all three items sit reserved and untouchable the whole time. And if the mall manager has a heart attack right after all three stores said "yes, holding it for you" but before telling them whether to actually finalize the sale, all three stores are left holding your items indefinitely, unable to sell them to anyone else and unable to complete your purchase either.
+
+                    A saga is closer to how the purchase actually works today: you buy the flight, then separately book the hotel, then separately reserve the rental car -- each is its own real, completed purchase, not a coordinated hold. If the rental car falls through, nobody magically un-happens the flight and hotel bookings; instead, you explicitly cancel the flight and explicitly cancel the hotel, which are real actions of their own that reverse the earlier real actions, not a single "undo everything" button.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "In Two-Phase Commit, what happens to a participant's lock between the 'prepare' phase and the final commit/abort instruction?",
+                    "Every participant holds its lock from the moment it votes yes in the prepare phase until it receives the coordinator's final commit-or-abort instruction, so a single slow or down participant stalls the whole transaction and blocks every other participant's lock for that entire duration.",
+                    [
+                        new QuizOptionSeed("The lock is held by every participant for the entire round trip, so one slow or down participant blocks all the others", true),
+                        new QuizOptionSeed("Each participant releases its lock immediately after voting yes, before the final decision arrives", false),
+                        new QuizOptionSeed("Locks are only held by the coordinator, never by individual participants", false),
+                        new QuizOptionSeed("2PC doesn't use locks at all -- it relies purely on optimistic retries", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "Why is a saga's failure-handling step called a 'compensating transaction' rather than a 'rollback'?",
+                    "Earlier saga steps already committed for real in their own databases, so there's nothing 'in progress' left to roll back -- undoing an earlier step means running a separate, deliberately-designed operation (like a refund) that reverses its real-world effect, not erasing that it happened.",
+                    [
+                        new QuizOptionSeed("Because each earlier step already committed for real, so undoing it requires a new operation that reverses its effect, rather than an automatic undo of something still in progress", true),
+                        new QuizOptionSeed("Because 'rollback' is a deprecated term in distributed systems and 'compensating transaction' replaced it", false),
+                        new QuizOptionSeed("Because compensating transactions are optional and only used for cosmetic cleanup", false),
+                        new QuizOptionSeed("Because a saga only ever has one step, so there's nothing to roll back across", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Microservices.io: Saga Pattern", "https://microservices.io/patterns/data/saga.html", LinkType.FurtherReading),
+                new ReferenceLinkSeed("AWS Prescriptive Guidance: Saga Pattern", "https://docs.aws.amazon.com/prescriptive-guidance/latest/cloud-design-patterns/saga.html", LinkType.OfficialDocs),
+            ]);
+
+        var lesson1Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson1.Slug,
+        [
+            "Write out, step by step, a saga for a real flow you're familiar with (checkout, booking, signup), naming the compensating action for every step",
+            "Explain, in your own words, why Two-Phase Commit's lock-holding makes it a poor fit across independently-owned microservices",
+            "Explain the choreography-vs-orchestration tradeoff, and state which you'd pick for a 5-step saga and why",
+        ]);
+
+        var lesson2 = BuildLesson(
+            slug: "real-time-communication-websockets-long-polling-and-sse",
+            title: "Real-Time Communication: WebSockets, Long Polling & SSE",
+            summary: "Why plain request/response HTTP can't let a server push data to a client, and how short polling, long polling, Server-Sent Events, and WebSockets each solve that differently -- with a clear framework for picking the right one.",
+            estimatedMinutes: 40,
+            objectives:
+            [
+                "Explain why a server can't proactively push data to a client over plain request/response HTTP",
+                "Contrast short polling and long polling, and state what each actually costs",
+                "Explain what Server-Sent Events provide and why they're strictly one-directional",
+                "Choose between short polling, long polling, SSE, and WebSockets for a given real-time requirement",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    Plain HTTP is built entirely around the client initiating things: a client sends a request, the server computes a response, and the connection's job for that exchange is done. The server has no mechanism to reach out to a client on its own -- it can only ever respond to a request that client already sent. That's a real structural limitation, not just a missing feature: if a new chat message arrives, or a live score changes, there's no way for the server to hand that update to the client unless the client happens to ask again at just the right moment.
+
+                    **Short polling** is the naive fix, and it's exactly what it sounds like: the client asks "anything new?" every few seconds, gets an answer, and asks again. It works, but it has a real cost on both ends of that cadence. Most of those requests come back with "no, nothing new," which is wasted bandwidth and wasted server load -- every poll requires a full request/response round trip (connection setup or reuse, headers, server-side work to check for an update) even when the answer is "no." And there's an inherent delay baked into the approach: however long the polling interval is, that's the worst-case lag between something actually happening and the client finding out about it. Shortening the interval to reduce that lag directly multiplies the wasted-request problem.
+
+                    **Long polling** improves on this by changing what the server does when it has nothing new to report: instead of immediately replying "no," the server *holds the request open* -- doesn't respond at all -- until either new data genuinely becomes available or a timeout is reached. The moment the server does have something to send, it responds immediately with that data, and the client, having gotten its answer, immediately opens another long-poll request to keep the cycle going. This meaningfully cuts down on the "nothing new, wasted round trip" problem that plagues short polling, because a response now generally means there's real information in it. But it isn't free: each waiting client is still tying up a server-side thread or connection for as long as it's held open, and the interaction is still not truly bidirectional -- the client is still the one that has to initiate every request; the server can only ever respond to a request that's already sitting open, it still can't originate contact on its own.
+
+                    **Server-Sent Events (SSE)** take a different approach: a single long-lived HTTP connection (content type `text/event-stream`) over which the server can push as many events as it wants, whenever it wants, without the client ever having to re-request. This is a genuine improvement in one specific direction -- the server truly initiates each push over an already-open channel, rather than merely responding to a request that happened to still be open. The tradeoff is that SSE is strictly **one-directional**: server to client only. If the client ever needs to send something back -- an acknowledgment, a new message, a command -- it has to make an entirely separate, ordinary HTTP request to do so; the SSE channel itself carries no traffic the other way.
+
+                    **WebSockets** are the fully bidirectional option. A WebSocket connection starts as a normal HTTP request that includes an `Upgrade` header, and once the server agrees, that connection is upgraded into a persistent, raw TCP connection that stays open for as long as both sides want it. Over that one connection, either side -- client or server -- can send a message to the other at any time, with minimal per-message overhead (no HTTP headers being re-sent on every message the way there would be with repeated requests). This is what makes WebSockets the right fit for anything where both sides need to talk to each other with low latency, not just the server pushing to the client.
+
+                    None of this comes for free, and the cost is specific: a WebSocket connection is **stateful**. It has to stay open for as long as the client is actively connected, which means some specific server instance is holding that connection open and has to keep track of exactly which client it belongs to. This is a fundamentally different scaling shape than ordinary stateless HTTP requests, where any instance behind a load balancer can handle any request because nothing about the connection itself needs to be remembered between requests. This is the same "scaling a stateful workload" concern that shows up when scaling something like a cache or a database connection pool -- a fleet of WebSocket servers has to actually solve "which instance holds this client's connection, and how do messages meant for that client get routed to the right instance," rather than getting horizontal scaling for free the way a stateless API layer does.
+
+                    Put together, this gives a fairly mechanical decision framework. Reach for **short polling** when updates are infrequent or non-urgent and simplicity is what matters most -- it's the least infrastructure to build and reason about. Reach for **long polling** as a simple, broadly-compatible fallback that feels closer to bidirectional when WebSockets genuinely aren't available (a restrictive proxy, an old client). Reach for **SSE** specifically when the feed is one-directional server-push -- live sports scores, a stock ticker, a notification feed -- where the client never needs to send anything back over that same channel. Reach for **WebSockets** specifically when the interaction is genuinely bidirectional and latency-sensitive in both directions -- a chat application, a multiplayer game, a collaborative document editor -- where both "server pushes to client" and "client pushes to server, fast" actually matter.
+                    """, 1),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **The core problem**
+                    - Plain HTTP request/response only lets the client initiate; the server can never proactively push without a request already waiting
+
+                    **Short polling**
+                    - Client repeatedly asks "anything new?" on a fixed interval
+                    - Cost: most requests return "nothing new" (wasted bandwidth/load); lag up to the polling interval
+
+                    **Long polling**
+                    - Client requests; server HOLDS the request open until new data exists or a timeout hits, then responds and client re-polls immediately
+                    - Fewer wasted "nothing new" round trips than short polling
+                    - Still ties up a server thread/connection per waiting client; still not truly bidirectional (client always initiates)
+
+                    **Server-Sent Events (SSE)**
+                    - One long-lived HTTP connection, `text/event-stream`; server pushes events over time without re-requests
+                    - Strictly one-directional: server -> client only; client-to-server traffic needs a separate ordinary request
+
+                    **WebSockets**
+                    - HTTP `Upgrade` handshake -> persistent raw TCP connection
+                    - Fully bidirectional, minimal per-message overhead, either side sends anytime
+
+                    **The WebSocket cost**
+                    - Stateful: a connection stays open on one specific server instance for as long as the client is connected
+                    - The fleet must track which instance holds which client's connection -- doesn't scale like stateless HTTP
+
+                    **Decision framework**
+                    - Short polling -- infrequent/non-urgent updates, simplicity first
+                    - Long polling -- simple bidirectional-feeling fallback when WebSockets aren't available
+                    - SSE -- one-directional server-push feeds (scores, tickers, notifications)
+                    - WebSockets -- genuinely bidirectional, low-latency both ways (chat, multiplayer, collaborative editing)
+                    """, 2),
+                Block(BlockType.CodeSnippet, "Minimal SSE Endpoint vs. a WebSocket Echo Loop in ASP.NET Core", BodyFormat.PlainText, """
+                    // Server-Sent Events: one long-lived response, server writes events
+                    // over time. Purely one-directional -- there is no way for the
+                    // client to send anything back over this same connection.
+                    app.MapGet("/scores/stream", async (HttpContext context) =>
+                    {
+                        context.Response.Headers.ContentType = "text/event-stream";
+
+                        while (!context.RequestAborted.IsCancellationRequested)
+                        {
+                            var score = await GetLatestScoreAsync();
+                            await context.Response.WriteAsync($"data: {score}\n\n");
+                            await context.Response.Body.FlushAsync();
+                            await Task.Delay(TimeSpan.FromSeconds(5));
+                        }
+                    });
+
+                    // WebSocket: after the Upgrade handshake, both sides can send
+                    // whenever they want over the same persistent connection.
+                    app.Map("/chat", async (HttpContext context) =>
+                    {
+                        if (!context.WebSockets.IsWebSocketRequest)
+                        {
+                            context.Response.StatusCode = StatusCodes.Status400BadRequest;
+                            return;
+                        }
+
+                        using var socket = await context.WebSockets.AcceptWebSocketAsync();
+                        var buffer = new byte[4096];
+
+                        // The connection is now open in both directions -- this loop only
+                        // shows receiving, but the server could just as easily push a
+                        // message to this client at any moment, unprompted, from elsewhere
+                        // in the app (e.g. another user's chat message arriving).
+                        while (socket.State == WebSocketState.Open)
+                        {
+                            var result = await socket.ReceiveAsync(buffer, CancellationToken.None);
+                            if (result.MessageType == WebSocketMessageType.Close) break;
+
+                            await BroadcastToOtherClientsAsync(buffer, result.Count);
+                        }
+                    });
+                    """, 3, language: "csharp"),
+                Block(BlockType.Diagram, "Connection Shape: Short Polling vs. Long Polling vs. SSE vs. WebSocket", BodyFormat.AsciiArt, """
+                    Short polling                Long polling                 SSE                           WebSocket
+                    (client repeats,             (server holds the           (one open connection,        (one open connection,
+                     mostly empty replies)        request open)               server pushes over it)       either side sends anytime)
+
+                    C ---req---> S               C ---req---> S              C ---req---> S                C --Upgrade--> S
+                    C <--"no"--- S                 (...waiting...)             (connection stays open)       C <=======> S
+                    C ---req---> S               C <--data--- S              C <--event--- S                 (both directions,
+                    C <--"no"--- S               C ---req---> S              C <--event--- S                  no per-message
+                    C ---req---> S                 (...waiting...)             C <--event--- S                 HTTP overhead)
+                    C <--data--- S               C <--data--- S              (client can't send
+                                                                               back over this channel --
+                    new request every            server never truly           needs its own separate       persistent, fully
+                    interval, most               "pushes" -- it just          request for that direction    bidirectional,
+                    wasted                       delays an existing reply                                   stateful per client
+                    """, 4),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Pick the least powerful tool that satisfies the actual requirement -- don't reach for WebSockets by default just because they're the most capable option. A one-directional live feed (scores, notifications) implemented with SSE is simpler to build, simpler to scale, and simpler to debug than a WebSocket connection you only ever use in one direction.
+
+                    If you do build on WebSockets, plan for connection routing from day one -- decide up front how a message destined for a specific client gets to the exact server instance holding that client's connection (a pub/sub backplane like Redis, or a dedicated connection-routing layer), rather than discovering the problem once you have more than one server instance in production.
+
+                    Always set a sensible timeout on a long-polling request and have the client treat "the connection timed out with no new data" as a normal, expected outcome that triggers an immediate re-poll -- not as an error to be logged or retried with backoff.
+                    """, 5),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    When a design question needs "real-time updates," don't jump straight to "use WebSockets" -- name all four options and the actual axis that separates them (direction of push, and how much infrastructure each costs), then pick based on whether the client genuinely needs to push data back over the same channel. Explicitly stating "this is one-directional, so SSE is a simpler fit than WebSockets" (or the reverse, when it's genuinely bidirectional) is what shows you're reasoning about the tradeoff rather than defaulting to the most impressive-sounding technology.
+                    """, 6),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Reaching for WebSockets for a purely one-directional feed (a live score ticker, a notification stream) when SSE would do the same job with a plain HTTP connection and none of the bidirectional connection-state management WebSockets require -- the extra power goes unused while the extra operational cost (stateful connection routing across a fleet) stays fully real.
+
+                    Also common: describing long polling as "basically the same as WebSockets" -- it still requires the client to re-initiate a new request every time the server responds, and the server still can never originate contact with a client that isn't currently sitting inside an open request; it reduces wasted round trips versus short polling, but it doesn't remove the client-must-always-initiate constraint.
+                    """, 7),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    Short polling is like repeatedly calling a friend's voicemail every five minutes to ask "did anything happen yet?" -- most calls get the same "no" answer, and if something happened four minutes ago, you don't find out until your next scheduled call.
+
+                    Long polling is like calling and asking your friend to stay on the line and only speak once they actually have news -- you're not calling back every five minutes for nothing, but you're still the one who placed the call, your friend still can't call you out of the blue, and you're both tying up a phone line the whole time you wait.
+
+                    SSE is like subscribing to a one-way radio broadcast -- the station can announce as many updates as it wants over the airwaves whenever news happens, but you, the listener, have no way to talk back over that same radio; if you want to respond, you need an entirely different channel, like a phone call.
+
+                    A WebSocket is like being on an open phone call with someone where either person can speak at any moment without redialing -- genuinely two-way, low-friction in both directions, but for that to work, someone has to actually keep that specific call connected the whole time, and if your friend group has one receptionist handling many simultaneous calls, that receptionist has to remember exactly which open line belongs to which caller.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "What specifically does long polling improve on compared to short polling, and what limitation does it still share with it?",
+                    "Long polling holds the request open until there's actually new data (or a timeout), so far fewer responses are wasted 'nothing new' round trips compared to short polling's fixed-interval requests. But it still isn't truly bidirectional -- the client always has to be the one to initiate each request; the server can only respond to a request that's already open, never originate contact on its own.",
+                    [
+                        new QuizOptionSeed("It cuts down on wasted 'nothing new' round trips by holding the request open, but the client still always has to initiate -- the server can never originate contact on its own", true),
+                        new QuizOptionSeed("It removes the need for the client to ever send another request once the first one is answered", false),
+                        new QuizOptionSeed("It makes the connection fully bidirectional, identical in capability to a WebSocket", false),
+                        new QuizOptionSeed("It has no advantage over short polling other than using fewer lines of client code", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "A live stock-ticker feature only needs to push price updates from the server to the client -- the client never needs to send data back over that same channel. Which technology fits best, and why?",
+                    "Server-Sent Events, because the requirement is strictly one-directional server-to-client push, which is exactly what SSE provides over a single long-lived connection -- reaching for a WebSocket would add full bidirectional capability and stateful connection-routing overhead that this feature never actually uses.",
+                    [
+                        new QuizOptionSeed("Server-Sent Events -- the requirement is one-directional server push, which is exactly what SSE is built for, without WebSockets' unused bidirectional overhead", true),
+                        new QuizOptionSeed("WebSockets, because they are always the superior choice whenever real-time updates are involved", false),
+                        new QuizOptionSeed("Short polling, because stock prices update too rarely to justify any persistent connection", false),
+                        new QuizOptionSeed("Long polling, because it is simpler to implement than SSE in every framework", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("MDN: Server-Sent Events", "https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("MDN: WebSockets API", "https://developer.mozilla.org/en-US/docs/Web/API/WebSockets_API", LinkType.OfficialDocs),
+            ],
+            prerequisites: [lesson1]);
+
+        var lesson2Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson2.Slug,
+        [
+            "Build a minimal long-polling endpoint that holds a request open until either new data exists or a timeout fires, and observe the client immediately re-polling",
+            "Build a minimal SSE endpoint that streams periodic events to a browser using EventSource, and confirm it truly is one-directional",
+            "Build a minimal WebSocket echo server and client, and explain out loud why routing a message to a specific client gets harder once there's more than one server instance",
+        ]);
+
+        var module = BuildModule(topicId, "distributed-transactions-and-real-time-communication", "Distributed Transactions & Real-Time Communication",
+            "How to coordinate a write across multiple services' databases without a single ACID transaction using the Saga pattern, and how to choose between short polling, long polling, SSE, and WebSockets for pushing real-time updates to clients.",
+            80, [lesson1, lesson2], sortOrder: 5);
+
+        return (module, [lesson1Checklist, lesson2Checklist]);
+    }
+
+    private static (Module, List<ChecklistSeed>) BuildBloomFiltersAndChatSystemCaseStudyModule(int topicId)
+    {
+        var lesson1 = BuildLesson(
+            slug: "bloom-filters-probabilistic-membership-testing",
+            title: "Bloom Filters: Probabilistic Membership Testing",
+            summary: "A fixed-size bit array plus K hash functions that cheaply answers 'have I definitely NOT seen this before?' -- with false positives possible but false negatives never.",
+            estimatedMinutes: 35,
+            objectives:
+            [
+                "Explain the specific problem a Bloom filter solves: cheaply answering 'definitely not seen' for a huge set without storing every item",
+                "Describe a Bloom filter's structure (a fixed-size bit array plus K hash functions) and how INSERT and QUERY work",
+                "Explain why a Bloom filter can produce false positives but can never produce a false negative, and why that one-directional guarantee is what makes it useful",
+                "Identify real systems (e.g. a Cassandra SSTable read path, a web crawler, a blocklist pre-check) that use a Bloom filter as a cheap pre-check before an expensive lookup",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    **The problem**: you have a huge set of items (millions or billions) and need to cheaply answer one narrow question: "have I definitely NOT seen this item before?" Storing every item to answer that (a hash set, a database lookup) works but costs memory or a network/disk round trip proportional to the number of items. A Bloom filter answers the same practical question using a small, fixed amount of memory, at the cost of an occasional, boundable amount of imprecision -- but only in one direction.
+
+                    **Structure**: a Bloom filter is just a fixed-size bit array, initially all zeros, plus K independent hash functions that each map any item to one index in that array. Nothing about the item itself is stored -- only which bits its hashes happened to touch.
+
+                    **INSERT(item)**: run the item through all K hash functions. Each produces an index into the bit array. Set all K of those bits to 1.
+
+                    **QUERY(item)**: run the item through the same K hash functions and check whether ALL K corresponding bits are already set to 1.
+                    - If even one of those bits is still 0, the item was DEFINITELY never inserted -- a guaranteed true negative, no exceptions. That bit could only be 1 if some INSERT had touched it, and none did.
+                    - If all K bits happen to be 1, the item was PROBABLY inserted -- but this can be a FALSE POSITIVE: other, different items, inserted earlier, may have coincidentally set every one of those same K bits between them, even though this exact item was never inserted.
+
+                    **Why false positives are possible but false negatives are not**: INSERT only ever sets bits to 1, never back to 0, and a QUERY only rejects an item when it finds an unset bit. Since every bit belonging to an actually-inserted item is guaranteed to have been set at insert time, that bit can never be 0 later -- an inserted item will always pass its own query. But a bit being 1 doesn't prove which item set it; it's just a shared, no-memory flag that any number of different items' hashes could have flipped independently. That one-directional guarantee -- "no" always means no, "yes" only means probably -- is exactly what makes a Bloom filter usable as a safe pre-check: you can trust it completely to rule things out, and only pay the cost of a slower, authoritative check when it says "maybe."
+
+                    **Tuning the false-positive rate**: more hash functions (K) and/or a bigger bit array lower the false-positive rate, at the cost of more memory (bigger array) and more computation per operation (more hashes to run). The false-positive rate is tunable up front based on how many items you expect to insert -- size the bit array and choose K for your expected item count and your acceptable error rate, the same way you'd size a hash table's capacity in advance.
+
+                    **You cannot delete from a standard Bloom filter.** Unsetting an item's K bits back to 0 could silently corrupt the filter for other items -- if any other, still-present item happens to share one of those same bit positions, unsetting it would make that other item incorrectly look like it was never inserted, a false negative the filter is never supposed to produce. A **Counting Bloom filter** is the standard variant that supports deletion, replacing each single bit with a small counter (incremented on insert, decremented on delete) so a bit position shared by multiple items only reads as "unset" once every item that touched it has actually been removed.
+
+                    **Real-world use cases** -- all built around the same shape: a Bloom filter as a fast, no-false-negative pre-check in front of an expensive lookup:
+                    - A database read path (e.g., a Cassandra SSTable, or a CDN's cache-miss check) checks a Bloom filter before touching disk or the network: if the filter says "definitely not present," the expensive lookup is skipped entirely; if it says "maybe present," the normal, authoritative lookup proceeds as usual.
+                    - A web crawler checks whether a URL has already been visited without keeping every visited URL string in memory -- a Bloom filter answers "definitely not visited" cheaply, and only a small fraction of "maybe visited" URLs need any further, more expensive check.
+                    - A spellchecker or a malicious-URL blocklist does a fast Bloom filter pre-check before falling back to a slower, authoritative dictionary or blocklist lookup -- most queries are resolved by the cheap check alone.
+                    """, 1),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **What it answers**: "have I definitely NOT seen this item?" -- cheaply, without storing every item
+
+                    **Structure**
+                    - Fixed-size bit array, all bits start at 0
+                    - K independent hash functions, each mapping an item to one bit index
+
+                    **INSERT(item)** -- run item through all K hash functions, set all K resulting bits to 1
+
+                    **QUERY(item)** -- run item through all K hash functions, check all K resulting bits
+                    - Any bit still 0 -> DEFINITELY never inserted (true negative, no exceptions)
+                    - All bits 1 -> PROBABLY inserted (could be a false positive from other items' overlapping bits)
+
+                    **One-directional guarantee**: false positives possible, false negatives impossible
+
+                    **Tuning**: more hash functions and/or a bigger bit array -> lower false-positive rate, more memory/compute; size both for your expected item count
+
+                    **Deletion**: not supported in a standard Bloom filter (unsetting a bit can break other items sharing it) -- use a Counting Bloom filter (small counters instead of single bits) if deletion is needed
+
+                    **Use cases**: DB/SSTable pre-check before disk lookup (Cassandra), CDN cache-miss pre-check, crawler "already visited?" check, spellchecker/blocklist pre-check before an authoritative lookup
+                    """, 2),
+                Block(BlockType.CodeSnippet, "Bloom Filter: Bit Array + K Hash Functions", BodyFormat.PlainText, """
+                    public class BloomFilter
+                    {
+                        private readonly BitArray bits;
+                        private readonly int bitCount;
+                        private readonly int hashCount;
+
+                        public BloomFilter(int bitCount, int hashCount)
+                        {
+                            this.bitCount = bitCount;
+                            this.hashCount = hashCount;
+                            bits = new BitArray(bitCount);
+                        }
+
+                        public void Insert(string item)
+                        {
+                            foreach (var index in GetIndexes(item))
+                            {
+                                bits[index] = true;
+                            }
+                        }
+
+                        // "Might contain" -- NOT "contains". A true result can be a false
+                        // positive; a false result is a guaranteed, no-exceptions true negative.
+                        public bool MightContain(string item)
+                        {
+                            foreach (var index in GetIndexes(item))
+                            {
+                                if (!bits[index]) return false; // one unset bit proves this was never inserted
+                            }
+                            return true; // all K bits set -- probably inserted, but could be a coincidence
+                        }
+
+                        // Simulates K independent hash functions from just two real ones
+                        // (double hashing): h_i(x) = h1(x) + i * h2(x), for i = 0..hashCount-1.
+                        private IEnumerable<int> GetIndexes(string item)
+                        {
+                            var bytes = Encoding.UTF8.GetBytes(item);
+                            var h1 = item.GetHashCode();
+                            var h2 = unchecked((int)System.Security.Cryptography.SHA256.HashData(bytes).Sum(b => (long)b));
+
+                            for (var i = 0; i < hashCount; i++)
+                            {
+                                var combined = unchecked(h1 + i * h2);
+                                yield return Math.Abs(combined % bitCount);
+                            }
+                        }
+                    }
+
+                    // ~1% false-positive rate for ~1M inserted items needs roughly 10 bits/item and 7 hash functions.
+                    var filter = new BloomFilter(bitCount: 10_000_000, hashCount: 7);
+                    filter.Insert("user:98213@example.com");
+
+                    if (!filter.MightContain("user:00000@example.com"))
+                    {
+                        // Definitely never inserted -- skip the expensive lookup entirely.
+                    }
+                    """, 3, language: "csharp"),
+                Block(BlockType.Diagram, "False Positive vs. Guaranteed True Negative", BodyFormat.AsciiArt, """
+                    Bit array (16 bits, all start at 0), K = 3 hash functions
+
+                    INSERT("cat")  -> hashes to indices 2, 5, 11  -> set those bits to 1
+                    INSERT("dog")  -> hashes to indices 5, 8, 13  -> set those bits to 1
+
+                      index:  0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15
+                      bits:   0 0 1 0 0 1 0 0 1 0 0  1  0  1  0  0
+
+                    QUERY("cat")  -> indices 2, 5, 11 -> all set to 1 -> "probably inserted" (correct here)
+
+                    QUERY("fish") -> indices 2, 8, 13 -> all set to 1 -> "probably inserted"
+                                     -- but "fish" was NEVER actually inserted! Its 3 indices just
+                                     happen to overlap bits that "cat" and "dog" set independently.
+                                     This is a FALSE POSITIVE.
+
+                    QUERY("bird") -> indices 1, 5, 9  -> indices 1 and 9 are still 0
+                                     -> at least one required bit is unset
+                                     -> DEFINITELY never inserted, no exceptions
+                    """, 4),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Size the bit array and choose the number of hash functions (K) based on your expected number of inserted items and your acceptable false-positive rate, not arbitrary defaults -- an under-sized filter for the actual data volume degrades into a much higher false-positive rate than intended as it fills up.
+
+                    Use well-distributed, independent hash functions (or simulate K independent hashes from two real hash functions via double hashing) -- correlated hash functions that tend to collide together defeat the whole point of using multiple of them.
+
+                    Always treat a Bloom filter's "yes" as "maybe" and follow it with the real, authoritative check -- never skip the authoritative source of truth just because the filter said an item is probably present.
+                    """, 5),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    Bring up a Bloom filter whenever a design needs to cheaply rule out "have we seen this before?" at huge scale before paying for an expensive lookup -- a cache-miss check, a "has this URL been crawled" check, a dedup pre-check in front of a database. State the guarantee precisely: no false negatives, possible false positives -- interviewers listen for whether you get the direction of the asymmetry right, since it's easy to accidentally say it backwards.
+
+                    If asked "what if you need to delete an item," don't just say "you can't" -- name the Counting Bloom filter as the variant built for exactly that, using small counters instead of single bits.
+                    """, 6),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Describing a Bloom filter's "yes" answer as a guarantee ("the item is definitely in the set") instead of a probabilistic one -- a Bloom filter's positive result is only ever "probably," never "definitely," and treating it as certain skips the authoritative check it's supposed to precede.
+
+                    Also common: forgetting that a standard Bloom filter cannot support deletion, and unsetting bits directly to "remove" an item -- since other items may share some of those same bit positions, this can silently introduce false negatives for those other items, which a Bloom filter is never supposed to produce.
+                    """, 7),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    Picture a giant keyring holding a fixed number of keys, far fewer keys than the number of lockers in a huge locker room. Instead of tracking which specific locker you've opened, you just note, for each locker you open, which several keys on the ring "would" open it (each locker maps to several keys, and the same key can belong to many different lockers) -- and you leave a small scuff mark on those keys.
+
+                    Later, to check "have I ever opened locker #482?", you look up which keys belong to locker #482 and check whether all of them are scuffed. If even one of those keys has no scuff mark, you know for certain you've never opened that locker -- it would have scuffed that key too. But if all of locker #482's keys happen to be scuffed, you can't be fully sure -- maybe you scuffed all of them individually by opening several other lockers that happen to share those same keys, and #482 itself was never actually opened. That's a false positive. What you can never get is a false negative: any locker you genuinely opened has definitely left its scuff marks behind.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "A Bloom filter QUERY for item X finds that all K corresponding bits are set to 1. What can you conclude?",
+                    "All K bits being set means X was probably inserted, but this is not a guarantee -- other, different items may have coincidentally set every one of those same K bits between them (a false positive). A Bloom filter's positive result is always 'maybe,' never 'definitely.'",
+                    [
+                        new QuizOptionSeed("X was definitely inserted -- a Bloom filter never produces false positives", false),
+                        new QuizOptionSeed("X was probably inserted, but this could be a false positive from other items' overlapping bits", true),
+                        new QuizOptionSeed("X was definitely never inserted", false),
+                        new QuizOptionSeed("The filter must be resized because it has reached capacity", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "Why can't you delete an item from a standard Bloom filter by unsetting its K bits back to 0?",
+                    "Other, still-present items may have independently set some of those same bit positions. Unsetting a shared bit would make those other items incorrectly query as 'never inserted' -- a false negative, which a Bloom filter is never supposed to produce.",
+                    [
+                        new QuizOptionSeed("Other items may share some of the same bit positions, so unsetting them could wrongly turn those other items into false negatives", true),
+                        new QuizOptionSeed("Bit arrays in general do not support unsetting individual bits once written", false),
+                        new QuizOptionSeed("The hash functions used are one-way and cannot be recomputed for an existing item", false),
+                        new QuizOptionSeed("Because the bit array must be re-sized every time an item is removed", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Wikipedia: Bloom filter", "https://en.wikipedia.org/wiki/Bloom_filter", LinkType.FurtherReading),
+                new ReferenceLinkSeed("Apache Cassandra: Bloom filters in the storage engine", "https://cassandra.apache.org/doc/latest/cassandra/architecture/storage_engine.html", LinkType.OfficialDocs),
+            ]);
+
+        var lesson1Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson1.Slug,
+        [
+            "Implement a Bloom filter (bit array + K hash functions) with Insert and MightContain, and verify a query for a never-inserted item can return a false positive but never a false negative",
+            "Reason about how bit-array size and number of hash functions affect the false-positive rate for a target number of inserted items",
+            "Name at least two real systems that use a Bloom filter as a pre-check before an expensive lookup, and explain why the no-false-negative guarantee makes that safe",
+        ]);
+
+        var lesson2 = BuildLesson(
+            slug: "case-study-real-time-chat-system",
+            title: "Case Study: Designing a Real-Time Chat System",
+            summary: "A full walkthrough combining WebSockets, message queues, sharding, and the fan-out tradeoff from the news feed case study into one design: a one-to-one and group chat system.",
+            estimatedMinutes: 50,
+            objectives:
+            [
+                "Explain why a chat system's bidirectional, latency-sensitive messaging calls for the WebSocket option, and why a connection registry is required once each connection lives on one specific server instance",
+                "Trace how a message from User A reaches User B through a queue/pub-sub system and a connection-registry lookup, including the case where User B is offline",
+                "Sketch a messages/read-receipts schema partitioned by conversation ID and explain why that partitioning choice fits the sharding ideas from an earlier lesson",
+                "Compare group chat fan-out to the fan-out-on-write vs. fan-out-on-read tradeoff from the news feed case study and justify the right default for ordinary group sizes",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    This case study asks you to design a real-time one-to-one and group chat system -- like WhatsApp or Slack at a conceptual level -- and, like the news feed case study, it's a synthesis exercise: almost nothing here is a brand-new concept. The goal is combining pieces from earlier lessons into one coherent architecture.
+
+                    **Why WebSockets, specifically**: chat is genuinely bidirectional and latency-sensitive in both directions -- a user needs to send a message AND receive other people's messages the instant they arrive, without polling or waiting. This is exactly the case the real-time-communication-websockets-long-polling-and-sse lesson identifies as calling for a WebSocket connection rather than long-polling or SSE (which is naturally one-directional, server-to-client) -- that earlier lesson's tradeoffs aren't re-derived here, they're simply applied: use a WebSocket for the client's live connection.
+
+                    **The practical implication of "each user holds one open WebSocket"**: that connection is a live, stateful, in-memory object held by exactly one specific server instance -- the one that happened to accept it. No other instance can write into that socket directly. So routing a message to a specific recipient requires knowing WHICH server instance currently holds that recipient's connection. The standard fix is a **connection registry** -- typically a fast shared store like Redis -- mapping user ID to the server instance (and connection ID) currently holding that user's WebSocket, updated the moment a connection opens or closes.
+
+                    **Message delivery, end to end**: when User A sends a message to User B, the chat service doesn't try to reach User B directly. It publishes the message to a queue/pub-sub system (tying back to the message-queues-async-communication lesson), which every server instance consumes from. Whichever instance's consumer sees, via a connection-registry lookup, that it is the one currently holding User B's WebSocket, pushes the message down that socket. If no instance holds a connection for User B -- they're offline -- nothing gets pushed anywhere right now, but that's fine, because of the next point.
+
+                    **Durability for offline recipients**: the message must be persisted to a database (tying back to the databases-at-scale lesson) as part of sending it, independent of whether delivery over a live WebSocket succeeds. If it were only ever "delivered" by pushing down a socket, an offline recipient's message would simply be lost -- there's no connection to receive it. Instead, the message is saved durably the moment it's sent, so that when User B eventually connects, the client can ask for everything since its last-seen message and receive those as "missed messages" -- the persistence layer is the real source of truth; the WebSocket push is just a low-latency delivery optimization on top of it for whoever happens to be online right now.
+
+                    **Storage and read receipts**: a simple schema sketch -- a `messages` table keyed by conversation/thread ID with a timestamp (or a monotonically increasing sequence) for ordering within that conversation, and a separate per-user `last_read_message_id` (or timestamp) per conversation for read-receipt tracking ("User B has read up through message #4821"). Chat history is a natural fit for the sharding ideas from the consistent-hashing-and-sharding-strategies lesson: partition by conversation ID, not by user ID, so every message belonging to one conversation lands on the same shard -- fetching a conversation's history in order stays a single-shard operation instead of a cross-shard fan-out and merge.
+
+                    **Group chat fan-out**: this is the same fan-out-on-write vs. fan-out-on-read tradeoff already taught in the social-media-news-feed case study, just applied at a different scale. A group chat has dozens to low hundreds of members, not the tens-of-millions-of-followers scale that forced the news feed case study into a hybrid approach for celebrity accounts. At that ordinary size, fan-out-on-write -- deliver/push the message to every online group member's connection immediately -- is usually the right call outright; there's no celebrity-style write-side blowup to guard against, so the added complexity of a hybrid read-time fallback isn't buying you anything here.
+
+                    To be explicit about what this lesson is *not* re-teaching: the WebSocket-vs-long-polling-vs-SSE tradeoff, the delivery-guarantee tradeoffs of a message queue (at-least-once vs. exactly-once, idempotent consumers), and the mechanics of how a sharding key maps to a shard are all covered in their own earlier lessons -- here they're just being applied as building blocks in one design.
+                    """, 1),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Connection layer**
+                    - Chat is bidirectional and latency-sensitive both ways -> WebSocket (see real-time-communication-websockets-long-polling-and-sse)
+                    - Each user's WebSocket is held in memory by exactly one server instance
+                    - Connection registry (e.g. Redis): user ID -> owning server instance/connection ID
+
+                    **Message delivery**
+                    - Sender's message is published to a queue/pub-sub (see message-queues-async-communication)
+                    - Consumed by the instance the registry says holds the recipient's connection -> pushed down that socket
+                    - Recipient offline -> no push happens, but the message was already durably persisted
+
+                    **Durability**
+                    - Message persisted to a database (see databases-at-scale) as part of sending -- not only as an offline fallback
+                    - Enables "missed message" delivery: fetch everything after the recipient's last-read marker on reconnect
+
+                    **Storage & read receipts**
+                    - `messages` table keyed by conversation ID, ordered by timestamp/sequence
+                    - Per-user `last_read_message_id` (or timestamp) per conversation for read receipts
+                    - Partition by conversation ID (see consistent-hashing-and-sharding-strategies) -> one conversation's history stays on one shard
+
+                    **Group chat fan-out**
+                    - Same fan-out-on-write vs. fan-out-on-read tradeoff as the news feed case study
+                    - Normal group size (dozens-hundreds) -> fan-out-on-write is fine outright; no celebrity-scale blowup to guard against
+                    """, 2),
+                Block(BlockType.CodeSnippet, "Chat Message Send Path: Persist, Publish, Route", BodyFormat.PlainText, """
+                    public async Task SendMessageAsync(string senderId, string recipientId, string conversationId, string text)
+                    {
+                        var message = new ChatMessage(Guid.NewGuid(), conversationId, senderId, text, DateTime.UtcNow);
+
+                        // Durable persistence happens unconditionally -- whether or not the
+                        // recipient is online right now, the message must survive as chat
+                        // history / a missed message. Partitioned by conversationId (see
+                        // consistent-hashing-and-sharding-strategies).
+                        await messageStore.SaveAsync(message);
+
+                        // Publish, decoupled via a queue, so the sender's request returns
+                        // immediately regardless of whether the recipient is connected.
+                        await messageQueue.PublishAsync(new DeliverMessageJob(recipientId, message));
+                    }
+
+                    // Consumed by every server instance (pub/sub across instances) -- each
+                    // instance checks whether it happens to be the one holding the
+                    // recipient's live WebSocket right now.
+                    async Task OnDeliverMessageJobAsync(DeliverMessageJob job)
+                    {
+                        var ownerInstance = await connectionRegistry.GetOwnerInstanceAsync(job.RecipientId); // Redis lookup
+
+                        if (ownerInstance == currentInstanceId && webSocketConnections.TryGet(job.RecipientId, out var socket))
+                        {
+                            await socket.SendAsync(job.Message); // recipient is online right now -- push immediately
+                        }
+                        // If ownerInstance is null, the recipient isn't connected anywhere --
+                        // do nothing here. The message is already durably saved above and will
+                        // be delivered as a "missed message" the next time the recipient's
+                        // client connects and asks for everything after its lastReadMessageId.
+                    }
+
+                    public async Task<List<ChatMessage>> GetMissedMessagesAsync(string userId, string conversationId)
+                    {
+                        var lastReadId = await readReceiptStore.GetLastReadMessageIdAsync(userId, conversationId);
+                        return await messageStore.GetMessagesAfterAsync(conversationId, lastReadId);
+                    }
+                    """, 3, language: "csharp"),
+                Block(BlockType.Diagram, "Message Path: Sender to Connected or Offline Recipient", BodyFormat.StructuredSteps, """
+                    [{"label":"User A sends message","note":"over an existing WebSocket connection"},{"label":"Chat Service","note":"persists message to the conversation's shard immediately"},{"label":"Message Queue / Pub-Sub","note":"published so delivery doesn't block the sender"},{"label":"Connection Registry (Redis)","note":"looked up: which server instance holds User B's WebSocket?"},{"label":"Owning Server Instance","note":"pushes the message down User B's live WebSocket, if connected"},{"label":"User B offline?","note":"message stays durably stored; delivered as a missed message on next connect"}]
+                    """, 4),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Keep the connection registry entries fresh with a heartbeat/TTL tied to the connection itself (the same lease-style thinking as the distributed-locks-and-leader-election lesson) -- so a server instance that crashes without cleanly closing its sockets doesn't leave stale "owner" entries pointing at a dead instance.
+
+                    Persist a message durably before (or atomically with) attempting to push it over a live WebSocket, never only as a fallback path taken when delivery fails -- treat the database as the source of truth and the WebSocket push as a latency optimization on top of it.
+
+                    Don't reach for a hybrid fan-out approach for group chat unless a group can genuinely reach broadcast-channel scale (many thousands of members) -- for ordinary group sizes, plain fan-out-on-write is simpler and sufficient.
+                    """, 5),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    When asked to design a chat system, volunteer the connection-registry problem yourself before being prompted -- "each WebSocket lives on one specific instance, so I need a shared registry mapping user to instance" is the detail that separates candidates who've internalized the multi-instance reality of WebSockets from ones who only know the client-side connection story. Then explicitly connect this design to the news feed case study when group fan-out comes up: naming the same fan-out-on-write/fan-out-on-read tradeoff at a different scale, and explaining why chat's scale doesn't need the celebrity-account hybrid, shows you can reuse a concept rather than re-deriving it from scratch every time.
+                    """, 6),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Assuming any server instance can push directly into any user's WebSocket without a connection registry -- a socket is a live, in-memory connection owned by exactly one instance, and forgetting this leads to a design that silently can't route messages to anyone connected to a different instance than the one currently handling the request.
+
+                    Also common: treating durable persistence as only an offline fallback ("if the WebSocket push fails, then save it to the database") instead of an unconditional step -- and over-engineering group chat with a celebrity-style hybrid fan-out for an ordinary-sized group, adding complexity for a write-side blowup that a few hundred members was never going to cause.
+                    """, 7),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    Think of an old hotel switchboard. Every guest's phone line is plugged into one specific extension board, operated by one specific operator (a server instance) -- an operator at a different board can't just reach over and plug into a line they don't physically have in front of them. To connect a call, the front desk keeps a directory (the connection registry) of which board currently has each guest's line plugged in, and routes the call to that board's operator.
+
+                    If a guest has checked out for the afternoon (offline), the operator can't ring a line that isn't plugged in anywhere -- so instead, the front desk writes the message on a slip and drops it in the guest's mailbox slot (durable persistence), ready to be handed over the moment the guest checks back in and asks "anything for me?"
+
+                    For a small conference room's group call, the switchboard just rings every attendee's line at once the moment someone speaks -- there's no need for anything cleverer when it's a dozen or a hundred lines. That only stops being good enough at the scale of, say, patching a message out to every phone in a stadium at once.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "In this chat system design, why does routing a message to a specific recipient require a 'connection registry' (e.g., a Redis map from user ID to server instance) instead of just broadcasting the message to every server instance?",
+                    "Each user's WebSocket connection lives in the memory of exactly one specific server instance -- the one that accepted it. Only that instance can write to that live socket, so any instance handling the message needs to look up which instance currently owns the recipient's connection before it can route the message there.",
+                    [
+                        new QuizOptionSeed("A WebSocket connection lives in the memory of one specific server instance; only that instance can write to it, so the system needs to know which instance currently holds the recipient's connection", true),
+                        new QuizOptionSeed("WebSockets cannot be used behind a load balancer, so every instance must independently track every connection", false),
+                        new QuizOptionSeed("Broadcasting the message to every server instance is actually the standard solution and no registry is needed", false),
+                        new QuizOptionSeed("The registry is only needed for group chats, not one-to-one messages", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "User B is offline when User A sends a message. What must happen for User B to eventually see it?",
+                    "Because no WebSocket is open to push the message down, it must be durably persisted to a database as an unconditional part of sending -- not just as a fallback -- so it can be delivered to User B as a 'missed message' the next time User B connects.",
+                    [
+                        new QuizOptionSeed("The message is durably persisted to a database and delivered to User B as a 'missed message' the next time User B connects", true),
+                        new QuizOptionSeed("The message queue holds the message in memory indefinitely until a WebSocket push eventually succeeds", false),
+                        new QuizOptionSeed("The message is dropped, since no WebSocket connection is open to receive it", false),
+                        new QuizOptionSeed("User A's client keeps retrying the send request until User B comes online", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("System Design Primer: Design a chat service", "https://github.com/donnemartin/system-design-primer", LinkType.FurtherReading),
+                new ReferenceLinkSeed("Discord Engineering: How Discord Stores Trillions of Messages", "https://discord.com/blog/how-discord-stores-trillions-of-messages", LinkType.FurtherReading),
+            ],
+            prerequisites: [lesson1]);
+
+        var lesson2Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson2.Slug,
+        [
+            "Sketch the end-to-end path of a message from User A to User B, including the connection registry lookup, the queue publish, and the durable persistence step",
+            "Design a messages table schema partitioned by conversation ID, plus a per-user last-read-message table for read receipts",
+            "Explain why fan-out-on-write is the right call for a normal-sized chat group, and when a design might need to reconsider that (e.g., an extremely large broadcast channel)",
+        ]);
+
+        var module = BuildModule(topicId, "bloom-filters-and-case-study-chat-system", "Bloom Filters & Case Study: Designing a Chat System",
+            "Probabilistic membership testing with Bloom filters, plus a full case study combining WebSockets, message queues, databases, and sharding from earlier modules into one design: a real-time chat system.",
+            85, [lesson1, lesson2], sortOrder: 6);
 
         return (module, [lesson1Checklist, lesson2Checklist]);
     }
