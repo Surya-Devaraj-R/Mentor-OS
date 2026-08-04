@@ -7,6 +7,14 @@ using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 
+// Sandboxed cloud hosts (Render's free tier, among others) restrict the
+// low-level OS file-watching feature (inotify) that .NET's config system
+// uses by default to watch appsettings.json for live changes. In that
+// restricted environment, the watcher itself crashes the whole process
+// with a native segfault -- setting this BEFORE CreateBuilder runs turns
+// that watcher off. We don't need live config reloading in production.
+Environment.SetEnvironmentVariable("DOTNET_hostBuilder__reloadConfigOnChange", "false");
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Cloud hosts (Render, Railway, etc.) tell the app which port to listen on
