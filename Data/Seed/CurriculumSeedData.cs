@@ -14,6 +14,16 @@ public static class CurriculumSeedData
         [
             new Topic
             {
+                Slug = "csharp-basics",
+                Title = "C# Basics",
+                Description = "Absolute-beginner C#, from zero: variables, loops, methods, classes, and more. Start here if you're brand new to programming.",
+                IconKey = "course",
+                SortOrder = 0,
+                CreatedUtc = now,
+                UpdatedUtc = now,
+            },
+            new Topic
+            {
                 Slug = "csharp",
                 Title = "C#",
                 Description = "Language fundamentals, OOP, and modern C# features.",

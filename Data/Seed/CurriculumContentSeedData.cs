@@ -19,6 +19,17 @@ public static class CurriculumContentSeedData
     {
         var results = new List<(Module Module, List<ChecklistSeed> Checklists)>
         {
+            BuildCSharpBasicsGettingStartedModule(topicIdBySlug["csharp-basics"]),
+            BuildCSharpBasicsNumbersAndLogicModule(topicIdBySlug["csharp-basics"]),
+            BuildCSharpBasicsRepetitionAndReuseModule(topicIdBySlug["csharp-basics"]),
+            BuildCSharpBasicsCollections1Module(topicIdBySlug["csharp-basics"]),
+            BuildCSharpBasicsOop1Module(topicIdBySlug["csharp-basics"]),
+            BuildCSharpBasicsOop2Module(topicIdBySlug["csharp-basics"]),
+            BuildCSharpBasicsRealProgramsModule(topicIdBySlug["csharp-basics"]),
+            BuildCSharpBasicsCollections2Module(topicIdBySlug["csharp-basics"]),
+            BuildCSharpBasicsModernControlFlowModule(topicIdBySlug["csharp-basics"]),
+            BuildCSharpBasicsModernDataModule(topicIdBySlug["csharp-basics"]),
+            BuildCSharpBasicsAdvancedModule(topicIdBySlug["csharp-basics"]),
             BuildCSharpModule(topicIdBySlug["csharp"]),
             BuildCSharpAsyncAndTestingModule(topicIdBySlug["csharp"]),
             BuildCSharpOopDeepDiveModule(topicIdBySlug["csharp"]),
@@ -21673,6 +21684,3006 @@ public static class CurriculumContentSeedData
 
         return (module, [lesson1Checklist, lesson2Checklist]);
     }
+
+    // ============================== C# Basics ==============================
+
+    private static (Module, List<ChecklistSeed>) BuildCSharpBasicsGettingStartedModule(int topicId)
+    {
+        var lesson1 = BuildLesson(
+            slug: "csharp-basics-hello-world",
+            title: "Hello World",
+            summary: "Write your very first line of C# code and learn, piece by piece, what each part of it means.",
+            estimatedMinutes: 20,
+            objectives:
+            [
+                "Write and run the smallest possible C# program: a single line that prints text to the screen",
+                "Explain what each part of Console.WriteLine(\"Hello, World!\"); does, piece by piece",
+                "Explain the difference between code and a program, and why C# has strict rules",
+                "Recognize the semicolon as the mark that ends almost every C# instruction",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    A computer is very simple in one way: it does exactly what you tell it. Nothing more. Nothing less.
+
+                    **Code** is a list of instructions you write for the computer. A **program** is a full set of instructions that does one job.
+
+                    We write code using a language. Here, we use **C#** (said "C sharp"). C# has strict rules. If you break one of them, the computer does not guess what you meant -- it just shows you an error instead.
+
+                    Here is the smallest C# program you can write:
+
+                    ```
+                    Console.WriteLine("Hello, World!");
+                    ```
+
+                    This one line tells the computer: show the text `Hello, World!` on the screen.
+
+                    **Line by line, what each piece means:**
+
+                    1. `Console` -- the name for "the screen where text shows up." Think of it like a TV screen for text.
+                    2. `.` (the dot) -- means "look inside" or "use something that belongs to." `Console.WriteLine` means "use the WriteLine tool that belongs to Console."
+                    3. `WriteLine` -- an action meaning "write a line of text, then move to a new line" (like pressing Enter after typing).
+                    4. `(` and `)` -- hold the "input" for the action -- what to actually write.
+                    5. `"Hello, World!"` -- the actual text, called a **string** (a string of letters). Anything inside double quotes is plain text, exactly as written.
+                    6. `;` -- means "this instruction is done." Almost every C# line ends with one; forgetting it is the #1 beginner mistake.
+
+                    So the whole line means: "Hey Console, use your WriteLine action, and the text to write is: Hello, World!"
+                    """, 1),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Every piece of `Console.WriteLine("Hello, World!");`**
+
+                    - `Console` -- the screen where text shows up
+                    - `.` -- "look inside" / "use something that belongs to"
+                    - `WriteLine` -- the action: write text, then move to a new line
+                    - `( )` -- holds the input: what to actually write
+                    - `"..."` -- a string: plain text, written exactly as it appears between the quotes
+                    - `;` -- marks the end of the instruction
+
+                    **Quick rule:** almost every C# line ends with a semicolon `;`. If you forget it, the computer shows an error.
+                    """, 2),
+                Block(BlockType.CodeSnippet, "Your First C# Program", BodyFormat.PlainText, """
+                    Console.WriteLine("Hello, World!");
+                    """, 3, language: "csharp"),
+                Block(BlockType.Diagram, "Breaking Down One Line of Code", BodyFormat.StructuredSteps, """
+                    [{"label":"Console","note":"The name for 'the screen where text shows up.' Think of it like a TV screen for text."},{"label":".  (the dot)","note":"Means 'look inside' or 'use something that belongs to.' Console.WriteLine means 'use the WriteLine tool that belongs to Console.'"},{"label":"WriteLine","note":"An action meaning 'write a line of text, then move to a new line' (like pressing Enter after typing)."},{"label":"( and )","note":"Hold the 'input' for the action -- what to actually write."},{"label":"'Hello, World!'","note":"The actual text, called a string. Anything inside double quotes is plain text, exactly as written."},{"label":";","note":"Means 'this instruction is done.' Almost every C# line ends with one; forgetting it is the #1 beginner mistake."}]
+                    """, 4),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Always end a C# instruction with a semicolon `;` -- make it a habit to type it the moment you finish the rest of the line, instead of going back for it later.
+
+                    Run your code often, even after tiny changes. Typing one line, running it, and seeing the result is the fastest way to learn what each piece actually does.
+
+                    Type the code yourself instead of only reading it. Typing `Console.WriteLine("Hello, World!");` with your own hands teaches your fingers the pattern, not just your eyes.
+                    """, 5),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    Junior developer interviews sometimes ask you to explain a simple line of code out loud, just to see how clearly you can think. If asked to explain `Console.WriteLine("Hello, World!");`, you can answer simply: "This tells the computer to use the Console's WriteLine action to print the text `Hello, World!` to the screen, and the semicolon marks the end of the instruction."
+
+                    You do not need fancy words. Saying it in plain, clear steps -- what each piece does, in order -- is exactly what a good answer sounds like at this level.
+                    """, 6),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Forgetting the semicolon `;` at the end of the line -- this is the single most common beginner mistake, and the computer will show an error until it's added.
+
+                    Forgetting one of the quote marks around the text, or forgetting to close the parentheses `)` -- both cause an error, because the computer expects the text to be wrapped in quotes and the input to be closed properly.
+
+                    Typing `console` with a lowercase `c` instead of `Console` with a capital `C` -- C# cares about capitalization, so `console` is not the same word as `Console` to the computer.
+                    """, 7),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    Think of `Console.WriteLine("Hello, World!");` like handing a note to an announcer at an event. `Console` is the announcer. `.WriteLine` is you telling the announcer "please read this out loud, then pause." The text inside the quotes is exactly what's written on the note -- the announcer reads it word for word, nothing added, nothing changed. The semicolon is you tapping the announcer's shoulder to say "that's the whole note, you're done."
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "What does Console.WriteLine(\"Hello, World!\"); print to the screen?",
+                    "Console.WriteLine takes whatever is inside the quotes and prints it exactly as written. The quotes themselves are not printed -- they just mark where the text starts and ends.",
+                    [
+                        new QuizOptionSeed("Hello, World!", true),
+                        new QuizOptionSeed("Console.WriteLine(\"Hello, World!\")", false),
+                        new QuizOptionSeed("Nothing -- this code has a mistake in it", false),
+                        new QuizOptionSeed("Hello World (without the comma)", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "What happens if you forget the semicolon at the end of Console.WriteLine(\"Hello, World!\")?",
+                    "C# expects almost every instruction to end with a semicolon. Leaving it off is not just a style issue -- the computer shows an error and will not run the program until it's added.",
+                    [
+                        new QuizOptionSeed("The computer shows an error, because C# expects a semicolon at the end of almost every instruction", true),
+                        new QuizOptionSeed("The program runs exactly the same, because semicolons are optional in C#", false),
+                        new QuizOptionSeed("The text gets printed twice instead of once", false),
+                        new QuizOptionSeed("Nothing changes -- semicolons are just for making code look neat", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Write your first C# code", "https://learn.microsoft.com/en-us/dotnet/csharp/tour-of-csharp/tutorials/hello-world", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("Console.WriteLine Method", "https://learn.microsoft.com/en-us/dotnet/api/system.console.writeline", LinkType.OfficialDocs),
+            ]);
+
+        var lesson1Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson1.Slug,
+        [
+            "Type Console.WriteLine(\"Hello, World!\"); yourself, exactly as written, and run it",
+            "Change the text inside the quotes to your own name and run it again",
+            "Remove the semicolon on purpose, run the code, and read the error message the computer shows you",
+        ]);
+
+        var lesson2 = BuildLesson(
+            slug: "csharp-basics-variables",
+            title: "Variables",
+            summary: "Store information in labeled boxes called variables, then print what's inside them -- including how to build a full sentence out of two variables at once.",
+            estimatedMinutes: 20,
+            objectives:
+            [
+                "Explain what a variable is, using the labeled box idea",
+                "Create an int variable and a string variable and print their values",
+                "Explain why writing a variable's name without quotes prints its value instead of the word itself",
+                "Use string interpolation ($\"...\") to build one sentence out of several variables",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    A **variable** is a labeled box. You put one piece of information inside it, give the box a name, and later use the name to look inside again.
+
+                    ```
+                    int age = 25;
+                    string name = "Surya";
+
+                    Console.WriteLine(age);
+                    Console.WriteLine(name);
+
+                    Console.WriteLine($"My name is {name} and I am {age} years old.");
+                    ```
+
+                    **`int age = 25;`**
+
+                    `int` tells the computer "this box only holds a whole number" (short for "integer" -- no decimals). `age` is the name we chose for the box -- a clear name is better than `x`, because you can read your own code later and understand it. `=` in code does NOT mean "equals" like in math -- it means "put this value into the box on the left." `25` is the value being put in. `;` means the instruction is done. So: "Make a box for a whole number, call it age, put 25 inside it."
+
+                    **`string name = "Surya";`**
+
+                    Same pattern, different type. `string` means "this box holds text, not numbers." Text always needs double quotes around it -- without quotes, the computer would think `Surya` was the name of some other box, not plain text.
+
+                    **`Console.WriteLine(age);`**
+
+                    Putting the box's name (no quotes) instead of typed text tells the computer "don't print the word `age`, print whatever value is inside the age box right now" -- which is why it prints `25`, not the word `age`.
+
+                    **`Console.WriteLine($"My name is {name} and I am {age} years old.");`**
+
+                    The `$` right before the quotes turns on **string interpolation**: "inside this text, if you see curly braces `{ }`, don't print the braces -- look inside them, find a box name, and print that box's value there instead." So `{name}` becomes "put whatever is inside the name box, right here," and the same for `{age}`. The computer builds the final sentence by swapping in the real values.
+                    """, 1),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Making a variable**
+
+                    - `int age = 25;` -- a box named `age` that only holds a whole number, holding `25`
+                    - `string name = "Surya";` -- a box named `name` that holds text, holding `"Surya"`
+                    - `=` means "put this value into the box on the left" -- it is NOT the math "equals"
+                    - Text always needs double quotes; whole numbers never do
+
+                    **Printing a variable**
+
+                    - `Console.WriteLine(age);` -- no quotes around `age` -- prints the box's value (`25`), not the word `age`
+                    - `Console.WriteLine("age");` -- quotes around `age` -- would print the literal word `age`
+
+                    **Combining variables into one sentence**
+
+                    - `$"...{name}...{age}..."` -- the `$` turns on string interpolation
+                    - Anything inside `{ }` is treated as a box name -- its value gets swapped in
+                    """, 2),
+                Block(BlockType.CodeSnippet, "Variables: Making Boxes and Printing What's Inside", BodyFormat.PlainText, """
+                    int age = 25;
+                    string name = "Surya";
+
+                    Console.WriteLine(age);
+                    Console.WriteLine(name);
+
+                    Console.WriteLine($"My name is {name} and I am {age} years old.");
+                    """, 3, language: "csharp"),
+                Block(BlockType.Diagram, "Two Labeled Boxes", BodyFormat.AsciiArt, """
+                    int age = 25;                 string name = "Surya";
+
+                       Box labeled: age              Box labeled: name
+                      +----------------+            +----------------+
+                      |       25       |            |     Surya      |
+                      +----------------+            +----------------+
+
+                    Console.WriteLine(age);   -> looks inside the "age" box   -> prints: 25
+                    Console.WriteLine(name);  -> looks inside the "name" box  -> prints: Surya
+
+                    Console.WriteLine($"My name is {name} and I am {age} years old.");
+                                                           |                |
+                                                           v                v
+                                                looks inside "name"   looks inside "age"
+                                                box, prints: Surya    box, prints: 25
+
+                    Final printed sentence: My name is Surya and I am 25 years old.
+                    """, 4),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Give your variables clear, honest names, like `age` and `name`, instead of short unclear ones like `a` or `n`. You will thank yourself later when you read the code again and instantly know what each box holds.
+
+                    Pick the type that actually matches what you're storing: `int` for whole numbers, `string` for text. Putting the wrong kind of value in a box (like text into an `int` box) causes an error.
+
+                    Prefer string interpolation (`$"...{name}..."`) over gluing text together with `+` -- it reads more like a normal sentence and is easier to check for mistakes.
+                    """, 5),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    Junior developer interviews sometimes ask you to explain what a variable is, in your own words. A simple, clear answer works well: "A variable is a labeled box that holds one piece of information. I give the box a name and a type -- like `int` for a whole number or `string` for text -- and later I can use that name to read or print whatever value is stored inside it."
+
+                    If asked why `Console.WriteLine(age)` prints `25` instead of the word `age`, you can say: "Because `age` isn't in quotes, the computer treats it as a variable name and prints the value stored inside it, not the word itself."
+                    """, 6),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Forgetting the quotes around text, like writing `string name = Surya;` instead of `string name = "Surya";` -- without quotes, the computer thinks `Surya` is the name of some other box, not plain text, and shows an error.
+
+                    Confusing `=` with math's "equals" -- in code, `=` always means "put this value into the box on the left," never "these two things are the same."
+
+                    Putting quotes around a variable's name when you meant to print its value, like `Console.WriteLine("age");` -- this prints the literal word `age`, not the number stored inside the box.
+                    """, 7),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    A variable is like a labeled storage box on a shelf. You write a label on the outside, like "age" or "name," and put one thing inside -- a number, or a slip of paper with text on it. Later, you don't need to remember what's inside; you just read the label and open that exact box. String interpolation is like writing a note that says "put whatever is in the box labeled name here, and whatever is in the box labeled age here" -- someone reading the finished note only sees the real values, never the instructions to go fetch them.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "In the line int age = 25;, what does int mean?",
+                    "int tells the computer that this box only holds a whole number -- no decimals. It's short for 'integer.'",
+                    [
+                        new QuizOptionSeed("The box can only hold a whole number, with no decimals", true),
+                        new QuizOptionSeed("Add 25 to whatever is already stored", false),
+                        new QuizOptionSeed("The name of the box being created", false),
+                        new QuizOptionSeed("Convert text into a number", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "Why does Console.WriteLine(age); print 25 instead of printing the word \"age\"?",
+                    "Writing a variable's name without quotes tells the computer to print whatever value is stored inside that box, not the word itself. Quotes are what tell the computer to print literal text.",
+                    [
+                        new QuizOptionSeed("Writing age without quotes tells the computer to print the value stored inside the age box, not the word itself", true),
+                        new QuizOptionSeed("Because age is a reserved word in C# that always prints a number", false),
+                        new QuizOptionSeed("Because WriteLine always converts words into numbers automatically", false),
+                        new QuizOptionSeed("Because the semicolon at the end changes how the text is printed", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Variables and types in C#", "https://learn.microsoft.com/en-us/dotnet/csharp/tour-of-csharp/types", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("String interpolation in C#", "https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/tokens/interpolated", LinkType.OfficialDocs),
+            ]);
+
+        var lesson2Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson2.Slug,
+        [
+            "Change age and name to your own age and name, then run the program again",
+            "Add a new string variable, like city, and print it with Console.WriteLine",
+            "Use $\"...\" string interpolation to print one sentence that combines two of your variables",
+        ]);
+
+        var module = BuildModule(topicId, "csharp-basics-getting-started", "Getting Started", "The very first steps in C#: printing text to the screen and storing information in variables.", 40, [lesson1, lesson2], sortOrder: 1);
+        return (module, [lesson1Checklist, lesson2Checklist]);
+    }
+
+    private static (Module, List<ChecklistSeed>) BuildCSharpBasicsNumbersAndLogicModule(int topicId)
+    {
+        var lesson1 = BuildLesson(
+            slug: "csharp-basics-math",
+            title: "Math",
+            summary: "Doing basic math in C# with +, -, *, /, and % -- and the single most common beginner surprise: dividing two whole numbers.",
+            estimatedMinutes: 20,
+            objectives:
+            [
+                "Use +, -, and * to add, subtract, and multiply numbers in C#",
+                "Explain why dividing two int values cuts off the decimal part instead of rounding",
+                "Explain what the % (modulo) operator gives you, using a real leftover-amount example",
+                "Explain why using double instead of int keeps the decimal part of a division",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    C# can do math just like a calculator, using symbols called **operators**.
+
+                    - `+` adds two numbers.
+                    - `-` subtracts one number from another.
+                    - `*` multiplies two numbers. Notice it's a star, not the letter "x" -- computers don't use "x" for multiply.
+                    - `/` divides one number by another.
+                    - `%` is called **modulo**. It does NOT give you the division answer -- it gives you what's **left over** after dividing.
+
+                    Here's something that surprises almost every beginner: `int a = 10; int b = 3; a / b` prints `3`, not `3.333...`. That's because `int` is a box that can only hold **whole numbers** -- no decimal point allowed. When you divide two `int` boxes, C# throws away everything after the decimal point. It does not round to the nearest whole number -- it just chops off the decimal part completely. This is called **integer division**, and it is one of the most common beginner surprises in C#.
+
+                    If you want the real decimal answer, at least one of the two numbers needs to be a `double` (a box built to hold decimal numbers) instead of an `int`. That's why `x / y` below, using `double` variables, prints the long decimal `3.3333333333333335` instead of just `3`.
+
+                    Also notice the `//` in the code below. Anything after `//` on a line is a **comment** -- a note written for humans. The computer completely ignores it; it does not run or affect the program at all.
+                    """, 1),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **The five math operators**
+
+                    - `+` -- add
+                    - `-` -- subtract
+                    - `*` -- multiply (a star, not "x")
+                    - `/` -- divide
+                    - `%` -- modulo: what's left over after dividing
+
+                    **int vs double when dividing**
+
+                    - `int / int` -- always a whole number; the decimal part is thrown away (not rounded)
+                    - `double / double` (or at least one `double`) -- keeps the full decimal answer
+
+                    **Comments**
+
+                    - `// text` -- a note for humans only; the computer ignores everything after `//` on that line
+                    """, 2),
+                Block(BlockType.CodeSnippet, "Doing Math in C#", BodyFormat.PlainText, """
+                    int a = 10;
+                    int b = 3;
+
+                    Console.WriteLine(a + b); // add
+                    Console.WriteLine(a - b); // subtract
+                    Console.WriteLine(a * b); // multiply
+                    Console.WriteLine(a / b); // divide -- but watch this one closely!
+                    Console.WriteLine(a % b); // "remainder" -- what's left over after dividing
+
+                    double x = 10;
+                    double y = 3;
+
+                    Console.WriteLine(x / y); // divide -- compare this to a / b above
+                    """, 3, language: "csharp"),
+                Block(BlockType.Diagram, "Where Each Output Comes From", BodyFormat.StructuredSteps, """
+                    [{"label":"a + b -> 13","note":"10 + 3 = 13"},{"label":"a - b -> 7","note":"10 - 3 = 7"},{"label":"a * b -> 30","note":"10 * 3 = 30"},{"label":"a / b -> 3","note":"10 / 3 is really 3.333..., but int / int throws away the decimal part, leaving just 3"},{"label":"a % b -> 1","note":"10 divided by 3 leaves 1 left over (3 groups of 3 = 9, and 10 - 9 = 1)"},{"label":"x / y -> 3.3333333333333335","note":"x and y are double, so the decimal part is kept instead of thrown away"}]
+                    """, 4),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    If you need a real decimal answer from a division, make sure at least one of the two numbers is a `double` before you divide -- don't divide two `int` values and then try to "fix" the answer afterward, because the decimal part is already gone by then.
+
+                    Add a short `//` comment next to any math that might confuse a future reader (especially division), explaining what result you expect. It costs nothing and saves confusion later.
+                    """, 5),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    Junior interviews sometimes ask you to explain integer division out loud. A clear beginner-level answer is: "When you divide two `int` values in C#, the result is also an `int`, so any decimal part is thrown away, not rounded. If I need the decimal part, I need at least one of the numbers to be a `double`."
+
+                    Being able to explain `%` (modulo) clearly also comes up often: "It gives you the remainder left over after division, not the division answer itself."
+                    """, 6),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Expecting `a / b` to give a decimal answer when `a` and `b` are both `int` -- it won't. C# doesn't round; it simply cuts off everything after the decimal point.
+
+                    Mixing up `/` and `%` -- `/` gives you the answer to the division, `%` gives you what's left over. They answer two different questions.
+                    """, 7),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    Think of sharing 10 candies between 3 friends. Each friend gets 3 candies -- that's what `/` gives you (`10 / 3 = 3`). But there's 1 candy left over that couldn't be split evenly -- that leftover candy is exactly what `%` gives you (`10 % 3 = 1`).
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "What does Console.WriteLine(a / b) print if a = 10 and b = 3, and both are declared as int?",
+                    "Because a and b are both int, C# performs integer division: it computes the answer and throws away everything after the decimal point, without rounding. 10 / 3 is really 3.333..., so the printed result is just 3.",
+                    [
+                        new QuizOptionSeed("3", true),
+                        new QuizOptionSeed("3.33", false),
+                        new QuizOptionSeed("3.3333333333333335", false),
+                        new QuizOptionSeed("4", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "What does the % operator give you when you write 10 % 3?",
+                    "% is the modulo operator. It gives you the remainder left over after dividing, not the division answer itself. 3 groups of 3 use up 9 of the 10, leaving 1 remaining, so 10 % 3 is 1.",
+                    [
+                        new QuizOptionSeed("1, the amount left over after dividing", true),
+                        new QuizOptionSeed("3, the answer to the division", false),
+                        new QuizOptionSeed("3.33, the decimal division answer", false),
+                        new QuizOptionSeed("0, because 10 divides evenly into 3", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Arithmetic operators (C# reference)", "https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/operators/arithmetic-operators", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("Numeric types - C# reference", "https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/builtin-types/numeric-types", LinkType.OfficialDocs),
+            ]);
+
+        var lesson1Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson1.Slug,
+        [
+            "Type out the math example yourself in a new console app and run it, checking each printed number against what you expected",
+            "Change a and b to two different whole numbers, predict a / b and a % b on paper first, then run the code and check your prediction",
+            "Change a and b (or x and y) to double instead of int and confirm the division now keeps its decimal part",
+        ]);
+
+        var lesson2 = BuildLesson(
+            slug: "csharp-basics-decisions",
+            title: "Making Decisions",
+            summary: "Using bool, if/else, and else if to make a C# program choose between different actions based on a condition.",
+            estimatedMinutes: 20,
+            objectives:
+            [
+                "Explain what a bool variable holds and how a comparison like >= produces one",
+                "Use if and else to run one block of code or another, never both",
+                "Use else if to check several conditions in order and stop at the first true one",
+                "Trace through an if / else if / else chain by hand to predict which block runs",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    A `bool` ("boolean") is a box that can hold only one of two values: `true` or `false`. Nothing else fits in it.
+
+                    You get a `bool` by asking a question. `age >= 18` is a question: "is age greater than or equal to 18?" The answer to that question -- `true` or `false` -- gets stored in `isAdult`. Since `20 >= 18` is true, `isAdult` ends up holding `true`.
+
+                    Once you have a `bool`, you can use it to make a decision with `if` and `else`. Read `if (isAdult) { ... } else { ... }` like plain English: "if `isAdult` holds `true`, run this block; otherwise, run the `else` block." The curly braces `{ }` mark "the group of instructions that belongs to this case." The computer runs **only one** of the two blocks -- never both, and never neither.
+
+                    Sometimes there are more than two possible outcomes. The temperature example has three: hot, warm, or cold. `else if` lets you check another question if the first one wasn't true. The computer checks each question **top to bottom**, in order, and stops at the very first one that's true. Is `15 > 30`? No. Is `15 > 15`? No -- equal is not the same as greater than. Since neither question was true, the computer falls through to the final `else`, and prints "It's cold outside."
+
+                    Key idea to remember: the computer checks conditions top to bottom and stops at the first one that's true. If none of them are true, it falls to the final `else`.
+                    """, 1),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **bool**
+
+                    - A box that holds only `true` or `false`
+                    - Comparisons like `>=`, `>`, `<`, `==` produce a bool answer
+
+                    **if / else**
+
+                    - `if (condition) { ... } else { ... }`
+                    - Runs exactly one of the two blocks -- never both
+
+                    **else if**
+
+                    - Checks conditions top to bottom
+                    - Stops at the first one that is true
+                    - If none are true, runs the final `else`
+                    """, 2),
+                Block(BlockType.CodeSnippet, "Making Decisions with bool and if/else", BodyFormat.PlainText, """
+                    int age = 20;
+
+                    bool isAdult = age >= 18;
+                    Console.WriteLine(isAdult); // prints: True
+
+                    if (isAdult)
+                    {
+                        Console.WriteLine("You can vote.");
+                    }
+                    else
+                    {
+                        Console.WriteLine("You cannot vote yet.");
+                    }
+
+                    int temperature = 15;
+
+                    if (temperature > 30)
+                    {
+                        Console.WriteLine("It's hot outside.");
+                    }
+                    else if (temperature > 15)
+                    {
+                        Console.WriteLine("It's warm outside.");
+                    }
+                    else
+                    {
+                        Console.WriteLine("It's cold outside.");
+                    }
+                    """, 3, language: "csharp"),
+                Block(BlockType.Diagram, "Checking the Temperature Conditions in Order", BodyFormat.StructuredSteps, """
+                    [{"label":"temperature = 15","note":"the value we are checking"},{"label":"Is 15 > 30?","note":"No -- skip to the next check"},{"label":"Is 15 > 15?","note":"No -- 15 equals 15, and equal is not greater than, so this is false too"},{"label":"No condition was true, so run the final else","note":"prints: It's cold outside."}]
+                    """, 4),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Give your bool variables question-shaped names, like `isAdult` or `isValid`, so reading the code out loud sounds like plain English: "if isAdult...".
+
+                    When you have several conditions to check, order them carefully with `else if` -- remember the computer stops at the first true one, so put the most specific condition first if the conditions could overlap.
+                    """, 5),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    Junior interviews sometimes ask you to explain if/else out loud. A clear beginner-level answer is: "if runs one block when the condition is true and skips it otherwise; else is what runs instead when it's false; only one of the two blocks ever runs."
+
+                    For else if chains, be ready to say: "the computer checks each condition top to bottom and stops at the first one that's true -- it does not keep checking after that."
+                    """, 6),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Thinking `>=` and `>` are the same thing -- they're not. `15 > 15` is false (15 is not greater than itself), but `15 >= 15` would be true (15 is equal to 15).
+
+                    Assuming multiple `else if` blocks can all run for the same check -- they can't. Once the computer finds the first true condition, it runs that one block and skips every other `else if` and `else` below it.
+                    """, 7),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    An if/else if/else chain is like a security guard checking a line of questions in order to decide who gets in: "Are you on the VIP list? No. Are you on the regular guest list? No. Okay, you go to the back of the line." The guard stops asking questions the moment one is answered "yes," and only falls back to the last, default rule when every earlier question was "no."
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "What type of value does age >= 18 produce, and what does it get stored in?",
+                    "A comparison like >= asks a yes-or-no question and produces a bool -- a value that is only ever true or false. Here it gets stored in the bool variable isAdult.",
+                    [
+                        new QuizOptionSeed("A bool -- either true or false", true),
+                        new QuizOptionSeed("An int -- the number 18", false),
+                        new QuizOptionSeed("A string -- the text \"true\"", false),
+                        new QuizOptionSeed("A double -- a decimal number", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "In the temperature example, temperature is 15. Which message gets printed, and why?",
+                    "The computer checks conditions top to bottom and stops at the first true one. 15 > 30 is false, and 15 > 15 is also false (15 is not greater than itself), so neither else if matches. Since nothing above it was true, the final else runs, printing \"It's cold outside.\"",
+                    [
+                        new QuizOptionSeed("\"It's cold outside.\" -- neither 15 > 30 nor 15 > 15 is true, so the final else runs", true),
+                        new QuizOptionSeed("\"It's warm outside.\" -- because 15 equals 15", false),
+                        new QuizOptionSeed("\"It's hot outside.\" -- because 15 is a positive number", false),
+                        new QuizOptionSeed("All three messages print, one after another", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("The if statement - selection statements (C# reference)", "https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/statements/selection-statements", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("bool - C# reference", "https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/builtin-types/bool", LinkType.OfficialDocs),
+            ],
+            prerequisites: [lesson1]);
+
+        var lesson2Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson2.Slug,
+        [
+            "Type out the decisions example yourself in a new console app and run it, confirming the printed messages match what you expected",
+            "Change age to a number below 18 and predict which message prints before running the code",
+            "Change temperature to a value above 30, then a value exactly equal to 15, and confirm which branch runs each time",
+        ]);
+
+        var module = BuildModule(topicId, "csharp-basics-numbers-and-logic", "Numbers & Logic",
+            "Doing basic math with C#'s arithmetic operators (including the classic integer-division surprise) and making a program choose between actions using bool, if/else, and else if.",
+            40, [lesson1, lesson2], sortOrder: 2);
+
+        return (module, [lesson1Checklist, lesson2Checklist]);
+    }
+
+    private static (Module, List<ChecklistSeed>) BuildCSharpBasicsRepetitionAndReuseModule(int topicId)
+    {
+        var lesson1 = BuildLesson(
+            slug: "csharp-basics-loops",
+            title: "Loops",
+            summary: "Repeat instructions with for and while loops instead of copy-pasting code.",
+            estimatedMinutes: 20,
+            objectives:
+            [
+                "Explain the three parts of a for loop and what each part does",
+                "Trace a for loop step by step to predict its exact output",
+                "Explain how a while loop repeats based on a condition instead of a counter",
+                "Recognize what causes an infinite loop and how to avoid it",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    A loop lets you repeat instructions many times without copy-pasting.
+
+                    A `for` loop has three parts separated by `;`:
+
+                    - `int i = 1` runs ONCE at the start. It makes a counting box named `i`, starting at 1.
+                    - `i <= 5` is the question checked BEFORE every round. "Is i still <= 5? If yes, run the block again. If no, stop completely."
+                    - `i++` runs AFTER every round. It means "add 1 to i." It is short for `i = i + 1`.
+
+                    Step by step: i=1, 1<=5 is true, print 1, i becomes 2. This continues until i=6, 6<=5 is false, stop. That is why it printed 1 2 3 4 5 and nothing more.
+
+                    A `while` loop is simpler. It means "keep repeating this block for as long as the question stays true." `while (count > 0)` checks before every round. `count--` means "take away 1 from count." It is the mirror of `++`. The moment count reaches 0, the question becomes false, the loop stops, and the line after it ("Liftoff!") finally runs.
+
+                    `for` vs `while`: use `for` when you know exactly how many times to repeat (like "5 times"). Use `while` when you are repeating until some condition changes (like "until count hits zero").
+
+                    Warning: forgetting `i++` or `count--` means the question never becomes false, and the loop runs forever. This is called an "infinite loop." It is a very common beginner mistake.
+                    """, 1),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **for loop -- three parts separated by `;`**
+
+                    - Part 1 (`int i = 1`) -- runs ONCE, before anything else
+                    - Part 2 (`i <= 5`) -- checked BEFORE every round; false means stop
+                    - Part 3 (`i++`) -- runs AFTER every round; short for `i = i + 1`
+
+                    **while loop -- one condition**
+
+                    - `while (condition)` -- checked BEFORE every round
+                    - Keeps repeating as long as the condition is true
+                    - You must change something inside the loop so the condition can become false
+
+                    **for vs while**
+
+                    - Know exactly how many times? Use `for`.
+                    - Repeating until something changes? Use `while`.
+
+                    **Infinite loop**
+
+                    - Happens when the condition never becomes false
+                    - Common cause: forgetting `i++` or `count--`
+                    """, 2),
+                Block(BlockType.CodeSnippet, "For Loop and While Loop", BodyFormat.PlainText, """
+                    for (int i = 1; i <= 5; i++)
+                    {
+                        Console.WriteLine(i);
+                    }
+
+                    Console.WriteLine("---");
+
+                    int count = 3;
+                    while (count > 0)
+                    {
+                        Console.WriteLine("Countdown: " + count);
+                        count--; // same as: count = count - 1
+                    }
+                    Console.WriteLine("Liftoff!");
+                    """, 3, language: "csharp"),
+                Block(BlockType.Diagram, "Tracing the for Loop Round by Round", BodyFormat.AsciiArt, """
+                    i = 1   ->  is 1 <= 5? yes  ->  print 1  ->  i++ makes i = 2
+                    i = 2   ->  is 2 <= 5? yes  ->  print 2  ->  i++ makes i = 3
+                    i = 3   ->  is 3 <= 5? yes  ->  print 3  ->  i++ makes i = 4
+                    i = 4   ->  is 4 <= 5? yes  ->  print 4  ->  i++ makes i = 5
+                    i = 5   ->  is 5 <= 5? yes  ->  print 5  ->  i++ makes i = 6
+                    i = 6   ->  is 6 <= 5? NO   ->  stop the loop
+
+                    Output so far: 1 2 3 4 5
+
+                    count = 3  ->  is 3 > 0? yes  ->  print "Countdown: 3"  ->  count-- makes count = 2
+                    count = 2  ->  is 2 > 0? yes  ->  print "Countdown: 2"  ->  count-- makes count = 1
+                    count = 1  ->  is 1 > 0? yes  ->  print "Countdown: 1"  ->  count-- makes count = 0
+                    count = 0  ->  is 0 > 0? NO   ->  stop the loop  ->  print "Liftoff!"
+                    """, 4),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Always make sure something inside the loop moves it closer to stopping. In a `for` loop that is usually `i++`. In a `while` loop it is usually `count--` or something similar. If you cannot point to the exact line that changes the condition, stop and check your loop before running it.
+
+                    Use `for` when you already know the number of repeats, like "print the numbers 1 to 5." Use `while` when you are waiting for something to happen, like "keep going until count reaches 0."
+                    """, 5),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    Junior interviews sometimes ask you to explain this concept out loud. Be ready to say, in plain words, what each of the three parts of a `for` loop does: "the first part runs once at the start, the second part is checked before every round, and the third part runs after every round."
+
+                    Also be ready to explain what an infinite loop is and why it happens. A simple answer is: "the condition never becomes false, usually because you forgot to change the value the condition depends on."
+                    """, 6),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Forgetting to change the loop's counter or condition variable inside the loop body. If you forget `i++` in a `for` loop, or forget `count--` in a `while` loop, the condition never becomes false and the loop runs forever.
+
+                    Mixing up `<=` and `<` in the condition. `i <= 5` runs while i is 1, 2, 3, 4, 5 (five times). `i < 5` runs while i is 1, 2, 3, 4 (only four times). This one-character difference changes how many times the loop runs.
+                    """, 7),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    A `for` loop is like doing 5 push-ups because you decided ahead of time to do exactly 5. You count them as you go, and you stop the moment you hit 5.
+
+                    A `while` loop is like waiting at a bus stop "while the bus has not arrived yet." You do not know exactly how many minutes that will take. You just keep checking, over and over, until the condition changes (the bus arrives), and then you stop.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "What does i++ do in a for loop, and when does it run?",
+                    "i++ means \"add 1 to i.\" It is short for i = i + 1. In a for loop, this part runs after every round, right after the loop's block finishes.",
+                    [
+                        new QuizOptionSeed("It adds 1 to i, and it runs after every round of the loop", true),
+                        new QuizOptionSeed("It subtracts 1 from i, and it runs before every round of the loop", false),
+                        new QuizOptionSeed("It only runs once, at the very start of the loop", false),
+                        new QuizOptionSeed("It checks whether the loop should stop, and does nothing else", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "A while loop is written as while (count > 0), but the code inside never changes count. What happens?",
+                    "The condition count > 0 never becomes false, because nothing inside the loop changes count. This means the loop repeats forever. This is called an infinite loop, and it is a common beginner mistake.",
+                    [
+                        new QuizOptionSeed("The loop runs forever, because the condition never becomes false", true),
+                        new QuizOptionSeed("The loop runs exactly once and then stops automatically", false),
+                        new QuizOptionSeed("The program will not compile", false),
+                        new QuizOptionSeed("The loop stops after 5 rounds by default", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("for statement - C# reference", "https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/statements/iteration-statements", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("while statement - C# reference", "https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/statements/iteration-statements", LinkType.OfficialDocs),
+            ]);
+
+        var lesson1Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson1.Slug,
+        [
+            "Write a for loop that prints the numbers 1 to 10",
+            "Write a while loop that counts down from 5 to 1 and then prints 'Liftoff!'",
+            "Change a for loop's condition from <= to < and predict how many times it will run before running it",
+        ]);
+
+        var lesson2 = BuildLesson(
+            slug: "csharp-basics-methods",
+            title: "Methods",
+            summary: "Write reusable named blocks of code that take inputs and can hand back a result.",
+            estimatedMinutes: 20,
+            objectives:
+            [
+                "Explain what a method is and why it lets you reuse code",
+                "Explain what a parameter is and how it fills in a value when a method is called",
+                "Explain what return means and how it is different from void",
+                "Call a method and use the value it returns",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    A method is a named block of instructions you can reuse.
+
+                    `static` is a required word for now. Don't worry what it means yet -- it will be explained properly once a later lesson covers classes. For now, just always include it.
+
+                    `void` means "this method does something, but hands nothing back." `SayHello` is the name we gave it. The empty `()` means it needs no input. The method does nothing by itself until it is actually CALLED. `SayHello();` is what actually runs it.
+
+                    `Greet(string name)` has a **parameter**. A parameter is an input box the method needs YOU to fill in before it can do its job, like a blank on a form. `Greet("Surya");` pours `"Surya"` into that `name` box for this one run.
+
+                    `static int Add(int a, int b)` uses `int` instead of `void`. This tells you "this method hands back a whole number when it finishes." `(int a, int b)` means it needs two number inputs. `return a + b;` is the key new word. **return** means "stop here, and hand this exact value back to whoever called me." The method doesn't print anything itself. It computes and hands the answer back. `int result = Add(4, 7);` calls it, catching the returned `11` in a box called `result`. This is the same box pattern as `int age = 25;`, except a method computed the value this time instead of typing it directly.
+
+                    Core idea: a method is a mini-machine. Parameters are what you feed in. `return` is what comes out. `void` means nothing comes out -- it just does something.
+                    """, 1),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Parts of a method**
+
+                    - `static` -- required word for now, explained later with classes
+                    - `void` or a type like `int` -- what the method hands back (`void` = nothing)
+                    - Name -- like `SayHello`, `Greet`, `Add`
+                    - `(...)` -- parameters: input boxes the caller must fill in
+                    - `{ }` -- the body: the instructions that run
+
+                    **Calling vs defining**
+
+                    - Writing the method does not run it
+                    - `SayHello();` is what actually runs it
+
+                    **Parameters**
+
+                    - An input box the method needs filled in before it runs
+                    - `Greet("Surya");` puts `"Surya"` into the `name` box
+
+                    **return**
+
+                    - Means "stop here, hand this value back to whoever called me"
+                    - A method with `void` never uses `return` to hand back a value
+                    - `int result = Add(4, 7);` catches the returned value in a box called `result`
+                    """, 2),
+                Block(BlockType.CodeSnippet, "Methods with No Input, a Parameter, and a Return Value", BodyFormat.PlainText, """
+                    static void SayHello()
+                    {
+                        Console.WriteLine("Hello there!");
+                    }
+
+                    static void Greet(string name)
+                    {
+                        Console.WriteLine($"Hello, {name}!");
+                    }
+
+                    static int Add(int a, int b)
+                    {
+                        return a + b;
+                    }
+
+                    SayHello();
+                    Greet("Surya");
+
+                    int result = Add(4, 7);
+                    Console.WriteLine(result);
+                    """, 3, language: "csharp"),
+                Block(BlockType.Diagram, "How Add(4, 7) Turns Into 11", BodyFormat.StructuredSteps, """
+                    [{"label":"int result = Add(4, 7); is called","note":"the caller sends in two numbers, 4 and 7"},{"label":"a is filled with 4, and b is filled with 7","note":"these are the two parameter input boxes"},{"label":"return a + b; runs, so a + b is calculated","note":"4 + 7 equals 11"},{"label":"the method stops, and hands 11 back to the caller","note":"return means stop here and send this value back"},{"label":"result now holds 11","note":"same box pattern as 'int age = 25;', but a method computed the value this time"}]
+                    """, 4),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Give methods clear, simple names that describe what they do, like `SayHello` or `Greet`. This makes code easier to read later.
+
+                    Use `void` only when the method truly has nothing to hand back, like printing to the screen. Use a real type like `int` when the method computes a value that the caller needs to use afterward.
+                    """, 5),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    Junior interviews sometimes ask you to explain this concept out loud. Be ready to say, in plain words, the difference between a parameter and a return value: "a parameter is an input the method needs before it can run, and a return value is the output the method hands back when it finishes."
+
+                    Also be ready to explain `void`: "void means the method does something, like printing, but does not hand any value back to the caller."
+                    """, 6),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Writing a method but forgetting to call it. Defining `SayHello()` does nothing by itself. You must write `SayHello();` for it to actually run.
+
+                    Forgetting `return` in a method that is not `void`. If a method says it returns `int`, it must actually use `return` to hand back a whole number, or the code will not compile.
+                    """, 7),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    A method is like a recipe card. Writing the recipe card does not cook the meal. Someone has to actually follow it (call it) for anything to happen.
+
+                    A parameter is like a blank on an order form, such as "what flavor?" You must fill that blank in before the order can be made.
+
+                    A return value is like a receipt handed back to you after the order is done. `void` methods are like a task with no receipt. They just do the work and hand nothing back.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "A method is written as static void Greet(string name). What does the word void tell you?",
+                    "void means the method does something, like printing to the screen, but it does not hand any value back to whoever calls it. If the method computed and returned a value, it would use a type like int instead of void.",
+                    [
+                        new QuizOptionSeed("The method does something but hands nothing back to the caller", true),
+                        new QuizOptionSeed("The method always returns a whole number", false),
+                        new QuizOptionSeed("The method cannot take any parameters", false),
+                        new QuizOptionSeed("The method runs automatically without being called", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "Given static int Add(int a, int b) { return a + b; }, what happens when you write int result = Add(4, 7);?",
+                    "The method runs with a filled in as 4 and b filled in as 7. return a + b; computes 11 and stops the method, handing 11 back to the caller. That returned value, 11, is then stored in the box called result.",
+                    [
+                        new QuizOptionSeed("Add computes 4 + 7, returns 11, and result is set to 11", true),
+                        new QuizOptionSeed("Add prints 4 and 7 to the screen and returns nothing", false),
+                        new QuizOptionSeed("result becomes the text \"Add(4, 7)\"", false),
+                        new QuizOptionSeed("The code will not compile because Add has no body", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Methods - C# programming guide", "https://learn.microsoft.com/en-us/dotnet/csharp/programming-guide/classes-and-structs/methods", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("Method parameters - C# reference", "https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/keywords/method-parameters", LinkType.OfficialDocs),
+            ],
+            prerequisites: [lesson1]);
+
+        var lesson2Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson2.Slug,
+        [
+            "Write a void method with no parameters, then call it so it actually runs",
+            "Write a method that takes one string parameter and prints a greeting using it",
+            "Write a method that returns an int, call it, and store the returned value in a variable",
+        ]);
+
+        var module = BuildModule(topicId, "csharp-basics-repetition-and-reuse", "Repetition & Reuse",
+            "Loops for repeating instructions and methods for writing reusable, named blocks of code -- the first tools that let a beginner stop copy-pasting code.",
+            40, [lesson1, lesson2], sortOrder: 3);
+
+        return (module, [lesson1Checklist, lesson2Checklist]);
+    }
+
+    private static (Module, List<ChecklistSeed>) BuildCSharpBasicsCollections1Module(int topicId)
+    {
+        var lesson1 = BuildLesson(
+            slug: "csharp-basics-lists",
+            title: "Lists",
+            summary: "Storing many values in one box, in order, using List<string> -- reading items by index, counting items, adding new ones, and visiting every item with foreach.",
+            estimatedMinutes: 20,
+            objectives:
+            [
+                "Explain what a List<T> is and how it differs from a single variable like int age = 25",
+                "Read an item from a list using its index, and remember that indexes start counting at 0, not 1",
+                "Use .Count to see how many items are in a list, and .Add to put a new item on the end",
+                "Use a foreach loop to visit every item in a list, one at a time, without using index numbers",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    A list is a box that holds many values at once, in order -- not just one value like `int age = 25` did.
+
+                    `List<string> names = new List<string> { "Surya", "Ann", "Raj" };` breaks down like this:
+                    - `List<string>` means "a list, and every item inside must be a string."
+                    - `names` is the name we gave this list.
+                    - `new List<string> { ... }` means "build a brand new one." The values inside the curly braces are what we put in right away.
+
+                    Every item in a list has a position number called an **index**. Counting starts at 0, not 1! So:
+                    - `names[0]` is the 1st item -- "Surya"
+                    - `names[1]` is the 2nd item -- "Ann"
+
+                    This trips up almost every beginner at first. Remember: index 0 means "the first one."
+
+                    `.Count` tells you how many items are currently in the list. Before we add anything, `names.Count` is 3.
+
+                    `.Add(...)` puts a new item on the end of the list. After `names.Add("New Friend")`, the list has 4 items.
+
+                    `foreach (string name in names) { ... }` means "for each item in this list, one at a time, do the following." Read it as: "for each string -- call it `name` while looking at it -- inside `names`, print it." You don't need to know how many items there are, and you don't need index numbers. `foreach` just walks through every item, front to back, which is why the output includes "New Friend," the item we just added with `.Add`.
+
+                    `for` vs `foreach`: use `for` when counting numbers. Use `foreach` when you have a list and just want to visit every item, one by one.
+                    """, 1),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Creating a list**
+                    - `List<string> names = new List<string> { "Surya", "Ann", "Raj" };`
+
+                    **Reading an item (index starts at 0!)**
+                    - `names[0]` -> 1st item
+                    - `names[1]` -> 2nd item
+
+                    **Useful members**
+                    - `names.Count` -> how many items are in the list right now
+                    - `names.Add("New Friend")` -> puts a new item on the end
+
+                    **Visiting every item**
+                    - `foreach (string name in names) { Console.WriteLine(name); }`
+
+                    **for vs foreach**
+                    - `for` -> use when counting numbers
+                    - `foreach` -> use when you just want to visit every item in a list, one by one
+                    """, 2),
+                Block(BlockType.CodeSnippet, "Working With a List<string>", BodyFormat.PlainText, """
+                    List<string> names = new List<string> { "Surya", "Ann", "Raj" };
+
+                    Console.WriteLine(names[0]); // the FIRST item -- prints "Surya"
+                    Console.WriteLine(names[1]); // the SECOND item -- prints "Ann"
+
+                    Console.WriteLine(names.Count); // how many items are in the list right now
+
+                    names.Add("New Friend"); // add a new item to the end of the list
+
+                    Console.WriteLine("---");
+
+                    foreach (string name in names)
+                    {
+                        Console.WriteLine(name);
+                    }
+                    """, 3, language: "csharp"),
+                Block(BlockType.Diagram, "A List Before and After .Add", BodyFormat.AsciiArt, """
+                    Before names.Add("New Friend"):
+
+                      index:    0        1       2
+                      value:  "Surya"  "Ann"   "Raj"
+
+                    names.Count = 3
+
+                    After names.Add("New Friend"):
+
+                      index:    0        1       2          3
+                      value:  "Surya"  "Ann"   "Raj"   "New Friend"
+
+                    names.Count = 4   <- .Add put the new item on the END, at the next open index
+
+                    foreach walks left to right, index 0 to the last index:
+                      "Surya" -> "Ann" -> "Raj" -> "New Friend"
+                    """, 4),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Always double-check the index you want against "index = position - 1." If you want the 2nd item, that's index 1, not 2.
+
+                    When you just need to look at every item in a list and don't care about its position number, reach for `foreach` instead of a `for` loop with index numbers -- it's shorter and there's no index math to get wrong.
+
+                    Check `.Count` before you trust an index that came from user input or a calculation -- reading past the end of a list crashes your program.
+                    """, 5),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    Junior interviews sometimes ask you to explain this concept out loud: "Why does `names[0]` give you the first item, not `names[1]`?" Be ready to say plainly: "Because list indexes start counting at 0, not 1. The first item is always at index 0."
+
+                    You may also be asked "What's the difference between `.Count` and an index number?" Answer: "`.Count` is the total number of items in the list. An index is the position of one specific item. The last valid index is always `.Count - 1`, not `.Count`."
+                    """, 6),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Thinking `names[1]` gives you the 1st item. It doesn't -- it gives you the 2nd item, because counting starts at 0.
+
+                    Trying to read `names[names.Count]`. This is one index too far! If a list has 3 items (indexes 0, 1, 2), `names.Count` is 3, but there is no item at index 3. The last valid index is always `.Count - 1`.
+
+                    Forgetting that `.Add` puts the new item at the END of the list, not the beginning.
+                    """, 7),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    Think of a list like a row of numbered lockers at a gym, except the very first locker is labeled "0," not "1." If someone tells you "check locker 1," that's actually the SECOND locker, not the first -- exactly like `names[1]` being the 2nd item, "Ann." `.Count` is like asking the gym how many lockers are currently in use, and `.Add` is like the attendant putting your new bag in the next open locker at the end of the row.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "You create List<string> names = new List<string> { \"Surya\", \"Ann\", \"Raj\" };. What does names[1] give you?",
+                    "Index numbers start at 0, not 1. So names[0] is the 1st item, \"Surya,\" and names[1] is the 2nd item, \"Ann.\"",
+                    [
+                        new QuizOptionSeed("\"Ann\"", true),
+                        new QuizOptionSeed("\"Surya\"", false),
+                        new QuizOptionSeed("\"Raj\"", false),
+                        new QuizOptionSeed("An error, since indexing starts at 1", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "Which statement about List<string> is correct?",
+                    ".Add puts a new item on the end of the list, so .Count goes up by one right after calling it -- .Count always reflects the current total.",
+                    [
+                        new QuizOptionSeed(".Add adds a new item to the end of the list, and .Count reflects the new total after adding", true),
+                        new QuizOptionSeed(".Count tells you the position of the last item you added", false),
+                        new QuizOptionSeed(".Add replaces the first item in the list", false),
+                        new QuizOptionSeed("foreach only works on lists with fewer than 3 items", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Lists tutorial (Tour of C#)", "https://learn.microsoft.com/en-us/dotnet/csharp/tour-of-csharp/tutorials/lists", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("List<T> Class", "https://learn.microsoft.com/en-us/dotnet/api/system.collections.generic.list-1", LinkType.OfficialDocs),
+            ]);
+
+        var lesson1Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson1.Slug,
+        [
+            "Create a List<string> with 3 of your friends' names, print names[0] and names[1], and confirm which friend each index prints",
+            "Add a 4th name with .Add, print .Count before and after adding it, and confirm the number goes up by 1",
+            "Write a foreach loop that prints every name in your list, and count how many lines print compared to .Count",
+        ]);
+
+        var lesson2 = BuildLesson(
+            slug: "csharp-basics-arrays",
+            title: "Arrays",
+            summary: "Holding a fixed number of values with an array, reading items by index the same way as a List, and using .Length plus a for loop to visit every item.",
+            estimatedMinutes: 20,
+            objectives:
+            [
+                "Explain what an array is and how its size is fixed the moment it is created, unlike a List",
+                "Read an item from an array using its index, using the same zero-based rule as List",
+                "Use .Length to find out how many items an array holds, and know it's the array version of List's .Count",
+                "Use a for loop with .Length to visit every index in an array, from the first item to the last",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    An array holds many values, like a List does. The BIG difference: an array's size is FIXED the moment you create it. You cannot add a 4th value later -- it will always hold exactly 3.
+
+                    `int[] numbers = { 10, 20, 30 };` creates an array of 3 whole numbers. `int[]` means "an array of int values." The curly braces `{ 10, 20, 30 }` are the values it holds from the very start -- and that's all it will ever hold.
+
+                    `numbers[0]` is the first item -- same index rule as List. Counting starts at 0. So `numbers[0]` is 10, the 1st item.
+
+                    `.Length` is the array equivalent of List's `.Count` -- just a naming difference to remember (arrays use `Length`, Lists use `Count`). Both answer the same question: "how many items are in here?"
+
+                    The `for` loop from the Loops lesson walks through every index from 0 up to (but not including) `numbers.Length`. That's why the loop is written `for (int i = 0; i < numbers.Length; i++)` -- it starts at index 0 and stops right before it would go one index too far, printing each item in order: 10, 20, 30.
+                    """, 1),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Creating an array**
+                    - `int[] numbers = { 10, 20, 30 };`
+
+                    **Reading an item (index starts at 0, same as List)**
+                    - `numbers[0]` -> 1st item
+
+                    **Size**
+                    - `numbers.Length` -> how many items the array holds (arrays use `Length`, NOT `Count`)
+                    - Size is FIXED forever once the array is created -- there is no `.Add` on arrays
+
+                    **Visiting every item**
+                    - `for (int i = 0; i < numbers.Length; i++) { Console.WriteLine(numbers[i]); }`
+
+                    **List vs Array, quick reminder**
+                    - List: can grow with `.Add`, size question is `.Count`
+                    - Array: size fixed at creation, size question is `.Length`
+                    """, 2),
+                Block(BlockType.CodeSnippet, "Working With an int[] Array", BodyFormat.PlainText, """
+                    int[] numbers = { 10, 20, 30 };
+
+                    Console.WriteLine(numbers[0]);   // first item -- index 0, same rule as List
+                    Console.WriteLine(numbers.Length); // arrays use ".Length", NOT ".Count"
+
+                    Console.WriteLine("---");
+
+                    for (int i = 0; i < numbers.Length; i++)
+                    {
+                        Console.WriteLine(numbers[i]);
+                    }
+                    """, 3, language: "csharp"),
+                Block(BlockType.Diagram, "A Fixed-Size Array Walked by a for Loop", BodyFormat.AsciiArt, """
+                    int[] numbers = { 10, 20, 30 };  <- size is fixed at 3, forever
+
+                      index:    0      1      2
+                      value:   10     20     30
+
+                    numbers.Length = 3   <- arrays use Length, not Count
+
+                    for (int i = 0; i < numbers.Length; i++)
+                      i=0 -> numbers[0] -> 10
+                      i=1 -> numbers[1] -> 20
+                      i=2 -> numbers[2] -> 30
+                      i=3 -> stop! (3 < 3 is false, loop ends before reading a 4th, non-existent item)
+                    """, 4),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Never assume an array can grow. If you might need to add items later, use a `List<T>` instead of an array -- reach for an array only when you know the exact, fixed number of items up front.
+
+                    When looping through an array by index, always compare against `.Length`, never a hardcoded number like `3` -- if the array's size ever changes in your code, a hardcoded number quietly breaks.
+
+                    Remember the naming split: arrays use `.Length`, Lists use `.Count`. Mixing them up is a compile error, so the computer will catch it, but knowing it cold saves you the lookup.
+                    """, 5),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    Junior interviews sometimes ask you to explain this concept out loud: "What's the difference between an array and a List?" Be ready to say plainly: "An array has a fixed size chosen when it's created and can never grow or shrink. A List can grow -- you can `.Add` more items any time."
+
+                    You may also be asked "Why does an array use `.Length` but a List use `.Count`?" A simple, honest answer is: "That's just how C# named them -- they both answer the same question, how many items are here, just with different property names depending on the type."
+                    """, 6),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Calling `numbers.Count` on an array. Arrays don't have `.Count` -- they have `.Length`. This is a common mix-up when you've been using Lists and switch to an array.
+
+                    Trying to `.Add` a new value to an array, like `numbers.Add(40)`. Arrays don't have `.Add` at all, because their size is fixed forever once created. If you need to add items, use a `List<T>` instead.
+
+                    Writing the loop condition as `i <= numbers.Length` instead of `i < numbers.Length`. With `<=`, the loop would try to read `numbers[3]` on a 3-item array -- an index that doesn't exist -- and crash.
+                    """, 7),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    An array is like a carton of eggs bought from the store: it has a fixed number of slots -- say, 3 -- built right into the carton, and you cannot snap on a 4th slot later. A List is more like a shopping bag: you can always put one more item in, and the bag just stretches to fit. `.Length` is like reading the fixed number printed on the egg carton; `.Count` is like counting how many items are currently in the shopping bag -- same idea, different container, different word.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "int[] numbers = { 10, 20, 30 }; After creating this array, can you add a 4th number to it later?",
+                    "An array's size is fixed the moment it's created and can never grow. A List can grow with .Add, but an array cannot -- if you need to add items later, use a List<T> instead.",
+                    [
+                        new QuizOptionSeed("No -- an array's size is fixed the moment it is created", true),
+                        new QuizOptionSeed("Yes, using .Add just like a List", false),
+                        new QuizOptionSeed("Yes, but only if the new number is also an int", false),
+                        new QuizOptionSeed("Yes, using .Count++", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "What property do you use to find out how many items are in an array, and how does it differ from List?",
+                    "Arrays use .Length. Lists use .Count. They answer the same question -- how many items are here -- just with a different property name depending on the type.",
+                    [
+                        new QuizOptionSeed(".Length for arrays; Lists use .Count instead -- different name, same idea", true),
+                        new QuizOptionSeed(".Count for arrays; Lists use .Length instead", false),
+                        new QuizOptionSeed(".Size for arrays; Lists use .Length instead", false),
+                        new QuizOptionSeed("Both arrays and Lists use .Count", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Arrays (C# Programming Guide)", "https://learn.microsoft.com/en-us/dotnet/csharp/programming-guide/arrays/", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("Single-Dimensional Arrays", "https://learn.microsoft.com/en-us/dotnet/csharp/programming-guide/arrays/single-dimensional-arrays", LinkType.OfficialDocs),
+            ],
+            prerequisites: [lesson1]);
+
+        var lesson2Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson2.Slug,
+        [
+            "Create an int[] with 3 numbers, print numbers[0] and numbers.Length",
+            "Try to add a 4th number to the array (for example numbers.Add(40)) and see what happens -- notice arrays don't have .Add",
+            "Write a for loop using numbers.Length to print every number in the array, from first to last",
+        ]);
+
+        var module = BuildModule(topicId, "csharp-basics-collections-1", "Collections I",
+            "Storing more than one value in C#: growable, index-based Lists that can .Add new items, and fixed-size Arrays that use .Length -- the two most basic ways to hold many values at once.",
+            40, [lesson1, lesson2], sortOrder: 4);
+
+        return (module, [lesson1Checklist, lesson2Checklist]);
+    }
+
+    private static (Module, List<ChecklistSeed>) BuildCSharpBasicsOop1Module(int topicId)
+    {
+        var lesson1 = BuildLesson(
+            slug: "csharp-basics-classes",
+            title: "Classes",
+            summary: "What a class is, what an object is, and why each object keeps its own separate data.",
+            estimatedMinutes: 20,
+            objectives:
+            [
+                "Explain what a class is: a blueprint that bundles data (fields) and actions (methods) together",
+                "Describe what a field is, and explain why the Bark() method has no static keyword",
+                "Explain what new Dog() does, and what an object (also called an instance) is",
+                "Explain why two different Dog objects can hold two completely different Name and Age values at the same time",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    A **class** is a blueprint for building your own kind of "thing." It bundles data and actions together, in one named package.
+
+                    `class Dog` means: "here's a blueprint, I'm calling it Dog."
+
+                    `public string Name = "";` and `public int Age;` are **fields**: pieces of data every Dog you make will have. Every dog has ITS OWN Name and Age -- they don't share one value.
+
+                    `public void Bark()` is a method, just like in the methods lesson -- but notice: no `static` this time. That's the secret we skipped earlier. A method WITH `static` belongs to the program in general. A method WITHOUT `static` belongs to one specific Dog, and uses THAT dog's own Name when it runs.
+
+                    `public` means "anything outside this class is allowed to use this."
+
+                    The blueprint alone builds nothing. You must build one: `new Dog()` means "build a real dog from the Dog blueprint, right now." This built thing is called an **object** (or **instance**).
+
+                    `myDog` is the box holding this one specific dog. `myDog.Name = "Rex";` -- the dot means "look inside myDog, find its Name field, and set it" (same dot as Console.WriteLine).
+
+                    `myDog.Bark();` calls Bark specifically ON myDog. Since Bark isn't static, it uses myDog's own Name, printing "Rex says: Woof!"
+
+                    `anotherDog` builds a SECOND, completely separate dog from the same blueprint. myDog and anotherDog each have their own Name and Age. Changing one never touches the other. One blueprint, many independent objects.
+                    """, 1),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Class = the plan**
+
+                    - `class Dog { ... }` defines a blueprint named Dog
+                    - Fields (`Name`, `Age`) are the data every Dog will have -- each Dog gets its own copy
+                    - A method with no `static` belongs to one specific object, not the program in general
+
+                    **Object = a real thing built from the plan**
+
+                    - `new Dog()` builds one real Dog from the blueprint -- this is called an object, or an instance
+                    - `myDog.Name = "Rex";` -- dot means "reach inside myDog and set its Name field"
+                    - `myDog.Bark();` -- calls Bark on myDog specifically, using myDog's own data
+
+                    **Every object is independent**
+
+                    - `myDog` and `anotherDog` are two separate objects from the same Dog blueprint
+                    - Each keeps its own Name and Age -- changing one never changes the other
+                    """, 2),
+                Block(BlockType.CodeSnippet, "Building Two Independent Dog Objects", BodyFormat.PlainText, """
+                    Dog myDog = new Dog();
+                    myDog.Name = "Rex";
+                    myDog.Age = 3;
+                    myDog.Bark();
+
+                    Dog anotherDog = new Dog();
+                    anotherDog.Name = "Bella";
+                    anotherDog.Age = 5;
+                    anotherDog.Bark();
+
+                    Console.WriteLine($"{myDog.Name} is {myDog.Age} years old.");
+                    Console.WriteLine($"{anotherDog.Name} is {anotherDog.Age} years old.");
+
+                    class Dog
+                    {
+                        public string Name = "";
+                        public int Age;
+
+                        public void Bark()
+                        {
+                            Console.WriteLine($"{Name} says: Woof!");
+                        }
+                    }
+
+                    // Output:
+                    // Rex says: Woof!
+                    // Bella says: Woof!
+                    // Rex is 3 years old.
+                    // Bella is 5 years old.
+                    """, 3, language: "csharp"),
+                Block(BlockType.Diagram, "Two Separate Dog Objects Built From One Blueprint", BodyFormat.AsciiArt, """
+                    The Dog blueprint (class):
+                      Name : string
+                      Age  : int
+                      Bark(): prints "{Name} says: Woof!"
+
+                    new Dog() builds one real object. Each object gets its OWN copy of Name and Age:
+
+                      myDog                        anotherDog
+                      +------------------+         +------------------+
+                      | Name = "Rex"     |         | Name = "Bella"   |
+                      | Age  = 3         |         | Age  = 5         |
+                      +------------------+         +------------------+
+
+                    myDog.Bark()       -> uses myDog's own Name       -> "Rex says: Woof!"
+                    anotherDog.Bark()  -> uses anotherDog's own Name  -> "Bella says: Woof!"
+
+                    Changing myDog.Age never changes anotherDog.Age -- two separate boxes,
+                    built from the same one blueprint.
+                    """, 4),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Give a class a clear, singular name that describes ONE thing it represents -- `Dog`, not `Dogs` or `DogManager`. Each object you build from it is one of those things.
+
+                    Only mark a method `static` when it truly doesn't need any particular object's data to do its job. If a method uses a field like `Name`, it almost always should NOT be static.
+                    """, 5),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    Junior interviews sometimes ask you to explain this concept out loud: "what is the difference between a class and an object?" A clean answer is: "a class is the blueprint; an object is one real thing built from that blueprint using `new`. You can build many objects from one class, and each one keeps its own separate data."
+
+                    Being able to say that in one breath, without hesitating, is exactly what these interviews are checking for.
+                    """, 6),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Forgetting to call `new Dog()` before using a Dog variable. A class is only a plan -- it doesn't build anything by itself. Without `new`, there is no real object to store data in.
+
+                    Another common mix-up: thinking `myDog.Age = 3;` changes something inside the Dog blueprint itself. It doesn't. It only changes the Age field on this one specific object, `myDog`. `anotherDog.Age` is completely unaffected.
+                    """, 7),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    Think of a class like a cookie cutter, and each object like one actual cookie. The cookie cutter (the class) defines the SHAPE every cookie will have -- but it isn't a cookie you can eat. Each time you press it into the dough (`new Dog()`), you get one real cookie (an object). You can decorate one cookie with red sprinkles and another with blue sprinkles -- decorating one never changes the other, even though they came from the exact same cutter.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "Why does the Bark() method in the Dog class NOT have the static keyword?",
+                    "A method without static belongs to one specific object, not to the program in general. Bark() needs to use the calling object's own Name field, so it must be a non-static (instance) method -- that's exactly what lets myDog.Bark() print Rex's name and anotherDog.Bark() print Bella's name.",
+                    [
+                        new QuizOptionSeed("Because Bark() uses that specific object's own Name field, so it must belong to one object, not to the program in general", true),
+                        new QuizOptionSeed("Because static methods are not allowed to print anything to the console", false),
+                        new QuizOptionSeed("Because only fields can be static, never methods", false),
+                        new QuizOptionSeed("Because Bark() does not return a value", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "After running myDog.Age = 3; and anotherDog.Age = 5;, what is myDog.Age?",
+                    "Each object built with new Dog() gets its own separate copy of every field. Setting anotherDog.Age never touches myDog.Age, because they are two different objects -- myDog.Age stays 3.",
+                    [
+                        new QuizOptionSeed("3 -- myDog and anotherDog each keep their own separate Age field", true),
+                        new QuizOptionSeed("5 -- the last Age set anywhere overwrites every Dog object", false),
+                        new QuizOptionSeed("8 -- the two Age values get added together", false),
+                        new QuizOptionSeed("It causes a compiler error, because Age was already set once", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Classes and Structs (C#)", "https://learn.microsoft.com/en-us/dotnet/csharp/programming-guide/classes-and-structs/classes-and-structs", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("Object-Oriented Programming (C#)", "https://learn.microsoft.com/en-us/dotnet/csharp/fundamentals/tutorials/oop", LinkType.FurtherReading),
+            ]);
+
+        var lesson1Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson1.Slug,
+        [
+            "Type out the Dog class exactly as shown, build two Dog objects, and run the program yourself to see both dogs print their own name",
+            "Add a third Dog object with your own name and age, and print its own \"is X years old\" line",
+            "In your own words, write one sentence explaining why myDog and anotherDog never affect each other's Age",
+        ]);
+
+        var lesson2 = BuildLesson(
+            slug: "csharp-basics-constructors",
+            title: "Constructors",
+            summary: "The special method that forces you to supply every value the moment an object is built, so no object is ever left incomplete.",
+            estimatedMinutes: 20,
+            objectives:
+            [
+                "Explain what a constructor is and how it differs from a normal method: same name as the class, no return type at all",
+                "Explain exactly when a constructor runs, and why it runs automatically",
+                "Explain the difference between the lowercase parameter name and the uppercase field Name, and why C# treats them as two different things",
+                "Explain why using a constructor prevents a Dog object from ever being left with missing data",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    In the Classes lesson, we built a Dog then filled in Name and Age line by line AFTER building it. That means it's possible to forget to set one. A constructor fixes this: it forces you to hand over the values the moment you build the object -- no incomplete dogs allowed.
+
+                    A **constructor** is a special method: same name as the class, no return type at all (not even void). It runs automatically, exactly once, the instant `new Dog(...)` is called.
+
+                    Note: `name` (lowercase) is the INPUT we were just handed. `Name` (uppercase, capital N) is the dog's own FIELD. C# treats these as two completely different things -- capital letters matter.
+
+                    `Name = name;` copies the input into the real field.
+                    """, 1),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **What a constructor is**
+
+                    - Same name as the class -- here, `Dog`
+                    - No return type at all, not even `void`
+                    - Runs automatically, exactly once, the instant `new Dog(...)` is called
+
+                    **Why it helps**
+
+                    - Forces every value (like name and age) to be supplied up front
+                    - No way to end up with a Dog that's missing its Name or Age
+
+                    **Watch the capitalization**
+
+                    - `name` (lowercase) -- the input parameter, just handed to the constructor
+                    - `Name` (uppercase) -- the object's own field, stored permanently
+                    - `Name = name;` copies the input into the real field -- C# sees these as two different things
+                    """, 2),
+                Block(BlockType.CodeSnippet, "Building Dogs With a Constructor", BodyFormat.PlainText, """
+                    Dog myDog = new Dog("Rex", 3);
+                    myDog.Bark();
+
+                    Dog anotherDog = new Dog("Bella", 5);
+                    anotherDog.Bark();
+
+                    Console.WriteLine($"{myDog.Name} is {myDog.Age} years old.");
+
+                    class Dog
+                    {
+                        public string Name;
+                        public int Age;
+
+                        public Dog(string name, int age)
+                        {
+                            Name = name;
+                            Age = age;
+                        }
+
+                        public void Bark()
+                        {
+                            Console.WriteLine($"{Name} says: Woof!");
+                        }
+                    }
+
+                    // Output:
+                    // Rex says: Woof!
+                    // Bella says: Woof!
+                    // Rex is 3 years old.
+                    """, 3, language: "csharp"),
+                Block(BlockType.Diagram, "What Happens When new Dog('Rex', 3) Runs", BodyFormat.StructuredSteps, """
+                    [{"label":"new Dog('Rex', 3) is called","note":"C# looks for a constructor that takes a string and an int"},{"label":"The constructor Dog(string name, int age) runs","note":"name = 'Rex', age = 3 -- these are just inputs so far, not the object's fields yet"},{"label":"Name = name; runs","note":"copies the input name into the real field Name"},{"label":"Age = age; runs","note":"copies the input age into the real field Age"},{"label":"The object is fully built","note":"myDog now has Name = 'Rex' and Age = 3 -- guaranteed, because no step could be skipped"}]
+                    """, 4),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Prefer giving a class a constructor that requires the important values (like `name` and `age`) instead of leaving fields to be set line by line afterward -- it makes it impossible to end up with a half-built object.
+
+                    Use a lowercase parameter name (`name`) that matches the uppercase field it fills (`Name`) -- it makes the connection between the two obvious to anyone reading the code.
+                    """, 5),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    Junior interviews sometimes ask you to explain this concept out loud: "what is a constructor, and when does it run?" A clean answer is: "a constructor is a special method with the same name as the class and no return type. It runs automatically, exactly once, the moment `new` is used to build the object -- and it's the standard place to require the values that object needs from the start."
+
+                    Practice saying that out loud until it feels natural, not memorized.
+                    """, 6),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Giving the constructor a return type by accident, like writing `public void Dog(string name, int age)`. A real constructor has NO return type at all, not even `void`. Adding one turns it into a completely ordinary method that does NOT run automatically when `new Dog(...)` is called.
+
+                    Another common mix-up: mixing up `name` and `Name` and thinking they're the same variable. They are not. `name` is the temporary input; `Name` is the field that actually stays on the object. Forgetting to write `Name = name;` means the field never gets filled in, even though the constructor ran.
+                    """, 7),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    A constructor is like a form you must fill out at the front desk before you're allowed to check into a hotel room. You cannot get a room key (a real, usable object) without first handing over the required information (name, dates) at that front desk, right at check-in time. There's no way to "check in first, then maybe fill in your name later" -- the form is required at the exact moment the room is assigned to you.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "What makes a method in C# a constructor, rather than a normal method?",
+                    "A constructor has the exact same name as its class and no return type at all -- not even void. That combination is what tells C# to run it automatically, exactly once, whenever new ClassName(...) is called.",
+                    [
+                        new QuizOptionSeed("It has the same name as the class and no return type at all, not even void", true),
+                        new QuizOptionSeed("It must be marked static", false),
+                        new QuizOptionSeed("It must return a new object of the class's type", false),
+                        new QuizOptionSeed("It must be the first method written inside the class", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "In `public Dog(string name, int age) { Name = name; Age = age; }`, what is the difference between name and Name?",
+                    "name (lowercase) is the input parameter handed to the constructor when new Dog(...) is called. Name (uppercase) is the object's own field, which stores the value permanently. C# treats them as two separate things because it is case-sensitive -- the line Name = name; copies the temporary input into the permanent field.",
+                    [
+                        new QuizOptionSeed("name is the temporary input parameter; Name is the object's permanent field -- C# treats them as different because it is case-sensitive", true),
+                        new QuizOptionSeed("There is no difference -- C# ignores capitalization", false),
+                        new QuizOptionSeed("name is only used for debugging and has no effect on the program", false),
+                        new QuizOptionSeed("Name must always be declared before name, or the code fails to compile", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Constructors (C# Programming Guide)", "https://learn.microsoft.com/en-us/dotnet/csharp/programming-guide/classes-and-structs/constructors", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("Instance Constructors (C# Programming Guide)", "https://learn.microsoft.com/en-us/dotnet/csharp/programming-guide/classes-and-structs/instance-constructors", LinkType.FurtherReading),
+            ],
+            prerequisites: [lesson1]);
+
+        var lesson2Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson2.Slug,
+        [
+            "Type out the constructor-based Dog class exactly as shown, build two Dog objects using new Dog(\"name\", age), and run the program yourself",
+            "Try removing the constructor's parameters temporarily and see what error C# gives when you still call new Dog(\"Rex\", 3) -- then put the parameters back",
+            "In your own words, write one sentence explaining why a constructor prevents a Dog from ever being left without a Name or Age",
+        ]);
+
+        var module = BuildModule(topicId, "csharp-basics-oop-1", "Object-Oriented Basics",
+            "The first steps into object-oriented C#: what a class is, what an object is, and how a constructor guarantees every object starts out complete.",
+            40, [lesson1, lesson2], sortOrder: 5);
+
+        return (module, [lesson1Checklist, lesson2Checklist]);
+    }
+
+    private static (Module, List<ChecklistSeed>) BuildCSharpBasicsOop2Module(int topicId)
+    {
+        var lesson1 = BuildLesson(
+            slug: "csharp-basics-inheritance",
+            title: "Inheritance",
+            summary: "How one class can reuse another class's fields and methods automatically, using \"class Dog : Animal\" and base constructors.",
+            estimatedMinutes: 20,
+            objectives:
+            [
+                "Explain what `class Dog : Animal` means, using the words \"is a\"",
+                "Describe what a child class gets for free from its parent class, without rewriting any code",
+                "Explain what `: base(name, age)` does inside a child class's constructor",
+                "Identify which methods are shared between classes and which are unique to just one class",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    **Inheritance** lets one class reuse another class's code.
+
+                    `class Dog : Animal` means "a Dog IS AN Animal." The colon says: Dog gets everything Animal has, automatically.
+
+                    Look at `Animal`. It has two fields, `Name` and `Age`, and one method, `Describe()`. Now look at `Dog`. Dog does NOT write its own `Name`, `Age`, or `Describe()`. It gets all three for free, just by writing `: Animal` after its own name.
+
+                    Dog's constructor has `: base(name, age)`. This means: "before doing anything else, run Animal's OWN constructor with these same values." Animal is the class that actually knows how to set `Name` and `Age`. Dog just hands the values over.
+
+                    `Bark()` is written only inside `Dog`. Only a Dog can bark.
+                    `Meow()` is written only inside `Cat`. Only a Cat can meow.
+                    `Describe()` is written only ONCE, inside `Animal`. Both Dog and Cat can use it, without copying the code.
+
+                    This is the whole point of inheritance: write shared code once, in one place, and let every related class reuse it -- while still letting each class add its own special behavior on top.
+                    """, 1),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    - `class Dog : Animal` -> "Dog IS AN Animal"
+                    - Dog automatically gets everything Animal has: its fields AND its methods
+                    - `: base(name, age)` -> run Animal's constructor first, using these values
+                    - `Bark()` -> exists only on Dog
+                    - `Meow()` -> exists only on Cat
+                    - `Describe()` -> written once, in Animal, shared by both Dog and Cat
+                    - Rule of thumb: shared code goes in the parent class, special code goes in the child class
+                    """, 2),
+                Block(BlockType.CodeSnippet, "Dog, Cat, and Animal: Inheritance in Action", BodyFormat.PlainText, """
+                    Dog myDog = new Dog("Rex", 3);
+                    myDog.Bark();     // Dog's own, special method
+                    myDog.Describe(); // borrowed from Animal, without Dog rewriting it!
+
+                    Cat myCat = new Cat("Whiskers", 2);
+                    myCat.Meow();     // Cat's own, special method
+                    myCat.Describe(); // same borrowed method, still works here too
+
+                    class Animal
+                    {
+                        public string Name;
+                        public int Age;
+
+                        public Animal(string name, int age)
+                        {
+                            Name = name;
+                            Age = age;
+                        }
+
+                        public void Describe()
+                        {
+                            Console.WriteLine($"{Name} is {Age} years old.");
+                        }
+                    }
+
+                    class Dog : Animal
+                    {
+                        public Dog(string name, int age) : base(name, age)
+                        {
+                        }
+
+                        public void Bark()
+                        {
+                            Console.WriteLine($"{Name} says: Woof!");
+                        }
+                    }
+
+                    class Cat : Animal
+                    {
+                        public Cat(string name, int age) : base(name, age)
+                        {
+                        }
+
+                        public void Meow()
+                        {
+                            Console.WriteLine($"{Name} says: Meow!");
+                        }
+                    }
+
+                    // Output:
+                    // Rex says: Woof!
+                    // Rex is 3 years old.
+                    // Whiskers says: Meow!
+                    // Whiskers is 2 years old.
+                    """, 3, language: "csharp"),
+                Block(BlockType.Diagram, "Animal, Dog, and Cat: What Is Shared, What Is Not", BodyFormat.AsciiArt, """
+                                Animal
+                        (Name, Age, Describe())
+                              /        \\
+                            Dog          Cat
+                         (Bark())      (Meow())
+
+                    Dog "is a" Animal -> Dog gets Name, Age, and Describe() for free
+                    Cat "is a" Animal -> Cat gets Name, Age, and Describe() for free
+
+                    Bark() exists ONLY on Dog. Cat does not have it.
+                    Meow() exists ONLY on Cat. Dog does not have it.
+                    Describe() is written ONCE in Animal. Both Dog and Cat share it.
+                    """, 4),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Put shared fields and shared methods in the parent class (like `Animal`). Put only the special, unique behavior in each child class (like `Bark()` in `Dog`). This way you never write the same code twice.
+
+                    Always call the parent's constructor with `: base(...)` when the parent needs information (like `Name` and `Age`) to set itself up correctly. Don't try to set those fields yourself inside the child class -- let the parent do the job it already knows how to do.
+                    """, 5),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    Junior interviews sometimes ask you to explain inheritance out loud. A simple, correct answer is: "`class Dog : Animal` means Dog IS AN Animal. Dog automatically gets everything Animal has -- I don't have to rewrite it -- and Dog can still add its own extra methods on top."
+
+                    If asked what `: base(name, age)` does, say: "It calls the parent class's constructor first, so the parent can set up the fields it owns, before the child class does anything else."
+                    """, 6),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Thinking Dog needs to rewrite `Describe()` to use it. It does not. Once `class Dog : Animal` is written, `Describe()` already works on any Dog object, with zero extra code.
+
+                    Forgetting `: base(name, age)` in the child's constructor. Without it, `Animal`'s constructor never runs the way you expect, and `Name` and `Age` may not be set up correctly.
+
+                    Assuming a Cat can call `Bark()`, or a Dog can call `Meow()`. These methods belong ONLY to the class that defines them. Cat does not inherit Dog's methods, and Dog does not inherit Cat's methods -- they are both separate children of Animal, not related to each other.
+                    """, 7),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    Think of `Animal` as a family recipe book that every child in the family inherits. Every child (Dog, Cat) automatically knows how to make the family's shared recipe (`Describe()`) without being taught it again. But each child ALSO has their own personal specialty recipe that only they know: Dog knows how to `Bark()`, Cat knows how to `Meow()`. Sharing the family recipe book saves everyone from writing it out by hand, again and again.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "In `class Dog : Animal`, what does the colon mean?",
+                    "The colon in `class Dog : Animal` sets up inheritance: Dog IS AN Animal. This means Dog automatically gets Animal's fields (Name, Age) and methods (Describe()), without writing that code again.",
+                    [
+                        new QuizOptionSeed("Dog is a kind of Animal, and automatically gets Animal's fields and methods", true),
+                        new QuizOptionSeed("Dog and Animal are unrelated classes that just happen to be written near each other", false),
+                        new QuizOptionSeed("Animal is a kind of Dog", false),
+                        new QuizOptionSeed("Dog must rewrite every method that Animal has", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "What does `: base(name, age)` do inside Dog's constructor?",
+                    "`: base(name, age)` tells C# to run the parent class's (Animal's) constructor first, passing along these values, because Animal is the class that actually knows how to set up Name and Age.",
+                    [
+                        new QuizOptionSeed("It calls Animal's own constructor first, using these values, so Animal can set up Name and Age", true),
+                        new QuizOptionSeed("It creates a brand new, separate Animal object next to the Dog", false),
+                        new QuizOptionSeed("It deletes the values so Dog can set its own Name and Age instead", false),
+                        new QuizOptionSeed("It only runs after all of Dog's own constructor code has already finished", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Inheritance in C#", "https://learn.microsoft.com/en-us/dotnet/csharp/fundamentals/object-oriented/inheritance", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("Object-Oriented Programming (C#)", "https://learn.microsoft.com/en-us/dotnet/csharp/fundamentals/tutorials/oop", LinkType.OfficialDocs),
+            ]);
+
+        var lesson1Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson1.Slug,
+        [
+            "Type out the Dog/Cat/Animal code yourself and run it. Confirm you see all four lines of output in the exact order shown.",
+            "Add a `Sleep()` method to `Cat` only, then confirm a `Dog` object cannot call it.",
+            "In your own words, write one sentence explaining what `: base(name, age)` does and why Animal needs it.",
+        ]);
+
+        var lesson2 = BuildLesson(
+            slug: "csharp-basics-interfaces",
+            title: "Interfaces",
+            summary: "What an interface is -- a contract with no real code -- and how it lets one method work with many different, unrelated classes.",
+            estimatedMinutes: 20,
+            objectives:
+            [
+                "Explain what an interface is, using the word \"promise\" or \"contract\"",
+                "Explain the difference between an interface and a base class like Animal from the Inheritance lesson",
+                "Describe what happens if a class forgets to implement a method its interface requires",
+                "Explain why a method that accepts an interface type can work with many different classes",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    An **interface** is a contract. It is a promise, not real code.
+
+                    Look at `interface IMakesSound`. Inside it, there is only ONE line: `void MakeSound();`. There is no `{ }` body, no actual instructions. It is only saying: "whoever implements me MUST have a method called MakeSound()."
+
+                    Compare this to the Inheritance lesson. There, `Animal` gave `Dog` and `Cat` REAL, shared code -- `Describe()` already had working instructions inside it. An interface gives NO code at all. It only lists WHAT methods must exist.
+
+                    `class Dog : IMakesSound` means: "Dog PROMISES to provide everything IMakesSound requires." Because IMakesSound requires a `MakeSound()` method, Dog must write its own `MakeSound()` method with real instructions inside.
+
+                    If Dog forgot to write `MakeSound()`, the code would not compile at all. C# checks this promise for you, before your program can even run.
+
+                    Now look at `AnnounceSound(IMakesSound animal)`. This method does not ask for a Dog. It does not ask for a Cat. It asks for "anything that promises to have MakeSound()." That is why the SAME method works for both `new Dog()` and `new Cat()` -- it does not care what the object actually is, only that it kept its promise.
+                    """, 1),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    - An **interface** is a contract: only a list of method signatures, no bodies, no real code
+                    - `interface IMakesSound { void MakeSound(); }` -> a promise: "must have a MakeSound() method"
+                    - `class Dog : IMakesSound` -> "Dog promises to provide everything IMakesSound requires"
+                    - Forgetting to implement a promised method -> the code will not compile
+                    - A method that takes an interface type (like `IMakesSound animal`) works with ANY class that keeps that promise
+                    - Interface = promise only. Base class (like Animal) = promise PLUS real, shared code
+                    """, 2),
+                Block(BlockType.CodeSnippet, "IMakesSound: Interfaces in Action", BodyFormat.PlainText, """
+                    static void AnnounceSound(IMakesSound animal)
+                    {
+                        animal.MakeSound();
+                    }
+
+                    AnnounceSound(new Dog());
+                    AnnounceSound(new Cat());
+
+                    interface IMakesSound
+                    {
+                        void MakeSound(); // just a promise: "whoever implements me must have this method"
+                    }
+
+                    class Dog : IMakesSound
+                    {
+                        public void MakeSound()
+                        {
+                            Console.WriteLine("Woof!");
+                        }
+                    }
+
+                    class Cat : IMakesSound
+                    {
+                        public void MakeSound()
+                        {
+                            Console.WriteLine("Meow!");
+                        }
+                    }
+
+                    // Output:
+                    // Woof!
+                    // Meow!
+                    """, 3, language: "csharp"),
+                Block(BlockType.Diagram, "AnnounceSound: One Method, Two Different Classes", BodyFormat.StructuredSteps, """
+                    [{"label":"AnnounceSound(new Dog())","note":"Dog satisfies the IMakesSound promise, so it is accepted. animal.MakeSound() runs Dog's own MakeSound(), printing 'Woof!'"},{"label":"AnnounceSound(new Cat())","note":"Cat also satisfies the IMakesSound promise. The SAME AnnounceSound method now runs Cat's own MakeSound(), printing 'Meow!'"},{"label":"Why one method works for both","note":"AnnounceSound only asked for 'something that promises to have MakeSound()' -- it never asked for a specific class, so any class keeping that promise is accepted"}]
+                    """, 4),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Use an interface when you want different, unrelated classes to be usable in the same way, without forcing them to share a common base class. Dog and Cat do not need to be related by inheritance to both promise `MakeSound()`.
+
+                    Name interfaces starting with a capital `I`, like `IMakesSound`. This is a strong C# convention, and it helps you instantly recognize "this is a promise, not a real class" when reading code.
+                    """, 5),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    Junior interviews sometimes ask you to explain interfaces out loud. A simple, correct answer is: "An interface is a contract. It only lists method signatures, with no real code inside. Any class that implements the interface promises to provide real code for every one of those methods -- and the compiler enforces that promise."
+
+                    If asked how an interface differs from a base class, say: "A base class like Animal gives you real, shared code you can reuse. An interface gives you no code at all -- only a required list of methods that must exist."
+                    """, 6),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Thinking an interface can contain real, working code, the way `Describe()` did in the Inheritance lesson's `Animal` class. It cannot -- `interface IMakesSound { void MakeSound(); }` has no body, just a signature.
+
+                    Forgetting to implement a method the interface requires. If `Dog` says `: IMakesSound` but never writes `MakeSound()`, the code will not compile. This is not a runtime surprise -- C# catches it immediately.
+
+                    Assuming `AnnounceSound` needs to know whether it received a Dog or a Cat. It does not, and should not. It only needs to know that whatever it received keeps the `IMakesSound` promise.
+                    """, 7),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    Think of an interface like a job posting that says "must be able to drive." It doesn't teach anyone how to drive -- it's just a requirement. A truck driver and a taxi driver are very different jobs, with different training, but both can be hired for this posting, because both satisfy the one requirement: "must be able to drive." `AnnounceSound` is like the hiring manager -- it doesn't care if you are a Dog or a Cat, only that you kept the one promise it asked for: `MakeSound()`.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "What is an interface like `IMakesSound` actually made of?",
+                    "An interface only lists WHAT methods must exist -- like `void MakeSound();` -- with no body and no real instructions. It is a contract, not working code.",
+                    [
+                        new QuizOptionSeed("Only method signatures -- a list of promises, with no real code inside", true),
+                        new QuizOptionSeed("Real, working code that every implementing class automatically reuses", false),
+                        new QuizOptionSeed("A list of fields, but no methods", false),
+                        new QuizOptionSeed("A special kind of class that only one class is ever allowed to implement", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "Dog writes `class Dog : IMakesSound` but forgets to write a `MakeSound()` method. What happens?",
+                    "An interface is a promise enforced by the compiler. If a class implements an interface but does not provide every required method, the code will not compile at all -- this is caught immediately, not at runtime.",
+                    [
+                        new QuizOptionSeed("The code does not compile -- C# enforces the promise before the program can even run", true),
+                        new QuizOptionSeed("The code compiles, but crashes only when MakeSound() is actually called", false),
+                        new QuizOptionSeed("The code compiles and quietly does nothing when MakeSound() is called", false),
+                        new QuizOptionSeed("Dog automatically borrows Cat's MakeSound() method instead", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Interfaces (C# Programming Guide)", "https://learn.microsoft.com/en-us/dotnet/csharp/fundamentals/types/interfaces", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("Polymorphism in C#", "https://learn.microsoft.com/en-us/dotnet/csharp/fundamentals/object-oriented/polymorphism", LinkType.OfficialDocs),
+            ]);
+
+        var lesson2Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson2.Slug,
+        [
+            "Type out the IMakesSound/Dog/Cat/AnnounceSound code yourself and run it. Confirm you see 'Woof!' then 'Meow!'.",
+            "Delete the `MakeSound()` method from `Cat` and try to build. Confirm you get a compiler error, then put it back.",
+            "In your own words, write one sentence explaining the difference between what Animal (a base class) gives you and what IMakesSound (an interface) gives you.",
+        ]);
+
+        var module = BuildModule(topicId, "csharp-basics-oop-2", "Object-Oriented Basics II",
+            "Inheritance and interfaces for absolute beginners: how one class can reuse another class's code with `: Animal` and `base(...)`, and how an interface like `IMakesSound` acts as a promise that lets one method work with many different classes.",
+            40, [lesson1, lesson2], sortOrder: 6);
+        return (module, [lesson1Checklist, lesson2Checklist]);
+    }
+
+    private static (Module, List<ChecklistSeed>) BuildCSharpBasicsRealProgramsModule(int topicId)
+    {
+        var lesson1 = BuildLesson(
+            slug: "csharp-basics-reading-input",
+            title: "Reading Input from the User",
+            summary: "How to ask the user a question in the console, wait for their answer, and turn what they typed into a real number you can do math with.",
+            estimatedMinutes: 20,
+            objectives:
+            [
+                "Explain the difference between Console.Write and Console.WriteLine",
+                "Use Console.ReadLine() to get text typed by the user",
+                "Explain why `?? \"\"` after Console.ReadLine() is a safety net",
+                "Convert text typed by the user into a number using int.Parse, so it can be used in math",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    `Console.Write` prints text but does NOT move to a new line afterward. Whatever gets printed next stays on the same line.
+
+                    `Console.WriteLine` always jumps to a new line after printing. You've probably used this one already.
+
+                    Because our prompts below use `Console.Write`, whatever the user types appears right after the prompt, on the same line. In a real terminal window, the prompt appears first, then you type your answer right after it, then you press Enter to continue.
+
+                    `Console.ReadLine()` pauses the program completely. It waits for the user to type something and press Enter. Whatever they typed comes back as text (a string) -- always as text, even if they type digits like "28".
+
+                    Sometimes `ReadLine()` can hand back nothing at all. The `?? ""` part is a safety net: it means "if ReadLine gives back nothing, use an empty piece of text instead." This keeps the program from crashing.
+
+                    Since `age` needs to be a real number so we can add 10 to it, we use `int.Parse` to convert the text `ageText` into an actual whole number. You'll see `int.Parse` again in the next lesson, where we also learn what to do when the text it's given is NOT a real number.
+                    """, 1),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    - `Console.Write("text")` -- prints text, stays on the same line
+                    - `Console.WriteLine("text")` -- prints text, then moves to a new line
+                    - `Console.ReadLine()` -- pauses the program, waits for the user to type + press Enter, always returns a string
+                    - `?? ""` -- safety net: use empty text if ReadLine somehow returns nothing
+                    - `int.Parse(text)` -- converts text into a whole number so you can do math with it
+                    - `$"...{variable}..."` -- string interpolation: drops a variable's value directly into printed text
+                    """, 2),
+                Block(BlockType.CodeSnippet, "Ask for a Name and Age, Then Do Math With the Answer", BodyFormat.PlainText, """
+                    Console.Write("What is your name? ");
+                    string name = Console.ReadLine() ?? "";
+
+                    Console.Write("How old are you? ");
+                    string ageText = Console.ReadLine() ?? "";
+
+                    int age = int.Parse(ageText);
+
+                    Console.WriteLine($"Hello, {name}! In 10 years you will be {age + 10}.");
+                    """, 3, language: "csharp"),
+                Block(BlockType.Diagram, "How the Program Runs, Step by Step", BodyFormat.StructuredSteps, """
+                    [{"label":"Console.Write('What is your name? ') runs","note":"Prints the prompt. The cursor stays on the same line -- no new line yet."},{"label":"Console.ReadLine() runs and waits","note":"The program pauses here. User types 'Surya' and presses Enter. name becomes 'Surya'."},{"label":"Console.Write('How old are you? ') runs","note":"Prints the next prompt, again on the same line as whatever comes next."},{"label":"Console.ReadLine() runs and waits again","note":"User types '28' and presses Enter. ageText becomes the text '28' -- not a number yet."},{"label":"int.Parse(ageText) runs","note":"Converts the text '28' into the real number 28, stored in age."},{"label":"Console.WriteLine runs with the final message","note":"Prints: Hello, Surya! In 10 years you will be 38. -- then moves to a new line."}]
+                    """, 4),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Always add `?? ""` (or a similar check) right after `Console.ReadLine()` in real programs. It's a small habit that prevents rare crashes.
+
+                    Use `Console.Write` (not `Console.WriteLine`) for a prompt when you want the user's typed answer to appear right after it, on the same line. Save `Console.WriteLine` for messages where you want a clean new line afterward.
+                    """, 5),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    Junior interviews sometimes ask you to explain this concept out loud. Be ready to say, in plain words: "Console.ReadLine() always returns a string, even if the user types numbers -- so if you need a real number, you must convert it yourself, usually with int.Parse."
+
+                    Also be ready to explain the difference between Console.Write and Console.WriteLine in one sentence: Write does not add a new line afterward, WriteLine always does.
+                    """, 6),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Forgetting that `Console.ReadLine()` always gives back text (a string), not a number -- trying to use it directly in math, like `ageText + 10`, does not work the way you'd expect. You must convert it first with `int.Parse`.
+
+                    Mixing up `Console.Write` and `Console.WriteLine` -- using `WriteLine` for a prompt pushes the cursor to a new line, so the user's answer ends up on its own line below the question instead of right after it.
+                    """, 7),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    `Console.Write` is like a cashier asking "Paper or plastic?" and then standing right there, quietly waiting for your answer -- not walking away first. `Console.WriteLine` is like the cashier asking, then immediately stepping off to a new spot to wait.
+
+                    `Console.ReadLine()` is like the cashier's ears: they always hear words, never numbers directly. If you say "28 items," they hear the word "28," not the number 28 -- someone still has to translate that word into an actual number before doing any math with it. That translation step is exactly what `int.Parse` does.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "What is the difference between Console.Write and Console.WriteLine?",
+                    "Console.Write does not add a new line after printing, so the next thing printed appears right after it on the same line. Console.WriteLine always moves to a new line after printing.",
+                    [
+                        new QuizOptionSeed("Console.Write prints text and stays on the same line; Console.WriteLine prints text and moves to a new line", true),
+                        new QuizOptionSeed("They do the exact same thing", false),
+                        new QuizOptionSeed("Console.Write can only print numbers", false),
+                        new QuizOptionSeed("Console.WriteLine pauses the program to wait for user input", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "In the code above, why do we need int.Parse(ageText) instead of just using ageText directly in the math?",
+                    "Console.ReadLine() always gives back a string, never a real number, even if the user typed only digits. int.Parse converts that text into an actual whole number, which is required before you can do math like age + 10.",
+                    [
+                        new QuizOptionSeed("Because Console.ReadLine() always returns text (a string), even when the user types digits -- so it must be converted into a number before you can do math with it", true),
+                        new QuizOptionSeed("Because int.Parse makes the program run faster", false),
+                        new QuizOptionSeed("Because Console.ReadLine() returns a number already, and int.Parse just double-checks it", false),
+                        new QuizOptionSeed("Because ageText might be misspelled", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Console.ReadLine Method", "https://learn.microsoft.com/en-us/dotnet/api/system.console.readline", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("Int32.Parse Method", "https://learn.microsoft.com/en-us/dotnet/api/system.int32.parse", LinkType.OfficialDocs),
+            ]);
+
+        var lesson1Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson1.Slug,
+        [
+            "Run the program yourself in a real terminal, typing your own name and age, and confirm each prompt appears before you type your answer",
+            "Change Console.Write to Console.WriteLine for one of the two prompts, run it again, and notice how the user's answer now appears on its own line",
+            "Try removing `?? \"\"` from one of the ReadLine() calls and think about (or test) what could happen if ReadLine ever returned nothing",
+        ]);
+
+        var lesson2 = BuildLesson(
+            slug: "csharp-basics-error-handling",
+            title: "Handling Errors (try/catch)",
+            summary: "Using try/catch so a program can recover from bad input, like text that isn't a real number, instead of crashing.",
+            estimatedMinutes: 20,
+            objectives:
+            [
+                "Explain what happens when int.Parse is given text that is not a real number",
+                "Use try/catch to catch a FormatException instead of letting the program crash",
+                "Explain why code after a failing line inside a try block does not run",
+                "Trace through a try/catch block and predict exactly which lines will run and which will be skipped",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    `int.Parse` tries to turn text into a whole number. If the text is NOT a real number -- like "abc" -- the program would normally CRASH right there.
+
+                    `try` and `catch` let us catch that crash and handle it gracefully instead of crashing.
+
+                    Everything risky goes inside the `try` block. If something inside `try` fails (throws an error), the program immediately jumps to the matching `catch` block -- it skips every remaining line inside `try`.
+
+                    If nothing inside `try` fails, the `catch` block is skipped entirely. It only runs when something actually goes wrong.
+
+                    In the code below there are two attempts. Attempt #1 uses `badInput = "abc"`. `int.Parse(badInput)` fails, because "abc" isn't a real number. The line right after it never runs, because the line above it failed. The program jumps straight into `catch`, which prints "That wasn't a valid number!".
+
+                    Attempt #2 uses `goodInput = "42"`. `int.Parse(goodInput)` succeeds, because "42" IS a real number. So the line after it DOES run, printing "You entered: 42". The `catch` block is skipped entirely here, because nothing failed.
+
+                    The final line, `Console.WriteLine("Program continues normally after this.")`, proves the program didn't crash -- it kept going normally after both attempts, even after the first one failed.
+                    """, 1),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    - `try { ... }` -- put risky code here (code that might fail)
+                    - `catch (FormatException) { ... }` -- runs ONLY if something inside `try` fails with that specific kind of error
+                    - The moment something inside `try` fails, every remaining line in that `try` block is skipped -- the program jumps straight to `catch`
+                    - If nothing in `try` fails, `catch` is skipped entirely
+                    - `int.Parse("abc")` -- fails (throws a FormatException), because "abc" is not a real number
+                    - `int.Parse("42")` -- succeeds, because "42" is a real number
+                    - Code after the whole try/catch block always keeps running, whether or not something failed inside it
+                    """, 2),
+                Block(BlockType.CodeSnippet, "Two Attempts: One Bad Input, One Good Input", BodyFormat.PlainText, """
+                    string badInput = "abc";
+                    string goodInput = "42";
+
+                    try
+                    {
+                        int number = int.Parse(badInput); // this line will fail (throw an error)
+                        Console.WriteLine("You entered: " + number); // this line never runs, because the line above failed
+                    }
+                    catch (FormatException)
+                    {
+                        Console.WriteLine("That wasn't a valid number!");
+                    }
+
+                    try
+                    {
+                        int number = int.Parse(goodInput); // this line succeeds
+                        Console.WriteLine("You entered: " + number); // so this line DOES run
+                    }
+                    catch (FormatException)
+                    {
+                        Console.WriteLine("That wasn't a valid number!"); // skipped entirely -- nothing failed
+                    }
+
+                    Console.WriteLine("Program continues normally after this.");
+                    """, 3, language: "csharp"),
+                Block(BlockType.Diagram, "Two Attempts: One Fails, One Succeeds", BodyFormat.StructuredSteps, """
+                    [{"label":"Attempt #1: int.Parse('abc') runs inside try","note":"'abc' is not a real number -- this line fails immediately."},{"label":"The next line inside try is skipped","note":"The Console.WriteLine that prints 'You entered' never runs, because the line above it failed."},{"label":"The program jumps straight to catch","note":"Prints 'That wasn't a valid number!' -- this is the ONLY reason catch ever runs."},{"label":"Attempt #2: int.Parse('42') runs inside a new try","note":"'42' is a real number -- this line succeeds."},{"label":"The next line inside try DOES run","note":"Prints 'You entered: 42', because nothing above it failed."},{"label":"catch is skipped entirely this time","note":"Nothing failed inside try, so catch never runs for this attempt."},{"label":"Program continues normally after this","note":"Proves the program didn't crash, even though Attempt #1 failed."}]
+                    """, 4),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Only wrap the specific risky lines in `try` -- not your entire program. That makes it clear exactly which lines might fail, and keeps unrelated code running normally even when something inside `try` fails.
+
+                    Catch a specific error type, like `FormatException`, instead of catching everything blindly. This way you only handle the exact problem you expect (bad text that isn't a number), and don't accidentally hide other, unrelated bugs.
+                    """, 5),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    Junior interviews sometimes ask you to explain this concept out loud. Be ready to say, in plain words: "try/catch lets a program recover from an error instead of crashing. Code inside try runs normally until something fails -- then it jumps straight to catch, skipping any remaining lines in try. If nothing fails, catch never runs at all."
+
+                    Also be ready to explain why int.Parse("abc") fails specifically: "abc" cannot be turned into a whole number, so C# throws a FormatException.
+                    """, 6),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Thinking that code right after the line that failed will still run inside `try` -- it will NOT. The instant something fails, every remaining line in that `try` block is skipped, and the program jumps straight to `catch`.
+
+                    Forgetting that `catch` only runs when something actually fails. If nothing fails, `catch` is skipped completely -- it does not run "just in case."
+
+                    Catching the wrong error type -- writing `catch (SomeOtherException)` instead of `catch (FormatException)` means the program still crashes, because catch only handles the specific error type it's watching for.
+                    """, 7),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    `try` is like attempting to unlock a door with a key you're not sure fits. `catch` is like having a backup plan ready in case the key doesn't work -- you only use the backup plan if the key actually fails. If the key works fine, you never even think about the backup plan; you just walk through the door and keep going.
+
+                    Attempt #1 in the code is like a key that doesn't fit at all -- you immediately give up on that key and go straight to your backup plan. Attempt #2 is like a key that fits perfectly -- you never need the backup plan, and you walk straight through.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "In the code, why does the line that prints \"You entered: \" + number never run during Attempt #1?",
+                    "The moment int.Parse(badInput) fails (because \"abc\" is not a real number), the program immediately jumps to the matching catch block -- it never returns to run the rest of the try block.",
+                    [
+                        new QuizOptionSeed("Because the line above it, int.Parse(badInput), fails first, so the program skips the rest of the try block and jumps to catch", true),
+                        new QuizOptionSeed("Because Console.WriteLine only works with numbers, not text", false),
+                        new QuizOptionSeed("Because catch runs before try", false),
+                        new QuizOptionSeed("Because badInput was never declared", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "What happens to the catch block during Attempt #2, where goodInput = \"42\"?",
+                    "catch only runs when something inside try actually fails. Since int.Parse(\"42\") succeeds (\"42\" is a real number), nothing fails, so catch is skipped completely for that attempt.",
+                    [
+                        new QuizOptionSeed("It is skipped entirely, because nothing inside the try block failed", true),
+                        new QuizOptionSeed("It runs anyway, just to double-check the number", false),
+                        new QuizOptionSeed("It runs before the try block", false),
+                        new QuizOptionSeed("It causes the program to crash", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("try-catch (C# Reference)", "https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/statements/exception-handling-statements", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("FormatException Class", "https://learn.microsoft.com/en-us/dotnet/api/system.formatexception", LinkType.OfficialDocs),
+            ],
+            prerequisites: [lesson1]);
+
+        var lesson2Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson2.Slug,
+        [
+            "Run the code yourself and confirm the exact three messages print in order",
+            "Change badInput from \"abc\" to another non-number word (like \"hello\") and confirm catch still runs the same way",
+            "Remove the try/catch around the first int.Parse(badInput) call and run it, to see the program crash instead of handling the error gracefully",
+        ]);
+
+        var module = BuildModule(topicId, "csharp-basics-real-programs", "Real Programs",
+            "Two short, hands-on lessons for absolute beginners: reading input typed by the user, and handling errors so bad input doesn't crash your program.",
+            40, [lesson1, lesson2], sortOrder: 7);
+
+        return (module, [lesson1Checklist, lesson2Checklist]);
+    }
+
+    private static (Module, List<ChecklistSeed>) BuildCSharpBasicsCollections2Module(int topicId)
+    {
+        var lesson1 = BuildLesson(
+            slug: "csharp-basics-dictionaries",
+            title: "Dictionaries",
+            summary: "A Dictionary looks things up by a KEY you choose -- like a name -- instead of by position like a List does.",
+            estimatedMinutes: 20,
+            objectives:
+            [
+                "Explain the difference between looking something up by POSITION (a List) and looking something up by KEY (a Dictionary)",
+                "Create a Dictionary<string, string>, read a value by its key, and add a brand-new key with square brackets",
+                "Use ContainsKey(...) to check whether a key exists before assuming it does",
+                "Use a foreach loop with KeyValuePair<string, string> to walk through every key and value in a Dictionary",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    A **List** (from an earlier lesson) looks things up by **position** -- index 0, index 1, index 2, and so on. That works well when order matters, but not so well when you want to look something up by a name instead of a number.
+
+                    A **Dictionary** looks things up by a **key** you choose. Think of `Dictionary<string, string>` as a phone book: instead of "give me item number 2," you say "give me the phone number that belongs to `Surya`." The first type in the angle brackets (`string`) is the type of the key. The second type (`string`) is the type of the value stored with that key.
+
+                    ```csharp
+                    Dictionary<string, string> phoneBook = new Dictionary<string, string>
+                    {
+                        { "Surya", "555-1234" },
+                        { "Ann", "555-5678" }
+                    };
+                    ```
+
+                    Each `{ "Surya", "555-1234" }` pair means: the key `"Surya"` maps to the value `"555-1234"`.
+
+                    To look up a value, put the key in square brackets: `phoneBook["Surya"]` gives back `"555-1234"`. You can use that same square-bracket syntax to **add** a brand-new entry too. `phoneBook["Raj"] = "555-9999";` adds a new key `"Raj"` with the value `"555-9999"`, because `"Raj"` did not exist in the dictionary yet.
+
+                    Before you look something up, it is often smart to check whether the key even exists. `ContainsKey(...)` answers exactly that question, returning `true` or `false`. `phoneBook.ContainsKey("Ann")` is `true` because `"Ann"` is a key in this dictionary. `phoneBook.ContainsKey("Bob")` is `false` because `"Bob"` was never added.
+
+                    To go through every entry in a dictionary, use `foreach` with a `KeyValuePair<string, string>`. Each pair gives you `entry.Key` (the key) and `entry.Value` (the matching value), one entry at a time.
+                    """, 1),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    - `Dictionary<string, string>` -- first type is the key, second type is the value
+                    - `new Dictionary<string, string> { { "Surya", "555-1234" } }` -- creates a dictionary with one entry
+                    - `phoneBook["Surya"]` -- look up the value stored under the key `"Surya"`
+                    - `phoneBook["Raj"] = "555-9999";` -- adds a new key if it doesn't exist yet (or updates it if it does)
+                    - `phoneBook.ContainsKey("Ann")` -- returns `true`/`false`, checking if a key exists
+                    - `foreach (KeyValuePair<string, string> entry in phoneBook)` -- walks through every key-value pair
+                    - `entry.Key` / `entry.Value` -- the key and value of the current pair inside the loop
+                    - List looks things up by **position** (index); Dictionary looks things up by **key** (something you choose)
+                    """, 2),
+                Block(BlockType.CodeSnippet, "Dictionaries: Add, Look Up, and Loop", BodyFormat.PlainText, """
+                    Dictionary<string, string> phoneBook = new Dictionary<string, string>
+                    {
+                        { "Surya", "555-1234" },
+                        { "Ann", "555-5678" }
+                    };
+
+                    Console.WriteLine(phoneBook["Surya"]); // look up the value that belongs to the key "Surya"
+
+                    phoneBook["Raj"] = "555-9999"; // this both ADDS a new entry (since "Raj" doesn't exist yet)
+
+                    Console.WriteLine(phoneBook.ContainsKey("Ann")); // True  -- "Ann" IS a key in this dictionary
+                    Console.WriteLine(phoneBook.ContainsKey("Bob")); // False -- "Bob" is NOT a key in this dictionary
+
+                    Console.WriteLine("---");
+
+                    foreach (KeyValuePair<string, string> entry in phoneBook)
+                    {
+                        Console.WriteLine($"{entry.Key}: {entry.Value}");
+                    }
+                    """, 3, language: "csharp"),
+                Block(BlockType.Diagram, "List vs. Dictionary Lookups", BodyFormat.AsciiArt, """
+                    List<string> names          Dictionary<string, string> phoneBook
+                    (looked up by POSITION)      (looked up by KEY)
+
+                    index 0 -> "Surya"           "Surya" -> "555-1234"
+                    index 1 -> "Ann"             "Ann"   -> "555-5678"
+                    index 2 -> "Raj"             "Raj"   -> "555-9999"
+
+                    names[0]              gives  "Surya"   (you must know the POSITION)
+                    phoneBook["Surya"]     gives  "555-1234" (you only need to know the KEY)
+                    """, 4),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Before looking up a key that might not exist, check `ContainsKey(...)` first. Looking up a missing key directly with square brackets (like `phoneBook["Bob"]` when `"Bob"` was never added) crashes your program with an error.
+
+                    Choose a Dictionary when you need to look something up by a name, an ID, or any kind of label. Choose a List when order matters and you're fine looking things up by position.
+                    """, 5),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    Junior interviews sometimes ask you to explain this concept out loud: be ready to say, in plain words, "a List looks things up by position, a Dictionary looks things up by a key I choose, like a name." That one sentence shows you understand why the two collections exist side by side.
+
+                    Also be ready to explain what `ContainsKey` is for -- checking a key exists before you trust a lookup to succeed.
+                    """, 6),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Looking up a key that was never added, like `phoneBook["Bob"]`, without checking `ContainsKey` first. This crashes the program, because the dictionary has no value stored for a key it doesn't know about.
+
+                    Mixing up `Key` and `Value` inside a `foreach` loop -- remember, `entry.Key` is the label you look things up by, and `entry.Value` is what's stored under that label.
+                    """, 7),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    A Dictionary is like a real phone book or a school locker with a nameplate: you don't find someone's number by counting "first person, second person, third person" -- you look them up by their name. The name is the key, and the phone number is the value stored behind it.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "What is the main difference between how a List and a Dictionary look up values?",
+                    "A List looks up values by position (an index number like 0, 1, 2). A Dictionary looks up values by a key you choose yourself, such as a name.",
+                    [
+                        new QuizOptionSeed("A List looks up by position (index); a Dictionary looks up by a key you choose", true),
+                        new QuizOptionSeed("A List and a Dictionary both look up values only by position", false),
+                        new QuizOptionSeed("A Dictionary can only store numbers, while a List can store any type", false),
+                        new QuizOptionSeed("A List looks up by key; a Dictionary looks up by position", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "Given phoneBook[\"Raj\"] = \"555-9999\"; where \"Raj\" was never in the dictionary before, what happens?",
+                    "Using square brackets with a key that doesn't exist yet adds a brand-new entry to the dictionary. If the key already existed, the same syntax would instead update its value.",
+                    [
+                        new QuizOptionSeed("A new entry is added with the key \"Raj\" and the value \"555-9999\"", true),
+                        new QuizOptionSeed("The program crashes because \"Raj\" doesn't exist yet", false),
+                        new QuizOptionSeed("Nothing happens, since you can only read values, not add them, with square brackets", false),
+                        new QuizOptionSeed("It adds \"Raj\" as a value with \"555-9999\" as the key", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Dictionary<TKey,TValue> Class", "https://learn.microsoft.com/en-us/dotnet/api/system.collections.generic.dictionary-2", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("Common collections in .NET", "https://learn.microsoft.com/en-us/dotnet/standard/collections/", LinkType.OfficialDocs),
+            ]);
+
+        var lesson1Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson1.Slug,
+        [
+            "Create a Dictionary<string, string> with your own name and phone number as one entry, then add two more entries using square-bracket syntax",
+            "Use ContainsKey to check for a key you know exists and a key you know doesn't exist, and print both results",
+            "Write a foreach loop over your dictionary using KeyValuePair<string, string> and print every entry.Key and entry.Value",
+        ]);
+
+        var lesson2 = BuildLesson(
+            slug: "csharp-basics-string-manipulation",
+            title: "String Manipulation",
+            summary: "Handy built-in methods for cleaning up, changing the case of, checking inside, splitting, and slicing pieces out of a string.",
+            estimatedMinutes: 20,
+            objectives:
+            [
+                "Use Trim() to remove extra spaces from the start and end of a string",
+                "Use ToUpper() and ToLower() to change every letter's case",
+                "Use Contains() to check if a piece of text appears inside a string, and Split() to break a string into pieces",
+                "Use Substring() to grab a specific piece out of a string by position",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    Strings come with a lot of built-in methods (mini "tools") that help clean up and inspect text. Here are five of the most useful ones.
+
+                    `Trim()` removes spaces (or other blank characters) from the **start and end** of a string only -- not the middle. `"  Hello, World!  ".Trim()` becomes `"Hello, World!"`, with the outer spaces gone but the space between the words untouched.
+
+                    `ToUpper()` and `ToLower()` change every letter's case. `"Hello, World!".ToUpper()` becomes `"HELLO, WORLD!"`. `"Hello, World!".ToLower()` becomes `"hello, world!"`.
+
+                    `Contains(...)` checks if a piece of text appears **anywhere inside** a string, giving back `true` or `false`. `"Hello, World!".Contains("World")` is `true`, because `"World"` really is inside that string. `"Hello, World!".Contains("Bananas")` is `false`, because it isn't.
+
+                    `Split(...)` breaks **one** string into **many** pieces, wherever a chosen character shows up. `"one,two,three".Split(',')` breaks the string apart every time it sees a comma, giving back an array of strings: `"one"`, `"two"`, `"three"`.
+
+                    `Substring(...)` grabs a piece of a string using position numbers. `Substring(7)` means "starting at position 7, take the **rest** of the string." On `"Hello, World!"`, position 7 is where `"World!"` begins, so `text.Substring(7)` gives `"World!"`. `Substring(0, 5)` means "starting at position 0, take exactly **5 characters**," which gives `"Hello"`.
+                    """, 1),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    - `Trim()` -- removes spaces from the start and end only, not the middle
+                    - `ToUpper()` -- makes every letter CAPITAL
+                    - `ToLower()` -- makes every letter lowercase
+                    - `Contains("text")` -- returns `true`/`false`, checking if "text" appears anywhere inside the string
+                    - `Split(',')` -- breaks one string into an array of strings, wherever the comma appears
+                    - `Substring(7)` -- starting at position 7, takes the rest of the string
+                    - `Substring(0, 5)` -- starting at position 0, takes exactly 5 characters
+                    - String positions start counting at 0, just like List and array indexes
+                    """, 2),
+                Block(BlockType.CodeSnippet, "String Manipulation: Trim, Case, Contains, Split, Substring", BodyFormat.PlainText, """
+                    string messy = "  Hello, World!  ";
+                    Console.WriteLine($"[{messy.Trim()}]"); // Trim() removes spaces from the START and END only
+
+                    string text = "Hello, World!";
+                    Console.WriteLine(text.ToUpper()); // every letter becomes CAPITAL
+                    Console.WriteLine(text.ToLower()); // every letter becomes lowercase
+
+                    Console.WriteLine(text.Contains("World")); // True -- "World" DOES appear somewhere inside text
+                    Console.WriteLine(text.Contains("Bananas")); // False -- it does not appear
+
+                    string sentence = "one,two,three";
+                    string[] parts = sentence.Split(',');
+                    foreach (string part in parts)
+                    {
+                        Console.WriteLine(part);
+                    }
+
+                    Console.WriteLine(text.Substring(7));    // starting at position 7, take the REST of the string -> "World!"
+                    Console.WriteLine(text.Substring(0, 5)); // starting at position 0, take exactly 5 characters -> "Hello"
+                    """, 3, language: "csharp"),
+                Block(BlockType.Diagram, "Substring Positions on \"Hello, World!\"", BodyFormat.AsciiArt, """
+                    Position:  0  1  2  3  4  5  6  7  8  9  10 11 12
+                    Character: H  e  l  l  o  ,     W  o  r  l  d  !
+
+                    text.Substring(0, 5)  -> takes 5 characters starting at position 0 -> "Hello"
+                    text.Substring(7)     -> takes everything starting at position 7   -> "World!"
+                    """, 4),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Reach for `Trim()` whenever text might come from user typing (like a text box), since people often add extra spaces by accident.
+
+                    Use `Contains()` before `Substring()` when you're not sure a piece of text is even there -- pulling out a `Substring` at a position that doesn't exist crashes your program.
+                    """, 5),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    Junior interviews sometimes ask you to explain this concept out loud: practice saying "Trim removes outer spaces, Split breaks one string into many pieces, and Substring grabs a piece by position" in one breath -- it shows you know which tool does which job.
+
+                    Also be ready to explain that string positions, just like List indexes, start counting at 0, not 1.
+                    """, 6),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Expecting `Trim()` to remove spaces from the **middle** of a string -- it only removes them from the start and end.
+
+                    Forgetting that positions start at 0, so `Substring(7)` on `"Hello, World!"` starts at the 8th character, not the 7th.
+                    """, 7),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    Think of a string like a strip of paper with letters written on it. `Trim()` is like cutting off the blank edges of the paper. `Split(',')` is like cutting the strip into separate pieces every time you see a comma. `Substring(7)` is like measuring 7 letters in from the start and cutting the paper there, keeping everything after the cut.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "What does \"  Hello  \".Trim() return?",
+                    "Trim() only removes spaces from the very start and very end of a string. Since there are no other spaces inside \"Hello\" itself, the result is just \"Hello\" with the outer spaces gone.",
+                    [
+                        new QuizOptionSeed("\"Hello\"", true),
+                        new QuizOptionSeed("\"  Hello  \" (unchanged)", false),
+                        new QuizOptionSeed("\"H e l l o\"", false),
+                        new QuizOptionSeed("\"\" (an empty string)", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "For the string \"Hello, World!\", what does Substring(7) return?",
+                    "Substring(7) means \"starting at position 7, take the rest of the string.\" Counting from 0, position 7 lands right at the start of \"World!\", so that's what gets returned.",
+                    [
+                        new QuizOptionSeed("\"World!\"", true),
+                        new QuizOptionSeed("\"Hello,\"", false),
+                        new QuizOptionSeed("\"Hello, World!\" (the whole string)", false),
+                        new QuizOptionSeed("\"!\"", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("String.Trim Method", "https://learn.microsoft.com/en-us/dotnet/api/system.string.trim", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("String.Substring Method", "https://learn.microsoft.com/en-us/dotnet/api/system.string.substring", LinkType.OfficialDocs),
+            ]);
+
+        var lesson2Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson2.Slug,
+        [
+            "Take a string with extra spaces around it, print it before and after calling Trim(), wrapped in square brackets so you can see the difference",
+            "Split a comma-separated string of your own choosing into an array, then print each piece on its own line with a foreach loop",
+            "Use Substring to pull just the first 3 characters out of a string, and separately pull everything after a position you choose",
+        ]);
+
+        var module = BuildModule(topicId, "csharp-basics-collections-2", "Collections II",
+            "Dictionaries for key-based lookup, and the everyday string methods -- Trim, ToUpper/ToLower, Contains, Split, and Substring -- for cleaning up and slicing text.",
+            40, [lesson1, lesson2], sortOrder: 8);
+
+        return (module, [lesson1Checklist, lesson2Checklist]);
+    }
+
+    private static (Module, List<ChecklistSeed>) BuildCSharpBasicsModernControlFlowModule(int topicId)
+    {
+        var lesson1 = BuildLesson(
+            slug: "csharp-basics-enums-and-switch",
+            title: "Enums & Switch",
+            summary: "A fixed, named list of allowed values (enum), and a tidy way to check one value against many cases (switch).",
+            estimatedMinutes: 20,
+            objectives:
+            [
+                "Explain what an enum is, and why it's safer than a plain number or plain text",
+                "Write a switch statement that checks one value against several possible cases",
+                "Use stacked case lines and break to control which cases share a result and where a case stops",
+                "Use default to handle any value that doesn't match a specific case",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    An **enum** (short for "enumeration") is a fixed, named list of allowed values.
+
+                    Without an enum, you might use a plain number (`0`, `1`, `2`...) or plain text (`"Monday"`) to represent a day. Both are risky. A number doesn't tell you what it means just by looking at it. Text can be misspelled (`"Mondey"`), and the compiler won't catch it.
+
+                    An enum gives you a real, safe, named option that the computer understands. `Day.Wednesday` can only ever be one of the values you listed -- `Monday`, `Tuesday`, `Wednesday`, and so on. There is no way to accidentally misspell it, because it isn't free text -- it's a fixed list.
+
+                    When you print an enum value with `Console.WriteLine`, it prints its own name, not a number. So `Console.WriteLine(today)` prints `Wednesday`, not some hidden number.
+
+                    A **switch** checks ONE value against many possible cases. It's a tidier alternative to a long chain of `if` / `else if` / `else if` / ... statements.
+
+                    Each `case` line lists one value to check for. Two `case` lines stacked together with no code between them -- like `case Day.Saturday:` directly above `case Day.Sunday:` -- means "either of these leads to the same result."
+
+                    `break` means: stop here, don't fall into the next case.
+
+                    `default` runs when NONE of the cases above matched. In the example, `today` is `Day.Wednesday`. That is not `Saturday` and not `Sunday`, so the switch skips both of those cases and falls through to `default`, printing "It's a weekday."
+                    """, 1),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Enum**
+
+                    - A fixed, named list of allowed values (e.g. `Day.Monday`, `Day.Tuesday`, ...)
+                    - Safer than a plain number or plain text -- no misspellings, no guessing what a number means
+                    - Printing an enum value prints its **name**, not a number (`Console.WriteLine(today)` -> `Wednesday`)
+
+                    **Switch**
+
+                    - Checks ONE value against many possible `case` values
+                    - Tidier than a long `if` / `else if` / `else if` chain
+                    - Stacked cases with no code between them (`case A: case B:`) share the same result
+                    - `break` stops the current case from falling into the next one
+                    - `default` runs only when nothing above it matched
+                    """, 2),
+                Block(BlockType.CodeSnippet, "Enum + Switch: Checking the Day of the Week", BodyFormat.PlainText, """
+                    Day today = Day.Wednesday;
+
+                    Console.WriteLine(today); // enums print their own name -- prints "Wednesday"
+
+                    switch (today)
+                    {
+                        case Day.Saturday:
+                        case Day.Sunday:
+                            Console.WriteLine("It's the weekend!");
+                            break;
+
+                        default:
+                            Console.WriteLine("It's a weekday.");
+                            break;
+                    }
+
+                    // Note: top-level statements must come before type declarations in the same file,
+                    // so the enum is written here, at the end, even though it's used above.
+                    enum Day
+                    {
+                        Monday,
+                        Tuesday,
+                        Wednesday,
+                        Thursday,
+                        Friday,
+                        Saturday,
+                        Sunday
+                    }
+                    """, 3, language: "csharp"),
+                Block(BlockType.Diagram, "How the Switch Picks a Case for Wednesday", BodyFormat.AsciiArt, """
+                    today = Day.Wednesday
+
+                    switch (today)
+                    {
+                        case Day.Saturday:  ----> no match (today is not Saturday)
+                        case Day.Sunday:    ----> no match (today is not Sunday)
+                            (this code is skipped)
+
+                        default:            ----> MATCH! today matched none of the cases above
+                            Console.WriteLine("It's a weekday.")
+                    }
+
+                    Output printed: "Wednesday"   (from Console.WriteLine(today) earlier)
+                    Output printed: "It's a weekday."   (from the default case)
+                    """, 4),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Use an enum any time a value can only be one of a small, known set of options (days of the week, order status, traffic light color). Don't use a plain number or plain string for this -- an enum stops invalid values from ever existing in the first place.
+
+                    Always add a `default` case to your switch, even if you think you've covered every possibility. It protects you if a new enum value gets added later.
+                    """, 5),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    Junior interviews sometimes ask you to explain this concept out loud: "why use an enum instead of a plain number or string?" Have a simple answer ready: an enum is a fixed, named, safe set of values -- it can't be misspelled, and it can't hold a value that wasn't in the list.
+
+                    You might also be asked to explain what `default` does in a switch. Say it plainly: "it runs when none of the specific cases above it matched."
+                    """, 6),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Forgetting to add a `default` case, and assuming every possible value is already handled by a specific `case`. If a new enum value is added later (like adding a `Holiday` day), a switch with no `default` may silently do nothing for it.
+
+                    Confusing an enum's **name** with its underlying number. `Console.WriteLine(today)` prints `Wednesday`, the name -- it does not print a number, even though `Wednesday` is stored internally as one.
+                    """, 7),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    An enum is like a multiple-choice question on a form -- "Day of the week: (choose one) Monday / Tuesday / Wednesday / ..." -- you can only pick from the listed options, you can't scribble in your own misspelled answer.
+
+                    A switch is like a receptionist sorting mail into labeled bins. She looks at ONE piece of mail, checks it against each labeled bin in order, and drops it in the first bin that matches. If it matches Saturday's bin or Sunday's bin, it goes to the "weekend" pile. If nothing matches, it goes into the "miscellaneous / default" bin.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "You write `Day today = Day.Wednesday;` and then `Console.WriteLine(today);`. What gets printed?",
+                    "Enums print their own name by default, not the underlying number behind them. So this prints the word \"Wednesday\", exactly as written.",
+                    [
+                        new QuizOptionSeed("\"Wednesday\"", true),
+                        new QuizOptionSeed("A number, like 2", false),
+                        new QuizOptionSeed("\"Day.Wednesday\"", false),
+                        new QuizOptionSeed("\"today\"", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "In the example, `case Day.Saturday:` is stacked directly above `case Day.Sunday:` with no code between them. What does that mean?",
+                    "Stacking two case lines with nothing between them means either value leads to the exact same result -- if today is Saturday OR Sunday, the same code underneath runs.",
+                    [
+                        new QuizOptionSeed("Both values share the same result -- either one runs the same code underneath", true),
+                        new QuizOptionSeed("Saturday is checked first, and Sunday is only checked if the program crashes", false),
+                        new QuizOptionSeed("This is a syntax error in C#", false),
+                        new QuizOptionSeed("It means Saturday must always come right before Sunday in the enum", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Enumeration types - C# reference", "https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/builtin-types/enum", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("Selection statements - if, switch (C# reference)", "https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/statements/selection-statements", LinkType.OfficialDocs),
+            ]);
+
+        var lesson1Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson1.Slug,
+        [
+            "Type out the Day enum and switch example yourself, run it, and confirm the output matches exactly: \"Wednesday\" then \"It's a weekday.\"",
+            "Change `today` to `Day.Saturday`, run it again, and confirm it now prints \"It's the weekend!\"",
+            "Write your own small enum (for example TrafficLight: Red, Yellow, Green) with a switch that prints a different message for each value",
+        ]);
+
+        var lesson2 = BuildLesson(
+            slug: "csharp-basics-pattern-matching",
+            title: "Pattern Matching",
+            summary: "Checking a value's type and capturing it in one step with `is`, and turning an input into an output with a switch expression.",
+            estimatedMinutes: 20,
+            objectives:
+            [
+                "Explain what the object type can hold, and why that's different from a specific type like int",
+                "Use is pattern matching to check a value's type and capture it into a new variable in one step",
+                "Write a switch expression using => to turn an input directly into an output value",
+                "Use comparison patterns like < 0, 0, and > 0 inside a switch expression",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    `object item = 42;` -- `object` can hold ANYTHING. A number, some text, a `Dog`, anything. It's the most general type in C#.
+
+                    `if (item is int number)` does TWO things in one step:
+                    1. It checks: "is this actually a whole number (`int`)?"
+                    2. If yes, it captures that value into a brand new variable called `number`, which you can use right away inside the `if` block.
+
+                    This is called **pattern matching**. Instead of checking the type and then separately converting it, `is` does both at once.
+
+                    A **switch expression** is the `n switch { ... }` syntax you see in `Describe`. It's a compact way to turn an input into an output, without writing `case` / `break` / `return` over and over.
+
+                    Each line inside the switch expression is a pattern followed by `=>` ("then give back this value"):
+
+                    - `< 0 => "negative"` means "matches any number less than 0"
+                    - `0 => "zero"` means "matches exactly 0"
+                    - `> 0 => "positive"` means "matches any number greater than 0"
+
+                    Because `Describe` is written as `static string Describe(int n) => n switch { ... }`, calling `Describe(-5)` checks `-5` against each pattern top to bottom, finds it matches `< 0`, and gives back `"negative"`.
+                    """, 1),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **`object` type**
+
+                    - Can hold ANYTHING: a number, text, a custom class, anything
+                    - Useful when you don't know the exact type ahead of time
+
+                    **`is` pattern matching**
+
+                    - `item is int number` checks the type AND captures the value into `number`, in one step
+                    - If the check fails, the code inside the `if` block simply doesn't run
+
+                    **Switch expression** (`n switch { ... }`)
+
+                    - Compact way to turn an input into an output value
+                    - No `case`, `break`, or `return` needed
+                    - Each pattern ends with `=>` meaning "then give back this value"
+                    - `< 0` -> less than 0
+                    - `0` -> exactly 0
+                    - `> 0` -> greater than 0
+                    """, 2),
+                Block(BlockType.CodeSnippet, "is Pattern Matching and a Switch Expression", BodyFormat.PlainText, """
+                    object item = 42; // "object" can hold ANYTHING -- a number, text, a Dog, anything
+
+                    if (item is int number)
+                    {
+                        Console.WriteLine($"It's a number: {number}");
+                    }
+
+                    Console.WriteLine(Describe(-5));
+                    Console.WriteLine(Describe(0));
+                    Console.WriteLine(Describe(5));
+
+                    static string Describe(int n) => n switch
+                    {
+                        < 0 => "negative",
+                        0 => "zero",
+                        > 0 => "positive"
+                    };
+                    """, 3, language: "csharp"),
+                Block(BlockType.Diagram, "Matching -5, 0, and 5 Against the Switch Expression", BodyFormat.AsciiArt, """
+                    Describe(-5)                Describe(0)                 Describe(5)
+                         |                            |                           |
+                         v                            v                           v
+                    n switch                     n switch                    n switch
+                    {                            {                           {
+                      < 0 => "negative" <-MATCH     < 0 => no match             < 0 => no match
+                      0   => "zero"                 0   => "zero" <-MATCH       0   => no match
+                      > 0 => "positive"             > 0 => no match             > 0 => "positive" <-MATCH
+                    }                            }                           }
+                         |                            |                           |
+                         v                            v                           v
+                     "negative"                    "zero"                    "positive"
+                    """, 4),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Use `is` pattern matching instead of forcing a cast like `(int)item` when you're not sure the value is actually that type. A wrong cast throws an exception; `is` just quietly returns `false` and skips the block.
+
+                    Keep switch expression patterns simple and non-overlapping (like `< 0`, `0`, `> 0`), so it's always obvious which single pattern a given value will match.
+                    """, 5),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    Junior interviews sometimes ask you to explain this concept out loud: "what does `is int number` do?" Say both parts clearly -- it checks the type, and it captures the value into a new variable, in a single step.
+
+                    You might also be asked why a switch expression is useful. Have a simple answer ready: it turns an input into an output value directly, without needing separate `case` / `break` / `return` lines for each option.
+                    """, 6),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Forgetting that `object` hides the real type until you check it. Trying to use `item` as a number directly (like `item + 1`) without first confirming it really is a number will not compile -- you must use `is int number` (or a cast) first.
+
+                    Writing overlapping or out-of-order patterns in a switch expression, so the wrong one matches first. Order and precision matter -- each pattern should cover only the values you intend.
+                    """, 7),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    `object` is like a plain, unlabeled cardboard box -- it could contain a book, a phone, or a sandwich. You can't use what's inside until you open it and check.
+
+                    `is int number` is like opening the box, checking "is this a book?", and if so, handing it to you already labeled and ready to read -- all in one motion.
+
+                    A switch expression is like a vending machine: you put in a number, and depending on which slot it matches, the machine hands back exactly one labeled item -- no extra steps.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "In `if (item is int number)`, what happens if `item` actually holds a number?",
+                    "The check passes, and a brand new variable called number is created holding that value, ready to use right away inside the if block.",
+                    [
+                        new QuizOptionSeed("The check passes, and `number` is created holding that value, ready to use inside the if block", true),
+                        new QuizOptionSeed("The program throws an exception because object can't hold numbers", false),
+                        new QuizOptionSeed("item is deleted and replaced by number", false),
+                        new QuizOptionSeed("Nothing happens -- is only works with strings", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "Given the patterns `< 0 => \"negative\"`, `0 => \"zero\"`, `> 0 => \"positive\"`, what does `Describe(0)` return?",
+                    "0 matches the `0` pattern exactly, so the switch expression gives back \"zero\". It does not match `< 0` or `> 0`, since 0 is neither less than nor greater than itself.",
+                    [
+                        new QuizOptionSeed("\"zero\", because 0 matches the 0 pattern exactly", true),
+                        new QuizOptionSeed("\"negative\", because the first pattern always wins", false),
+                        new QuizOptionSeed("\"positive\", because 0 is not less than 0", false),
+                        new QuizOptionSeed("An error, because 0 doesn't match any pattern", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Pattern matching overview - C#", "https://learn.microsoft.com/en-us/dotnet/csharp/fundamentals/functional/pattern-matching", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("Switch expression - C# reference", "https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/operators/switch-expression", LinkType.OfficialDocs),
+            ],
+            prerequisites: [lesson1]);
+
+        var lesson2Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson2.Slug,
+        [
+            "Type out the pattern matching example yourself, run it, and confirm all four lines of output match",
+            "Change `item = 42` to `item = \"hello\"` and re-run -- confirm the is int number check no longer runs",
+            "Write your own switch expression that takes an int and returns \"small\", \"medium\", or \"large\" based on ranges you pick",
+        ]);
+
+        var module = BuildModule(topicId, "csharp-basics-modern-control-flow", "Modern Control Flow",
+            "Fixed, named value sets with enums and switch statements, plus pattern matching with is and switch expressions -- the modern building blocks for branching logic in C#.",
+            40, [lesson1, lesson2], sortOrder: 9);
+
+        return (module, [lesson1Checklist, lesson2Checklist]);
+    }
+
+    private static (Module, List<ChecklistSeed>) BuildCSharpBasicsModernDataModule(int topicId)
+    {
+        var lesson1 = BuildLesson(
+            slug: "csharp-basics-records",
+            title: "Records",
+            summary: "A one-line way to create a data-holding type in C#, and why it compares equal by value while an ordinary class compares equal only by identity.",
+            estimatedMinutes: 20,
+            objectives:
+            [
+                "Explain what a record is and why one line of code can replace a whole class",
+                "Predict whether two records with the same values are equal, and explain why",
+                "Predict whether two objects of an ordinary class with the same values are equal, and explain why",
+                "Describe the difference between comparing by value and comparing by identity",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    A **record** is a short way to write a class that is mainly about holding data.
+
+                    Look at this one line:
+                    `record Person(string Name, int Age);`
+
+                    This ONE line does the same job as writing a whole class with fields, a constructor, printing code, and comparison code. C# writes all of that for you, automatically.
+
+                    **Records print themselves nicely.** You do not need to write any extra code. If you write `Console.WriteLine(p1);`, C# prints something readable like `Person { Name = Surya, Age = 28 }`.
+
+                    **Records compare by VALUE.** "Value" means the actual data inside -- the Name and the Age. If two records hold the same data, C# says they are equal (`==` returns `True`), even though they are two separate objects.
+
+                    Compare that to an ordinary **class**, like `Dog` in the example. Classes compare by **IDENTITY**. "Identity" means: is this the exact same object in memory? Even if two Dog objects hold the exact same Name, C# says they are NOT equal, because they are two separate objects sitting in two separate places in memory.
+
+                    So the same question -- "are these two things equal?" -- gets a different answer depending on whether you used a record or a class.
+                    """, 1),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    - A **record** is a short way to write a data-holding class in one line.
+                    - `record Person(string Name, int Age);` gives you fields, a constructor, printing, AND comparison -- for free.
+                    - Records compare by **VALUE**: same data = equal (`==` is `True`).
+                    - Ordinary classes compare by **IDENTITY**: same data does NOT mean equal, unless it is literally the same object (`==` is `False`).
+                    - Records print themselves automatically: `Person { Name = Surya, Age = 28 }`.
+                    - Use a record when you mainly care about the data. Use a class when the object needs its own identity.
+                    """, 2),
+                Block(BlockType.CodeSnippet, "Records vs Classes: Value Equality vs Identity", BodyFormat.PlainText, """
+                    Person p1 = new Person("Surya", 28);
+                    Person p2 = new Person("Surya", 28);
+
+                    Console.WriteLine(p1); // records print themselves nicely, automatically
+                    Console.WriteLine(p1 == p2); // True! Records compare by VALUE -- same data means "equal"
+
+                    Dog d1 = new Dog("Rex");
+                    Dog d2 = new Dog("Rex");
+
+                    Console.WriteLine(d1 == d2); // False! Classes compare by IDENTITY (are these
+                                                  // the exact same object in memory?), not by
+                                                  // their data -- even though d1 and d2 hold
+                                                  // identical information, they're two separate
+                                                  // objects, so they are NOT considered equal.
+
+                    record Person(string Name, int Age); // this one line IS the whole record
+
+                    class Dog
+                    {
+                        public string Name;
+
+                        public Dog(string name)
+                        {
+                            Name = name;
+                        }
+                    }
+                    """, 3, language: "csharp"),
+                Block(BlockType.Diagram, "Value Equality vs Identity Equality", BodyFormat.AsciiArt, """
+                    RECORDS compare by VALUE:
+
+                    p1 --> [ Name: "Surya", Age: 28 ]   Box A (memory slot 1)
+                    p2 --> [ Name: "Surya", Age: 28 ]   Box B (memory slot 2)
+
+                    p1 == p2  ?  C# checks: "Do the VALUES inside match?"
+                                 Yes -> Name matches, Age matches -> result: True
+
+                    ----------------------------------------------------------
+
+                    CLASSES compare by IDENTITY:
+
+                    d1 --> [ Name: "Rex" ]   Box C (memory slot 3)
+                    d2 --> [ Name: "Rex" ]   Box D (memory slot 4)
+
+                    d1 == d2  ?  C# checks: "Is this the SAME box in memory?"
+                                 No -> Box C and Box D are different boxes -> result: False
+                    """, 4),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Use a **record** when a type's whole job is to hold some data -- like a Person, a Point, or an Order -- and you want easy printing and easy comparison for free.
+
+                    Use an ordinary **class** when the object represents something that changes over time, or something where two objects with the same data should still count as separate things (like two different bank accounts that happen to both start at $0).
+
+                    When in doubt for simple beginner data (like Person, Address, Coordinate), a record is usually the simpler choice.
+                    """, 5),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    Junior interviews sometimes ask you to explain this concept out loud: "What is the difference between a record and a class in C#?"
+
+                    Practice saying it simply: "A record compares by value -- same data means equal. A class compares by identity -- same data does NOT mean equal, unless it is literally the same object." Say the record line out loud too: `record Person(string Name, int Age);` -- and explain that this one line replaces a whole class.
+                    """, 6),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    A common mistake is assuming ALL objects with the same data are automatically equal in C#. That is only true for **records**. For an ordinary **class** like `Dog`, `d1 == d2` is `False` even when both dogs have the exact same Name -- because classes compare by identity, not by value, unless you write extra code yourself to change that.
+
+                    Another mistake: thinking you need to write a `ToString()` method for a record to print nicely. You do not -- records already do this for you.
+                    """, 7),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    Think of two identical receipts from a store -- same items, same prices, same total. Even though they are two separate pieces of paper, most people would say "these are the same receipt" because the DATA on them matches. That is how a **record** thinks: same data means equal.
+
+                    Now think of two different people wearing the exact same outfit. They look identical, but they are still two different people -- two separate identities. That is how a **class** thinks: even with identical details, they are still two separate "objects," so they are not considered equal.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "You create two records with the same values, like p1 = new Person(\"Surya\", 28) and p2 = new Person(\"Surya\", 28). What does p1 == p2 return?",
+                    "Records compare by value. Since p1 and p2 hold the exact same Name and Age, C# treats them as equal, so p1 == p2 is True -- even though they are two separate objects.",
+                    [
+                        new QuizOptionSeed("True, because records compare by value -- same data means equal", true),
+                        new QuizOptionSeed("False, because p1 and p2 are two separate objects", false),
+                        new QuizOptionSeed("True, because C# always compares every object by value", false),
+                        new QuizOptionSeed("False, because records need a custom Equals method to compare correctly", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "You create two Dog objects (an ordinary class) with the same Name, like d1 = new Dog(\"Rex\") and d2 = new Dog(\"Rex\"). What does d1 == d2 return?",
+                    "Ordinary classes compare by identity, not by value. Even though d1 and d2 hold the same Name, they are two separate objects in memory, so d1 == d2 is False.",
+                    [
+                        new QuizOptionSeed("False, because classes compare by identity -- same data does not mean the same object", true),
+                        new QuizOptionSeed("True, because both dogs have the same Name", false),
+                        new QuizOptionSeed("True, because C# always compares by value for any type", false),
+                        new QuizOptionSeed("False, because Dog is missing a constructor", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Records - C# reference", "https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/builtin-types/record", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("Tutorial: Create record types", "https://learn.microsoft.com/en-us/dotnet/csharp/whats-new/tutorials/records", LinkType.FurtherReading),
+            ]);
+
+        var lesson1Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson1.Slug,
+        [
+            "Create a record called Person with Name and Age, make two instances with the same values, and print p1 == p2 to confirm it prints True",
+            "Create an ordinary class called Dog with a Name field and a constructor, make two instances with the same Name, and print d1 == d2 to confirm it prints False",
+            "Print p1 by itself (Console.WriteLine(p1)) and notice it shows the values automatically, without writing a ToString method",
+        ]);
+
+        var lesson2 = BuildLesson(
+            slug: "csharp-basics-generics",
+            title: "Generics",
+            summary: "How the <T> placeholder lets one method work with a List<int>, a List<string>, or a list of anything else, without copy-pasting the method for every type.",
+            estimatedMinutes: 20,
+            objectives:
+            [
+                "Explain what the placeholder T means in a generic method",
+                "Read a generic method signature like static T GetFirst<T>(List<T> list) and explain what it does",
+                "Explain why the same generic method can work with a List<int> and a List<string> without changes",
+                "Explain why generics avoid copy-pasting the same method for every type",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    **Generics** let you write ONE method that works with many different types.
+
+                    Look at this method:
+                    ```
+                    static T GetFirst<T>(List<T> list)
+                    {
+                        return list[0];
+                    }
+                    ```
+
+                    `T` is a placeholder. It stands for "whatever Type you use me with." `T` is not a real type by itself -- it is just a stand-in name, like a blank space that gets filled in later.
+
+                    When you call `GetFirst(numbers)` where `numbers` is a `List<int>`, C# fills in the blank: `T` becomes `int`. When you call `GetFirst(names)` where `names` is a `List<string>`, C# fills in the blank differently: `T` becomes `string`.
+
+                    The method itself never changes. The SAME code works for a `List<int>`, a `List<string>`, or a list of anything else you can think of. This is called a **generic method**, because it is written generically, not tied to one specific type.
+                    """, 1),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    - `<T>` means "a placeholder for whatever type you use me with."
+                    - `T` stands for "Type" -- it is not a real type, just a stand-in name.
+                    - `static T GetFirst<T>(List<T> list)` works with `List<int>`, `List<string>`, or a list of any type.
+                    - No copy-pasting: you do NOT need a separate GetFirst method for every type.
+                    - C# figures out what `T` should be based on what you pass in -- you usually do not have to say it yourself.
+                    """, 2),
+                Block(BlockType.CodeSnippet, "Generic Method: GetFirst<T>", BodyFormat.PlainText, """
+                    List<int> numbers = new List<int> { 10, 20, 30 };
+                    List<string> names = new List<string> { "Surya", "Ann" };
+
+                    Console.WriteLine(GetFirst(numbers)); // works with a List of int
+                    Console.WriteLine(GetFirst(names));   // the SAME method also works with a List of string
+
+                    static T GetFirst<T>(List<T> list)
+                    {
+                        return list[0];
+                    }
+                    """, 3, language: "csharp"),
+                Block(BlockType.Diagram, "One Method, Two Types", BodyFormat.AsciiArt, """
+                    GENERIC METHOD:  static T GetFirst<T>(List<T> list)
+
+                      T is a placeholder. It means "whatever type you give me."
+
+                      Call 1: GetFirst(numbers)     numbers is List<int>
+                              T becomes int
+                              returns list[0] as an int  -->  10
+
+                      Call 2: GetFirst(names)       names is List<string>
+                              T becomes string
+                              returns list[0] as a string  -->  "Surya"
+
+                      ONE method definition. TWO different types used. NO copy-pasting.
+                    """, 4),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Reach for a generic method whenever you notice you are about to write the SAME method twice, just for two different types (like one for `List<int>` and one for `List<string>`). That duplication is exactly the sign that a generic method (`<T>`) will solve the problem.
+
+                    Give the placeholder a clear name. `T` is the standard name for "one generic type." For a single simple placeholder, `T` is fine and expected.
+                    """, 5),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    Junior interviews sometimes ask you to explain this concept out loud: "What does `<T>` mean in C#?"
+
+                    Practice a short, simple answer: "T is a placeholder for whatever type the method is used with. It lets one method work for many types, instead of writing a separate copy for each one." Being able to say this in plain words, without hesitating, is exactly what an interviewer is listening for.
+                    """, 6),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    A common mistake is thinking `T` is a real, specific type -- like it is some special built-in class called `T`. It is not. `T` is just a placeholder name; C# replaces it with the actual type (`int`, `string`, or anything else) each time the method is called.
+
+                    Another mistake is writing separate copies of a method for every type you need (like a GetFirstInt and a GetFirstString) instead of using one generic method. If the method body is identical except for the type, that is the sign you should use `<T>` instead.
+                    """, 7),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    Think of a generic method like a cookie cutter shaped like a circle. The SAME cutter works whether you are cutting sugar cookies, chocolate cookies, or gingerbread -- the cutter does not care what the dough is made of, it just does its one job (cutting a circle) on whatever dough you hand it.
+
+                    `T` is like that cutter's shape: it does not lock in one specific type of dough. It just says "whatever you hand me, I will do the same job on it."
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "In static T GetFirst<T>(List<T> list), what does the T represent?",
+                    "T is a placeholder, not a real built-in type. C# replaces it with whatever actual type the method is called with, such as int or string.",
+                    [
+                        new QuizOptionSeed("A placeholder for whatever type the method is used with", true),
+                        new QuizOptionSeed("A specific built-in C# type called T", false),
+                        new QuizOptionSeed("A required base class that every argument must inherit from", false),
+                        new QuizOptionSeed("A keyword that only works with numbers", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "Why can the SAME GetFirst method work for both List<int> and List<string> without any changes to its code?",
+                    "GetFirst is a generic method. Its T is a placeholder that C# fills in with the real type each time the method is called -- int for a List<int>, string for a List<string> -- so one method body works for both.",
+                    [
+                        new QuizOptionSeed("Because T is a generic placeholder that gets replaced with the actual type each time it's called", true),
+                        new QuizOptionSeed("Because C# automatically converts strings to integers", false),
+                        new QuizOptionSeed("Because List<int> and List<string> are secretly the same type", false),
+                        new QuizOptionSeed("Because GetFirst is silently duplicated once per type behind the scenes by you", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Generics - C#", "https://learn.microsoft.com/en-us/dotnet/csharp/fundamentals/types/generics", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("Introduction to Generics", "https://learn.microsoft.com/en-us/dotnet/csharp/programming-guide/generics/introduction-to-generics", LinkType.FurtherReading),
+            ]);
+
+        var lesson2Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson2.Slug,
+        [
+            "Write the generic method static T GetFirst<T>(List<T> list) and call it with a List<int> and a List<string>",
+            "Try changing GetFirst so it only works with List<int>, then notice you'd need a second copy for List<string> -- that's the problem generics solve",
+            "Write your own tiny generic method (for example GetLast<T>) and call it with two different types of lists",
+        ]);
+
+        var module = BuildModule(topicId, "csharp-basics-modern-data", "Modern C# Data",
+            "One-line data types with records and the <T> placeholder that lets one method work with any type -- two building blocks of everyday, modern C# code.",
+            40, [lesson1, lesson2], sortOrder: 10);
+
+        return (module, [lesson1Checklist, lesson2Checklist]);
+    }
+
+    private static (Module, List<ChecklistSeed>) BuildCSharpBasicsAdvancedModule(int topicId)
+    {
+        var lesson1 = BuildLesson(
+            slug: "csharp-basics-linq",
+            title: "LINQ Basics",
+            summary: "Three simple LINQ tools -- Where, Select, and OrderBy -- that let you filter, transform, and sort a list in one line instead of writing a loop by hand.",
+            estimatedMinutes: 20,
+            objectives:
+            [
+                "Explain what a lambda like \"n => n > 4\" means in plain words",
+                "Use Where() to keep only the items that match a condition",
+                "Use Select() to transform every item in a list into something new",
+                "Use OrderBy() to sort a list from smallest to largest",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    LINQ gives you one-line tools for common list tasks, instead of writing your own loop by hand every single time.
+
+                    Look at this piece: `n => n > 4`. This is called a **LAMBDA**. Read it as: "for each item (I'll call it `n` while I'm looking at it), check: is `n` greater than 4?"
+
+                    Here are the three tools this lesson covers:
+
+                    - **`Where()`** -- KEEPS only the items where the answer is true. It filters the list down.
+                    - **`Select()`** -- TRANSFORMS every item into something new. Here, we use it to double each number.
+                    - **`OrderBy()`** -- SORTS the list, smallest to largest, using whatever you give it.
+
+                    One more detail: `.ToList()` at the end turns the LINQ result back into a real `List` you can loop over. Without it, you'd have something LINQ is still "thinking about," not a finished list.
+                    """, 1),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    - `n => n > 4` -- a lambda. Read it as "for each item n, check: is n greater than 4?"
+                    - `Where(n => n > 4)` -- keeps only the items where the check is true
+                    - `Select(n => n * 2)` -- transforms every item into something new (here, doubled)
+                    - `OrderBy(n => n)` -- sorts the list smallest to largest
+                    - `.ToList()` -- turns the LINQ result back into a real `List` you can loop over
+                    """, 2),
+                Block(BlockType.CodeSnippet, "Where, Select, and OrderBy", BodyFormat.PlainText, """
+                    List<int> numbers = new List<int> { 5, 2, 8, 1, 9, 3 };
+
+                    List<int> bigNumbers = numbers.Where(n => n > 4).ToList();
+                    Console.WriteLine("Numbers bigger than 4:");
+                    foreach (int n in bigNumbers)
+                    {
+                        Console.WriteLine(n);
+                    }
+
+                    List<int> doubled = numbers.Select(n => n * 2).ToList();
+                    Console.WriteLine("Every number doubled:");
+                    foreach (int n in doubled)
+                    {
+                        Console.WriteLine(n);
+                    }
+
+                    List<int> sorted = numbers.OrderBy(n => n).ToList();
+                    Console.WriteLine("Sorted smallest to largest:");
+                    foreach (int n in sorted)
+                    {
+                        Console.WriteLine(n);
+                    }
+                    """, 3, language: "csharp"),
+                Block(BlockType.Diagram, "Starting List Through Three LINQ Tools", BodyFormat.AsciiArt, """
+                    Starting list: 5, 2, 8, 1, 9, 3
+
+                    Where(n => n > 4)          Select(n => n * 2)         OrderBy(n => n)
+                    "keep if bigger than 4"    "double every item"        "sort smallest to largest"
+
+                        5  -> kept                 5  -> 10                   5, 2, 8, 1, 9, 3
+                        2  -> dropped               2  -> 4                        |
+                        8  -> kept                 8  -> 16                        v
+                        1  -> dropped               1  -> 2                   1, 2, 3, 5, 8, 9
+                        9  -> kept                 9  -> 18
+                        3  -> dropped               3  -> 6
+
+                    Result: 5, 8, 9            Result: 10, 4, 16, 2, 18, 6
+
+                    Each tool looks at the SAME original list "numbers" and
+                    builds a brand new list -- it does not change "numbers" itself.
+                    """, 4),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Give the lambda variable a short, clear name, like `n` for a number or `p` for a person. It only needs to make sense while you're reading that one line.
+
+                    Always add `.ToList()` at the end when you plan to loop over the result, store it, or pass it around. This keeps things simple and avoids confusing "not-a-real-list-yet" behavior.
+
+                    Do one thing per line while you're learning. It's fine to combine `Where()` and `Select()` together later, but start by writing them one at a time so you can see exactly what each step does.
+                    """, 5),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    Junior interviews sometimes ask you to explain this concept out loud. Practice saying it simply: "A lambda is a tiny, unnamed function. `n => n > 4` means: take `n`, and check if it's bigger than 4."
+
+                    Also practice explaining the difference between the three tools in one sentence each: "`Where` filters, `Select` transforms, `OrderBy` sorts." Interviewers like hearing that short, clear summary before any code.
+                    """, 6),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Forgetting `.ToList()` at the end and then being surprised the result doesn't behave like a normal list right away.
+
+                    Mixing up `Where()` and `Select()` -- `Where()` never changes the values, it only decides which ones stay. `Select()` never removes anything, it only changes each value.
+
+                    Thinking `OrderBy()` (or `Where()`/`Select()`) changes the original list. It doesn't -- `numbers` stays exactly the same; you always get a brand new list back.
+                    """, 7),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    Imagine a basket of mixed fruit. `Where()` is like picking out only the apples and leaving everything else in the basket -- the fruit itself doesn't change, you're just choosing which pieces to keep. `Select()` is like running every piece of fruit through a juicer -- you get something new for every single piece, none skipped. `OrderBy()` is like lining up all the fruit on a table from smallest to largest -- same fruit, just arranged in a new order.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "What does the lambda \"n => n > 4\" mean?",
+                    "A lambda is a small, unnamed function. \"n => n > 4\" reads as: for each item, call it n, check whether n is greater than 4. It doesn't change anything by itself -- it's the check that Where() uses to decide what to keep.",
+                    [
+                        new QuizOptionSeed("For each item n, check if n is greater than 4", true),
+                        new QuizOptionSeed("Set every item to the value 4", false),
+                        new QuizOptionSeed("Add 4 to every item in the list", false),
+                        new QuizOptionSeed("Remove the number 4 from the list", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "After running \"numbers.Where(n => n > 4).ToList()\", what happens to the original \"numbers\" list?",
+                    "Where() (like Select() and OrderBy()) never changes the original list. It builds and returns a brand new list based on the check you gave it. \"numbers\" still contains 5, 2, 8, 1, 9, 3 afterward, in that same order.",
+                    [
+                        new QuizOptionSeed("It stays exactly the same -- a new list is returned instead", true),
+                        new QuizOptionSeed("All items 4 or smaller are permanently deleted from it", false),
+                        new QuizOptionSeed("It gets sorted from smallest to largest", false),
+                        new QuizOptionSeed("Every item in it gets doubled", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Introduction to LINQ queries (C#) -- Microsoft Learn", "https://learn.microsoft.com/en-us/dotnet/csharp/linq/get-started/introduction-to-linq-queries", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("Lambda expressions -- Microsoft Learn", "https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/operators/lambda-expressions", LinkType.OfficialDocs),
+            ]);
+
+        var lesson1Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson1.Slug,
+        [
+            "Make your own List<int> with 6 numbers you pick, then use Where() to keep only the ones bigger than some number you choose",
+            "Use Select() on your own list to triple every number instead of doubling it, and print the result",
+            "Use OrderBy() on your own list and print it before and after, so you can see the order change",
+        ]);
+
+        var lesson2 = BuildLesson(
+            slug: "csharp-basics-async-await",
+            title: "Async/Await Basics",
+            summary: "How \"async\" and \"await\" let C# wait for something slow -- like a download -- without freezing the rest of the program.",
+            estimatedMinutes: 20,
+            objectives:
+            [
+                "Explain why some operations, like downloading a file, take real time to finish",
+                "Explain what the \"async\" keyword on a method means",
+                "Explain what \"await\" does when it runs",
+                "Explain what \"Task\" means as a method's return type, instead of \"void\"",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    Some operations take real time -- downloading something from the internet, reading a big file, waiting on a database. `async` and `await` are how C# handles "wait for this, without freezing everything else."
+
+                    - **`async`** on a method means: "this method might need to pause and wait partway through."
+                    - **`Task`** (instead of `void`) is what a method returns when it's async and doesn't hand back a specific value.
+                    - **`await`** means: "pause right here until this finishes -- but don't freeze the whole program while waiting."
+
+                    `Task.Delay(2000)` is a fake, safe way to pretend "this takes 2 real seconds," standing in for something like a real network call.
+                    """, 1),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    - `async` on a method -- "this method might need to pause and wait partway through"
+                    - `Task` return type (instead of `void`) -- what an async method returns when it doesn't hand back a specific value
+                    - `await` -- "pause right here until this finishes, without freezing the whole program"
+                    - `Task.Delay(2000)` -- a fake, safe stand-in for something slow, like a 2-second network call
+                    """, 2),
+                Block(BlockType.CodeSnippet, "Waiting for a Slow Operation with Async/Await", BodyFormat.PlainText, """
+                    Console.WriteLine("Starting...");
+
+                    DateTime start = DateTime.Now;
+                    await DoSomethingSlowAsync();
+                    DateTime end = DateTime.Now;
+
+                    Console.WriteLine($"Done! That took about {(end - start).TotalSeconds:0.0} seconds.");
+
+                    static async Task DoSomethingSlowAsync()
+                    {
+                        Console.WriteLine("Working... (pretend this is downloading a file)");
+
+                        await Task.Delay(2000);
+
+                        Console.WriteLine("Finished working.");
+                    }
+                    """, 3, language: "csharp"),
+                Block(BlockType.Diagram, "Timeline of the Async Method Call", BodyFormat.StructuredSteps, """
+                    [{"label":"Console.WriteLine('Starting...') runs","note":"prints right away, no waiting yet"},{"label":"await DoSomethingSlowAsync() is called","note":"prints 'Working... (pretend this is downloading a file)'"},{"label":"await Task.Delay(2000) pauses here","note":"the program waits about 2 real seconds, but does not freeze up"},{"label":"Delay finishes, method continues","note":"prints 'Finished working.'"},{"label":"Control returns to the caller","note":"prints 'Done! That took about 2.0 seconds.'"}]
+                    """, 4),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Name async methods with an "Async" suffix, like `DoSomethingSlowAsync`. It's a simple habit that instantly tells anyone reading the code that this method might pause and wait.
+
+                    Use `await` every time you call an async method. If you forget it, your code might move on before the slow operation is actually finished.
+
+                    Use `Task` (not `void`) as the return type for async methods, unless you have a very specific reason not to. This lets the caller correctly `await` your method.
+                    """, 5),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    Junior interviews sometimes ask you to explain this concept out loud. Keep it simple: "`async` marks a method that might need to pause. `await` pauses at that exact line until the slow thing finishes, but it lets the rest of the program keep running instead of freezing."
+
+                    If asked why we don't just wait normally (like a plain loop), explain that a normal wait would freeze the whole program, while `await` only pauses that one piece of work.
+                    """, 6),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Forgetting to write `await` before calling an async method. Without it, the program can move on to the next line before the slow operation is actually done.
+
+                    Thinking `async` by itself makes code run faster. It doesn't -- it just means the method is *allowed* to pause without freezing everything else. The slow work still takes the same amount of real time.
+
+                    Confusing `Task.Delay(2000)` with actually doing nothing for 2 seconds in a way that blocks the program. `await Task.Delay(2000)` waits without freezing; a method like `Thread.Sleep(2000)` would freeze instead, which is a very different thing.
+                    """, 7),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    Imagine you put a load of laundry in the washing machine. You don't stand frozen in front of it for the whole cycle -- you start it, then go do other things, and come back when it's done. `await` is like starting the washing machine and knowing exactly when to come back, without staring at it the whole time. `async` on a method is like saying up front, "heads up, this task involves some waiting."
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "What does the \"await\" keyword do when it runs?",
+                    "await pauses right at that line until the operation it's waiting on finishes. Importantly, it does this without freezing the rest of the program -- other work can still happen while it waits.",
+                    [
+                        new QuizOptionSeed("Pauses at that line until the operation finishes, without freezing the whole program", true),
+                        new QuizOptionSeed("Immediately stops the program completely until you press a key", false),
+                        new QuizOptionSeed("Skips the operation entirely and moves to the next line", false),
+                        new QuizOptionSeed("Makes the operation run twice as fast", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "In \"static async Task DoSomethingSlowAsync()\", what does the \"async\" keyword mean?",
+                    "async on a method means this method might need to pause and wait partway through, usually because it awaits something slow inside it. It doesn't make the method faster -- it just allows it to pause safely.",
+                    [
+                        new QuizOptionSeed("This method might need to pause and wait partway through", true),
+                        new QuizOptionSeed("This method must never be given any parameters", false),
+                        new QuizOptionSeed("This method automatically runs faster than a normal method", false),
+                        new QuizOptionSeed("This method can only be called from Main", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Asynchronous programming with async and await -- Microsoft Learn", "https://learn.microsoft.com/en-us/dotnet/csharp/asynchronous-programming/", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("Task.Delay Method -- Microsoft Learn", "https://learn.microsoft.com/en-us/dotnet/api/system.threading.tasks.task.delay", LinkType.OfficialDocs),
+            ]);
+
+        var lesson2Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson2.Slug,
+        [
+            "Write your own async method that awaits Task.Delay for 3000 milliseconds instead of 2000, and confirm the printed timing matches",
+            "Add an extra Console.WriteLine before and after the await inside your async method, and predict the output order before running it",
+            "Explain out loud, in your own words, the difference between async and await, using this lesson's washing machine analogy",
+        ]);
+
+        var module = BuildModule(topicId, "csharp-basics-advanced", "Advanced Basics",
+            "Two beginner-friendly building blocks that come up constantly in real C# code: LINQ's Where/Select/OrderBy for working with lists in one line, and async/await for waiting on slow operations without freezing the program.",
+            40, [lesson1, lesson2], sortOrder: 11);
+
+        return (module, [lesson1Checklist, lesson2Checklist]);
+    }
+
 
     // ============================== Shared builders ==============================
 
