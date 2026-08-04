@@ -15,4 +15,12 @@
     <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.4" />
   </ItemGroup>
 
+  <!-- Personal C# practice lessons live in Learning/ as their own separate mini-projects.
+       Excluded here so their own Program.cs files don't clash with this app's Program.cs. -->
+  <ItemGroup>
+    <Compile Remove="Learning/**/*.cs" />
+    <Content Remove="Learning/**" />
+    <None Remove="Learning/**" />
+  </ItemGroup>
+
 </Project>

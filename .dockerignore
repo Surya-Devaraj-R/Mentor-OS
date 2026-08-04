@@ -1,0 +1,11 @@
+bin/
+obj/
+**/bin/
+**/obj/
+*.db
+*.db-shm
+*.db-wal
+.git
+.vs/
+.claude/
+Learning/

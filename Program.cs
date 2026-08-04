@@ -3,12 +3,34 @@ using MentorOS.Data;
 using MentorOS.Data.Seed;
 using MentorOS.Endpoints;
 using MentorOS.Services;
+using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseSqlite(builder.Configuration.GetConnectionString("Default")));
+// Cloud hosts (Render, Railway, etc.) tell the app which port to listen on
+// via the PORT environment variable, instead of the fixed port used for
+// local development.
+var port = Environment.GetEnvironmentVariable("PORT");
+if (!string.IsNullOrEmpty(port))
+{
+    builder.WebHost.UseUrls($"http://0.0.0.0:{port}");
+}
+
+var connectionString = builder.Configuration.GetConnectionString("Default")!;
+
+// On a freshly-attached persistent disk (e.g. Render), the mount directory
+// exists but the database file doesn't yet -- SQLite can create the FILE
+// itself, but not a missing parent directory. Create it up front so the
+// very first deploy doesn't crash before the app ever gets a chance to run.
+var dbDirectory = Path.GetDirectoryName(new SqliteConnectionStringBuilder(connectionString).DataSource);
+if (!string.IsNullOrEmpty(dbDirectory))
+{
+    Directory.CreateDirectory(dbDirectory);
+}
+
+builder.Services.AddDbContext<AppDbContext>(options => options.UseSqlite(connectionString));
 builder.Services.AddScoped<ProgressService>();
 builder.Services.AddScoped<SearchService>();
 builder.Services.ConfigureHttpJsonOptions(options =>
@@ -22,6 +44,15 @@ using (var scope = app.Services.CreateScope())
     await db.Database.MigrateAsync();
     await SeedRunner.ApplyAsync(db);
 }
+
+// Render (and similar hosts) terminate HTTPS at their edge and forward
+// plain HTTP to this app, adding an X-Forwarded-Proto header to say so.
+// Without trusting that header, UseHttpsRedirection below would see every
+// request as "still HTTP" and redirect forever.
+app.UseForwardedHeaders(new ForwardedHeadersOptions
+{
+    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
+});
 
 app.UseHttpsRedirection();
 
