@@ -6,6 +6,7 @@ import { renderMiniMarkdown } from '../components/content-blocks/mini-markdown.j
 import { createChecklist } from '../components/checklist.js';
 import { createLoadingMessage, createErrorMessage } from '../components/status-message.js';
 import { navigate } from '../router.js';
+import { getTopicIcon } from '../utils/icons.js';
 
 // Route: /roadmap/:topicSlug — lists the modules within one topic.
 export async function renderTopicView(params, query, root) {
@@ -31,7 +32,7 @@ export async function renderTopicView(params, query, root) {
 
 function buildTopicView(topic, modules, project) {
   const container = document.createElement('div');
-  container.className = 'flex flex-col gap-6';
+  container.className = 'flex flex-col gap-6 animate-fade-in-up';
 
   const header = document.createElement('header');
   header.className = 'flex flex-col gap-3';
@@ -39,19 +40,35 @@ function buildTopicView(topic, modules, project) {
     createBreadcrumb([{ label: 'Dashboard', hash: '#/' }, { label: topic.title }]),
   );
 
+  const headingRow = document.createElement('div');
+  headingRow.className = 'flex items-center gap-3';
+
+  const iconBadge = document.createElement('span');
+  iconBadge.className =
+    'flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500/15 via-slate-800 to-violet-500/15 text-2xl ring-1 ring-white/10';
+  iconBadge.setAttribute('aria-hidden', 'true');
+  iconBadge.textContent = getTopicIcon(topic);
+
   const heading = document.createElement('h1');
-  heading.className = 'text-2xl font-semibold tracking-tight text-slate-50';
+  heading.className = 'text-2xl font-extrabold tracking-tight text-slate-50 sm:text-3xl';
   heading.textContent = topic.title;
+
+  headingRow.append(iconBadge, heading);
 
   const description = document.createElement('p');
   description.className = 'text-sm text-slate-400';
   description.textContent = topic.description;
 
-  header.append(heading, description);
+  const moduleCountPill = document.createElement('span');
+  moduleCountPill.className =
+    'inline-flex w-fit items-center gap-1 rounded-full border border-white/10 bg-slate-800/60 px-3 py-1 text-xs font-medium text-slate-400';
+  moduleCountPill.textContent = `${modules.length} module${modules.length === 1 ? '' : 's'}`;
+
+  header.append(headingRow, description, moduleCountPill);
 
   const grid = document.createElement('div');
   grid.className = 'grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3';
-  modules.forEach((module) => grid.appendChild(createModuleCard(module, topic.slug)));
+  modules.forEach((module, index) => grid.appendChild(createModuleCard(module, topic.slug, index + 1)));
 
   container.append(header, grid);
 
@@ -66,11 +83,11 @@ function createProjectCard(project, topicSlug) {
   const card = document.createElement('button');
   card.type = 'button';
   card.className =
-    'flex flex-col gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-6 text-left transition duration-300 hover:-translate-y-1 hover:border-emerald-500/40 focus:outline-none focus:ring-2 focus:ring-emerald-500/50';
+    'group flex flex-col gap-2 rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-emerald-500/10 to-violet-500/10 p-6 text-left shadow-lg shadow-black/10 transition duration-300 hover:-translate-y-1 hover:border-emerald-500/40 hover:shadow-[0_8px_30px_rgba(16,185,129,0.15),0_10px_40px_rgba(139,92,246,0.12)] focus:outline-none focus:ring-2 focus:ring-emerald-500/50';
 
   const eyebrow = document.createElement('span');
-  eyebrow.className = 'text-xs font-semibold uppercase tracking-wide text-emerald-400';
-  eyebrow.textContent = 'Production Project';
+  eyebrow.className = 'flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-emerald-400';
+  eyebrow.textContent = '🚀 Production Project';
 
   const title = document.createElement('h3');
   title.className = 'text-base font-semibold text-slate-50';
@@ -85,11 +102,28 @@ function createProjectCard(project, topicSlug) {
   return card;
 }
 
-function createModuleCard(module, topicSlug) {
+function createModuleCard(module, topicSlug, position) {
   const card = document.createElement('button');
   card.type = 'button';
   card.className =
-    'flex flex-col gap-2 rounded-xl border border-white/5 bg-slate-800 p-5 text-left shadow-lg shadow-black/20 transition duration-300 hover:-translate-y-1 hover:border-emerald-500/30 focus:outline-none focus:ring-2 focus:ring-emerald-500/50';
+    'group flex flex-col gap-3 rounded-2xl border border-white/5 bg-slate-800/60 p-5 text-left shadow-lg shadow-black/20 ring-1 ring-white/5 backdrop-blur transition duration-300 hover:-translate-y-1 hover:border-emerald-500/30 hover:shadow-[0_8px_30px_rgba(16,185,129,0.15),0_10px_40px_rgba(139,92,246,0.12)] focus:outline-none focus:ring-2 focus:ring-emerald-500/50';
+
+  const topRow = document.createElement('div');
+  topRow.className = 'flex items-start justify-between gap-3';
+
+  const badge = document.createElement('span');
+  badge.className =
+    'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 text-xs font-bold text-emerald-400 ring-1 ring-emerald-500/20';
+  badge.textContent = String(position).padStart(2, '0');
+  badge.setAttribute('aria-hidden', 'true');
+
+  const arrow = document.createElement('span');
+  arrow.className =
+    'text-slate-600 opacity-0 transition duration-300 group-hover:translate-x-0.5 group-hover:text-emerald-400 group-hover:opacity-100';
+  arrow.setAttribute('aria-hidden', 'true');
+  arrow.textContent = '→';
+
+  topRow.append(badge, arrow);
 
   const title = document.createElement('h3');
   title.className = 'text-base font-semibold text-slate-50';
@@ -99,12 +133,13 @@ function createModuleCard(module, topicSlug) {
   description.className = 'text-sm text-slate-400';
   description.textContent = module.description;
 
-  card.append(title, description);
+  card.append(topRow, title, description);
 
   if (module.estimatedMinutes) {
     const meta = document.createElement('span');
-    meta.className = 'text-xs text-slate-500';
-    meta.textContent = `~${module.estimatedMinutes} min`;
+    meta.className =
+      'inline-flex w-fit items-center gap-1 rounded-full bg-slate-900/60 px-2.5 py-1 text-xs font-medium text-slate-400';
+    meta.textContent = `🕒 ~${module.estimatedMinutes} min`;
     card.appendChild(meta);
   }
 
@@ -136,7 +171,7 @@ export async function renderModuleView(params, query, root) {
 
 function buildModuleView(topic, module) {
   const container = document.createElement('div');
-  container.className = 'flex flex-col gap-6';
+  container.className = 'flex flex-col gap-6 animate-fade-in-up';
 
   const header = document.createElement('header');
   header.className = 'flex flex-col gap-3';
@@ -149,7 +184,7 @@ function buildModuleView(topic, module) {
   );
 
   const heading = document.createElement('h1');
-  heading.className = 'text-2xl font-semibold tracking-tight text-slate-50';
+  heading.className = 'text-2xl font-extrabold tracking-tight text-slate-50 sm:text-3xl';
   heading.textContent = module.title;
 
   const description = document.createElement('p');
@@ -164,7 +199,7 @@ function buildModuleView(topic, module) {
 
   const lessonList = document.createElement('div');
   lessonList.className = 'flex flex-col gap-3';
-  module.lessons.forEach((lesson) => lessonList.appendChild(createLessonRow(lesson)));
+  module.lessons.forEach((lesson, index) => lessonList.appendChild(createLessonRow(lesson, index + 1)));
 
   container.append(header, lessonsHeading, lessonList);
 
@@ -175,11 +210,26 @@ function buildModuleView(topic, module) {
   return container;
 }
 
-function createLessonRow(lesson) {
+function createLessonRow(lesson, position) {
   const row = document.createElement('button');
   row.type = 'button';
   row.className =
-    'flex items-center justify-between gap-4 rounded-xl border border-white/5 bg-slate-800 p-5 text-left shadow-lg shadow-black/20 transition duration-300 hover:-translate-y-1 hover:border-emerald-500/30 focus:outline-none focus:ring-2 focus:ring-emerald-500/50';
+    'group flex items-center justify-between gap-4 rounded-2xl border border-white/5 bg-slate-800/60 p-5 text-left shadow-lg shadow-black/20 ring-1 ring-white/5 backdrop-blur transition duration-300 hover:-translate-y-1 hover:border-emerald-500/30 hover:shadow-[0_8px_30px_rgba(16,185,129,0.15),0_10px_40px_rgba(139,92,246,0.12)] focus:outline-none focus:ring-2 focus:ring-emerald-500/50';
+
+  const leftGroup = document.createElement('div');
+  leftGroup.className = 'flex items-center gap-4';
+
+  const marker = document.createElement('span');
+  marker.setAttribute('aria-hidden', 'true');
+  if (lesson.isCompleted) {
+    marker.className =
+      'flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-sm font-bold text-slate-900 shadow shadow-emerald-500/30';
+    marker.textContent = '✓';
+  } else {
+    marker.className =
+      'flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-900/60 text-xs font-bold text-slate-500 ring-1 ring-white/10';
+    marker.textContent = String(position).padStart(2, '0');
+  }
 
   const textCol = document.createElement('div');
   textCol.className = 'flex flex-col gap-1';
@@ -193,36 +243,45 @@ function createLessonRow(lesson) {
   summary.textContent = lesson.summary;
 
   textCol.append(title, summary);
+  leftGroup.append(marker, textCol);
 
   const meta = document.createElement('div');
   meta.className = 'flex shrink-0 items-center gap-3 text-xs text-slate-500';
 
   if (lesson.estimatedMinutes) {
     const time = document.createElement('span');
-    time.textContent = `~${lesson.estimatedMinutes} min`;
+    time.textContent = `🕒 ~${lesson.estimatedMinutes} min`;
     meta.appendChild(time);
   }
 
   if (lesson.isCompleted) {
     const badge = document.createElement('span');
     badge.className = 'rounded-full bg-emerald-500/10 px-2 py-1 font-medium text-emerald-400';
-    badge.textContent = '✓ Completed';
+    badge.textContent = 'Completed';
     meta.appendChild(badge);
   }
 
-  row.append(textCol, meta);
+  const arrow = document.createElement('span');
+  arrow.className =
+    'hidden text-slate-600 opacity-0 transition duration-300 group-hover:translate-x-0.5 group-hover:text-emerald-400 group-hover:opacity-100 sm:inline';
+  arrow.setAttribute('aria-hidden', 'true');
+  arrow.textContent = '→';
+  meta.appendChild(arrow);
+
+  row.append(leftGroup, meta);
   row.addEventListener('click', () => navigate(`/lesson/${lesson.slug}`));
   return row;
 }
 
 function createCapstoneCard(capstone) {
   const card = document.createElement('section');
-  card.className = 'flex flex-col gap-4 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-6';
+  card.className =
+    'flex flex-col gap-4 rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-emerald-500/10 to-violet-500/10 p-6 shadow-lg shadow-black/10';
   card.setAttribute('aria-label', 'Capstone project');
 
   const eyebrow = document.createElement('span');
-  eyebrow.className = 'text-xs font-semibold uppercase tracking-wide text-emerald-400';
-  eyebrow.textContent = 'Capstone Project';
+  eyebrow.className = 'flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-emerald-400';
+  eyebrow.textContent = '🏁 Capstone Project';
 
   const title = document.createElement('h2');
   title.className = 'text-lg font-semibold text-slate-50';
