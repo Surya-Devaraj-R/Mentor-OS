@@ -45,6 +45,8 @@ public static class CurriculumContentSeedData
             BuildCSharpPerformanceAndLowLevelModule(topicIdBySlug["csharp"]),
             BuildCSharpTuplesLocalFunctionsAndModernSyntaxModule(topicIdBySlug["csharp"]),
             BuildCSharpJsonSerializationModule(topicIdBySlug["csharp"]),
+            BuildCSharpModernSyntaxAndErrorHandlingModule(topicIdBySlug["csharp"]),
+            BuildCSharpLowLevelAndDiagnosticsModule(topicIdBySlug["csharp"]),
             BuildDotNetModule(topicIdBySlug["dotnet"]),
             BuildDotNetProductionReadinessModule(topicIdBySlug["dotnet"]),
             BuildDotNetScalingAndResilienceModule(topicIdBySlug["dotnet"]),
@@ -5764,6 +5766,738 @@ public static class CurriculumContentSeedData
         return (module, [lesson1Checklist, lesson2Checklist]);
     }
 
+    private static (Module, List<ChecklistSeed>) BuildCSharpModernSyntaxAndErrorHandlingModule(int topicId)
+    {
+        var lesson1 = BuildLesson(
+            slug: "collection-expressions-and-modern-csharp-syntax",
+            title: "Collection Expressions & Modern C# 12/13 Syntax",
+            summary: "The `[...]` collection expression syntax and the spread operator `..`, and how the compiler picks the right concrete construction for arrays, List<T>, Span<T>, and enumerable interface types based on the target type.",
+            estimatedMinutes: 35,
+            objectives:
+            [
+                "Replace new T[] { ... } and new List<T>() with collection expression syntax, and explain how the compiler infers what to construct",
+                "Use the spread operator .. to combine existing sequences into a new collection without AddRange or manual loops",
+                "Explain which target types collection expressions support (arrays, List<T>, Span<T>/ReadOnlySpan<T>, and enumerable interface types) and why target typing is the mechanism behind that",
+                "Recognize target-typed new() as a related but distinct modern-syntax feature driven by the same left-hand-side type inference idea",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    C# 12 introduced **collection expressions** -- the `[...]` syntax -- as one uniform way to write a collection literal that works across arrays, `List<T>`, `Span<T>`, and more, replacing several different older syntaxes that each looked different depending on which collection type you were building.
+
+                    Before C# 12: `int[] numbers = new int[] { 1, 2, 3 };` for an array, `List<string> names = new List<string>();` for a list -- a different shape for each type. Collection expressions replace all of that with one consistent syntax: `int[] numbers = [1, 2, 3];`, `List<string> names = [];`, `Span<int> span = [10, 20, 30];`. The syntax itself never changes -- what changes is the **target type** the compiler sees on the left-hand side (a variable declaration, a parameter type, a return type, a field initializer). The compiler examines that target type and constructs whichever concrete thing is appropriate: a real `System.Array` for `int[]`, a `List<int>` (built using its `Add` method internally) for `List<int>`, an inline/stack-friendly memory view for `Span<int>`, or a compiler-chosen backing implementation for interface targets like `IEnumerable<T>` or `IReadOnlyList<T>`.
+
+                    The **spread operator** `..` inlines the contents of an existing sequence directly into a new collection expression: `List<int> combined = [.. first, .. second, 100];` enumerates `first`, then `second`, copying each element in order, then appends the literal `100` -- one new list, no manual loop, no explicit `AddRange` call. Spread only works against something enumerable -- a type implementing `IEnumerable<T>` (or otherwise satisfying the compiler's notion of a countable/enumerable source). It is not a generic "unpack any object into pieces" operator; you cannot spread a plain object that isn't collection-like.
+
+                    For context, **target-typed `new()`** (C# 9) is a separate but philosophically related feature: `Dictionary<string, List<int>> lookup = new();` lets the compiler infer the constructed type from the left-hand-side declaration instead of repeating the full type name after `new`. It doesn't build a collection expression's contents -- it just avoids restating a single type name -- but it's driven by the same underlying idea: the compiler reads the target type and does the obvious thing instead of you spelling it out twice.
+
+                    This repo targets .NET 10, and collection expressions require only C# 12/.NET 8+, so this is safe, current, mainstream syntax to reach for by default in new code -- not a bleeding-edge experiment.
+                    """, 1),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Collection expression basics**
+
+                    - `[]` -- empty collection; becomes an empty array, an empty `List<T>`, etc. depending on the target type
+                    - `[1, 2, 3]` -- the same literal builds whichever concrete type the target type calls for
+                    - `[.. other]` -- spread; enumerates `other` and copies its elements into the new collection being built
+                    - `[.. first, .. second, 100]` -- spread multiple sources plus extra literal elements, all in one expression
+
+                    **Supported target types**
+
+                    - Arrays (`int[]`, `string[]`, ...)
+                    - `List<T>` and other types with an `Add` method (the "collection initializer pattern")
+                    - `Span<T>` / `ReadOnlySpan<T>`
+                    - Enumerable interface types: `IEnumerable<T>`, `IReadOnlyList<T>`, `IReadOnlyCollection<T>`, `ICollection<T>`, `IList<T>`
+
+                    **Rules**
+
+                    - The construction is chosen by the **target type**, not by the `[...]` syntax itself
+                    - Spread `..` requires an enumerable source -- it cannot "spread" an arbitrary non-collection object
+                    - Requires C# 12 / .NET 8+
+                    - Target-typed `new()` (C# 9) is a related, separate feature: `Dictionary<string,int> d = new();` infers the type, but constructs one object, not a collection
+                    """, 2),
+                Block(BlockType.CodeSnippet, "Collection Expressions, Spread, and Target Typing", BodyFormat.PlainText, """
+                    // --- Before: a different construction syntax for every collection type ---
+                    int[] oldNumbers = new int[] { 1, 2, 3, 4, 5 };
+                    List<string> oldNames = new List<string>();
+                    List<int> oldCombined = new List<int>();
+                    oldCombined.AddRange(oldNumbers);
+                    oldCombined.Add(99);
+
+                    // --- After: collection expressions (C# 12, .NET 8+) ---
+                    int[] numbers = [1, 2, 3, 4, 5];
+                    List<string> names = [];
+                    Span<int> span = [10, 20, 30];
+
+                    // Spread operator: flatten multiple existing sequences into one new collection
+                    List<int> first = [1, 2, 3];
+                    List<int> second = [4, 5, 6];
+                    List<int> combined = [.. first, .. second, 100];   // 1, 2, 3, 4, 5, 6, 100
+
+                    // The compiler picks the construction based on the TARGET TYPE, not the
+                    // literal itself -- the exact same "[1, 2, 3]" text becomes a very different
+                    // runtime object depending on what it's assigned to:
+                    int[] asArray = [1, 2, 3];                 // a real System.Array
+                    List<int> asList = [1, 2, 3];              // a List<int>, built via Add internally
+                    ReadOnlySpan<int> asSpan = [1, 2, 3];       // a stack-friendly span view
+                    IEnumerable<int> asSequence = [1, 2, 3];    // compiler picks a suitable backing type
+
+                    // Spread only works on an enumerable source -- both operands below are
+                    // genuine collections, so this compiles and merges them in order.
+                    int[] merged = [.. asArray, .. asList];
+
+                    // Related modern-syntax callback: target-typed new() infers the type from
+                    // the left-hand side too, but constructs one object, not a collection.
+                    Dictionary<string, List<int>> lookup = new();
+                    """, 3, language: "csharp"),
+                Block(BlockType.Diagram, "One Literal, Target-Typed to Different Concrete Types", BodyFormat.AsciiArt, """
+                                         [1, 2, 3]   (the SAME collection expression)
+                                              |
+                        +---------------------+---------------------+----------------------+
+                        |                     |                     |                      |
+                        v                     v                     v                      v
+                    int[] arr            List<int> list       Span<int> span        IEnumerable<int> seq
+                    (System.Array)        (heap list, Add()    (stack/inline          (compiler picks a
+                                            used internally)     memory view)           suitable backing store)
+
+                    Spread:  [.. a, .. b]
+                        -> compiler enumerates "a", then "b", copying each element into the
+                           new collection being built, in order.
+                        -> requires "a" and "b" to be enumerable (IEnumerable<T>-like) --
+                           it cannot spread an arbitrary non-collection object.
+                    """, 4),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Default to collection expressions for new code targeting C# 12+/.NET 8+ -- `[1, 2, 3]` and `[]` read consistently across array/`List<T>`/`Span<T>` call sites instead of juggling three older syntaxes, and the compiler chooses an efficient backing representation for the target type (an empty array literal `[]` targeting an array type, for example, can reuse a single cached empty-array instance rather than allocating a new one every time).
+
+                    Reach for the spread operator instead of manual `AddRange`/`Concat` calls when combining a small, fixed number of known sequences into a new collection -- `[.. first, .. second]` reads as one literal instead of several mutating statements. For genuinely large or dynamically-sized merges, an incrementally-built `List<T>` (or lazy `Enumerable.Concat`) may still be clearer than cramming everything into one literal.
+                    """, 5),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    If asked "what's the difference between `new int[] {1,2,3}` and `[1,2,3]`?", the accurate answer is: nothing changes about the resulting value for an array target -- collection expressions are a compile-time syntax simplification, not a new runtime collection type. What's new is that the same `[1,2,3]` syntax also works, unmodified, for `List<T>`, `Span<T>`, and enumerable interface types, because the compiler decides what to build based on the target type rather than the literal syntax dictating it. Being able to explain "target typing" in one sentence is what separates "I've seen the new brackets" from actually understanding the feature.
+                    """, 6),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Assuming `[1, 2, 3]` always produces the same concrete runtime type regardless of context -- it doesn't; the exact same literal produces a real array for an `int[]` target, but a `List<int>` (built via `Add` calls under the hood) for a `List<int>` target, and something else again for `Span<int>`. The syntax is target-typed, not a fixed "array literal."
+
+                    Also common: trying to spread something that isn't enumerable (`[.. someNonCollectionObject]`) and expecting the compiler to figure out how to "unpack" it -- spread requires an actual enumerable source; it is not a generic decomposition operator for arbitrary objects.
+                    """, 7),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    A collection expression is like ordering "the usual" at a cafe that adjusts what you actually get based on which counter you're standing at -- say "[1, 2, 3]" at the array counter and you get a fixed tray; say the exact same words at the List<T> counter and you get an expandable basket instead -- same words, different actual container, because the counter (the target type) decides.
+
+                    The spread operator `..` is like a barista pouring the entire contents of two existing pitchers into one new pitcher before topping it off with a splash more -- it only works because pitchers (enumerable things) know how to be poured out one element at a time; you cannot "pour out" something that was never a pitcher to begin with.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "Given `int[] a = [1, 2, 3];` and `List<int> b = [1, 2, 3];`, what determines whether the compiler builds a real array or a List<int> from the identical [1, 2, 3] syntax?",
+                    "Collection expressions are target-typed: the compiler looks at the declared type on the left-hand side of the assignment (int[] vs List<int>) and constructs whichever concrete type that target calls for. The bracket syntax itself never changes.",
+                    [
+                        new QuizOptionSeed("The target type on the left-hand side of the declaration -- collection expressions are target-typed, not a fixed literal type", true),
+                        new QuizOptionSeed("The order the elements are listed in", false),
+                        new QuizOptionSeed("Whether the values are constants or variables", false),
+                        new QuizOptionSeed("Nothing -- both always produce a boxed object array under the hood", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "Which line correctly uses the spread operator to combine two existing List<int> instances named first and second into one new list, with an extra trailing value 100?",
+                    "The spread operator .. enumerates each source collection's elements into the new collection expression in order; plain literal syntax without .. would nest first and second as elements rather than spreading their contents, and neither * nor + is valid syntax for this.",
+                    [
+                        new QuizOptionSeed("List<int> combined = [.. first, .. second, 100];", true),
+                        new QuizOptionSeed("List<int> combined = [first, second, 100];", false),
+                        new QuizOptionSeed("List<int> combined = [*first, *second, 100];", false),
+                        new QuizOptionSeed("List<int> combined = first + second + 100;", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Collection expressions (C# reference)", "https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/operators/collection-expressions", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("What's new in C# 12", "https://learn.microsoft.com/en-us/dotnet/csharp/whats-new/csharp-12", LinkType.OfficialDocs),
+            ]);
+
+        var lesson1Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson1.Slug,
+        [
+            "Rewrite three existing new T[] {...}/new List<T>() declarations in one of your own projects using collection expression syntax, and confirm the project still builds",
+            "Combine two lists of your own using the spread operator [.. a, .. b] and print the result to confirm the order and contents",
+            "Declare a Span<int> and an IEnumerable<int> from the exact same [1, 2, 3] literal, and reason through (or inspect) what concrete type backs each one",
+        ]);
+
+        var lesson2 = BuildLesson(
+            slug: "result-pattern-and-functional-error-handling",
+            title: "Result Pattern & Functional Error Handling",
+            summary: "Returning a hand-rolled Result<TValue, TError> value that represents success-with-a-value or failure-with-an-error, instead of throwing for expected, recoverable failures -- and exactly where that pattern fits alongside exceptions.",
+            estimatedMinutes: 40,
+            objectives:
+            [
+                "Explain the difference between exceptions (unexpected, exceptional conditions) and the Result pattern (expected, recoverable failures that are part of a method's normal contract)",
+                "Hand-roll a minimal Result<TValue, TError>-shaped type with success/failure construction and a way to check which state it holds",
+                "Write a method that returns a Result instead of throwing for an expected failure case, and calling code that branches on success/failure without try/catch",
+                "State clearly that C# has no built-in Result<T> type, and identify where a hand-rolled type versus a community library each fit",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    Every method that can fail has to decide how to communicate that failure to its caller. C# gives you two fundamentally different tools for this, and reaching for the wrong one is a common source of both slower code and harder-to-follow control flow.
+
+                    **Exceptions** are C#'s built-in mechanism for genuinely **unexpected, exceptional** conditions -- situations that violate a method's basic contract or that the caller cannot reasonably be expected to plan for: a database connection dropping mid-query, a required file that's been deleted by another process, a bug that violated an internal invariant. Throwing unwinds the call stack until something catches it, and constructing/throwing an exception carries real runtime cost (capturing a stack trace, unwinding frames) -- a cost that's irrelevant for something genuinely rare, but wasteful if it happens on every routine call.
+
+                    The **Result pattern** is for the opposite case: failures that are **expected**, **routine**, and part of a method's normal contract -- "this user ID doesn't exist," "this input failed validation," "this order is already shipped and can't be cancelled." These aren't bugs or emergencies; they're one of two or three completely ordinary outcomes a caller needs to handle on every single call. Instead of throwing, the method returns a value that explicitly represents *either* success-with-a-value *or* failure-with-an-error-detail, and the caller checks which one it got before proceeding -- the same spirit as .NET's own `TryParse`-style APIs, just generalized into a reusable type instead of an `out` parameter plus a `bool`.
+
+                    **C# does not have a built-in `Result<T>` type.** Unlike Rust's `Result<T, E>` or F#'s `Result<'T, 'TError>`, this is not a language feature or a BCL type. It is a *pattern* you either hand-roll yourself -- a small generic type carrying a success flag, a value, and an error -- or adopt from a community library (FluentResults, OneOf, and LanguageExt all offer ready-made versions). The example below hand-rolls a minimal one specifically to show the shape of the pattern, not to suggest you must write this from scratch on every real project.
+
+                    A minimal hand-rolled version needs: a way to construct a success case (holding a value) and a failure case (holding an error), a way for calling code to check which one it has (an `IsSuccess`/`IsFailure` flag), and properties to retrieve the value or error only once the corresponding state has been confirmed. Because the failure case is a completely normal, expected return value rather than a thrown exception, there is no stack unwinding and no `try`/`catch` required at the call site -- just an ordinary `if` check or pattern match, exactly like checking any other property on any other object.
+                    """, 1),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **When to use which**
+
+                    - Exception -- unexpected, truly exceptional condition; not part of the method's normal contract (I/O failure, violated invariant, bug)
+                    - Result pattern -- expected, recoverable failure that is a routine part of the method's contract ("not found," "validation failed")
+
+                    **Minimal hand-rolled shape**
+
+                    - `IsSuccess` / `IsFailure` -- which state the result currently holds
+                    - `Value` -- accessible (without throwing) only when `IsSuccess` is true
+                    - `Error` -- accessible (without throwing) only when `IsFailure` is true
+                    - Static factories: `Result<TValue, TError>.Success(value)` / `Result<TValue, TError>.Failure(error)`
+
+                    **Key facts**
+
+                    - C# has NO built-in `Result<T>` type -- this is a hand-rolled pattern, not a language feature
+                    - Community libraries exist (FluentResults, OneOf, LanguageExt) if you'd rather not hand-roll one
+                    - Returning a Result avoids the cost of throwing/catching for routine, expected failures
+                    - Callers branch on `IsSuccess`/pattern match instead of wrapping calls in try/catch
+                    """, 2),
+                Block(BlockType.CodeSnippet, "A Minimal Hand-Rolled Result<TValue, TError>", BodyFormat.PlainText, """
+                    public readonly struct Result<TValue, TError>
+                    {
+                        public bool IsSuccess { get; }
+                        public bool IsFailure => !IsSuccess;
+
+                        private readonly TValue _value;
+                        private readonly TError _error;
+
+                        private Result(bool isSuccess, TValue value, TError error)
+                        {
+                            IsSuccess = isSuccess;
+                            _value = value;
+                            _error = error;
+                        }
+
+                        public static Result<TValue, TError> Success(TValue value) => new(true, value, default!);
+                        public static Result<TValue, TError> Failure(TError error) => new(false, default!, error);
+
+                        public TValue Value => IsSuccess
+                            ? _value
+                            : throw new InvalidOperationException("Result has no value; check IsSuccess first.");
+
+                        public TError Error => IsFailure
+                            ? _error
+                            : throw new InvalidOperationException("Result has no error; this Result is a success.");
+                    }
+
+                    public record User(int Id, string Name);
+
+                    // A method that returns Result instead of throwing for an EXPECTED failure --
+                    // "user not found" is a routine, everyday outcome of a lookup, not a bug.
+                    public static class UserRepository
+                    {
+                        private static readonly Dictionary<int, User> Users = new()
+                        {
+                            [1] = new User(1, "Ana"),
+                            [2] = new User(2, "Bilal"),
+                        };
+
+                        public static Result<User, string> FindById(int id)
+                        {
+                            return Users.TryGetValue(id, out var user)
+                                ? Result<User, string>.Success(user)
+                                : Result<User, string>.Failure($"No user found with id {id}");
+                        }
+                    }
+
+                    // Calling code branches on success/failure -- no try/catch needed, because
+                    // "not found" was never an exception in the first place.
+                    var result = UserRepository.FindById(42);
+                    if (result.IsSuccess)
+                    {
+                        Console.WriteLine($"Found: {result.Value.Name}");
+                    }
+                    else
+                    {
+                        Console.WriteLine($"Lookup failed: {result.Error}");
+                    }
+
+                    // Contrast: a genuinely EXCEPTIONAL condition still gets a real exception --
+                    // this is not something a caller is expected to routinely branch on.
+                    public static void LoadCriticalConfigOrThrow(string path)
+                    {
+                        if (!File.Exists(path))
+                        {
+                            throw new FileNotFoundException("Required startup config is missing -- the app cannot run.");
+                        }
+                    }
+                    """, 3, language: "csharp"),
+                Block(BlockType.Diagram, "Two Failure Paths: Exception vs. Result", BodyFormat.AsciiArt, """
+                    Unexpected, exceptional condition            Expected, recoverable failure
+                    (bug, corrupted state, I/O disaster)          (not found, validation failed)
+                                |                                              |
+                                v                                              v
+                       throw new SomeException(...)              Result<TValue, TError>.Failure(error)
+                                |                                              |
+                       stack unwinds until a catch                    returned like any normal value --
+                       (or the process crashes)                        no unwinding, no catch needed
+                                |                                              |
+                                v                                              v
+                       try { ... }                                if (result.IsSuccess) { ... }
+                       catch (SomeException ex)                    else { ... }
+                       { handle the emergency }                    { handle the routine, expected case }
+                    """, 4),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Reach for the Result pattern at a method's own natural failure points that are part of its documented contract -- "lookup returned nothing," "validation failed," "this operation conflicts with current state" -- especially in hot paths called often, where throwing/catching routinely would add real overhead. Keep exceptions for conditions a caller genuinely cannot be expected to plan for, and never throw purely for control flow just because it was the easiest thing to reach for.
+
+                    If you need richer Result behavior -- implicit conversions, `Match`/`Map` combinators, a collection of validation errors instead of a single one -- reach for an established library like FluentResults or OneOf rather than growing your own hand-rolled type into something bespoke and under-tested; the type shown here is meant to teach the shape of the pattern, not to be the final production-grade implementation.
+                    """, 5),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    When asked "when would you use a Result type instead of exceptions," the answer that shows real understanding isn't "Result types are faster" in the abstract -- it's naming the actual distinction: exceptions communicate that something abnormal happened outside the method's normal contract, while a Result return value communicates one of several completely normal, expected outcomes as part of that contract. Also worth stating plainly: C# has no built-in `Result<T>` -- saying "just use C#'s Result type" without qualifying that it's a pattern you build or import is a common and avoidable inaccuracy.
+                    """, 6),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Using the Result pattern for conditions that are genuinely exceptional (an out-of-memory condition, a corrupted internal invariant) just because "throwing exceptions is slow" -- that reasoning applies to routine, expected outcomes, not to rare emergencies where an exception's cost is irrelevant next to the severity of what happened.
+
+                    Also common: defining a Result type but then reading `.Value` (or `.Error`) without checking `IsSuccess`/`IsFailure` first -- this reintroduces the exact same kind of crash the pattern was meant to avoid, except now it's an `InvalidOperationException` on a Result object instead of the original exception you were trying to sidestep. And claiming C# "has" a Result type as a language feature, when it is a pattern you hand-roll or import from a library.
+                    """, 7),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    An exception is a fire alarm -- it interrupts everything, everyone drops what they're doing and evacuates via the nearest exit (a catch block), and you only want it going off for genuine emergencies, not every time someone burns toast. A Result return value is more like a form with a "not found" checkbox already printed on it -- checking that box is a completely normal, anticipated way to fill out the form, and whoever reads it just looks at which box got checked and proceeds accordingly, with no alarms and no evacuation.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "A method looks up a user by ID, and the ID legitimately doesn't exist in the data store -- a completely routine, expected outcome of calling the method. Which approach best fits this lesson's guidance?",
+                    "Because a missing ID is an expected, recoverable outcome that's part of the method's normal contract -- not a bug or an emergency -- returning a Result value that represents 'not found' as a normal outcome fits better than throwing, which the lesson reserves for genuinely unexpected conditions.",
+                    [
+                        new QuizOptionSeed("Return a Result<User, string> (or similar) representing the 'not found' outcome as a normal return value, since it's an expected, recoverable case that's part of the method's contract", true),
+                        new QuizOptionSeed("Throw a custom NotFoundException, since any failure of any kind should always be represented as an exception", false),
+                        new QuizOptionSeed("Return null with no other signal, and rely on every caller remembering that null means 'not found'", false),
+                        new QuizOptionSeed("Crash the process, since an invalid ID indicates the application's state has been corrupted", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "Which statement about C#'s support for the Result pattern is accurate?",
+                    "C# has no built-in Result<T> type in the language or the base class library -- unlike Rust or F#, this is purely a pattern you implement yourself or adopt from a community library such as FluentResults, OneOf, or LanguageExt.",
+                    [
+                        new QuizOptionSeed("C# has no built-in Result<T> type -- it's a pattern you hand-roll yourself or adopt from a community library", true),
+                        new QuizOptionSeed("C# includes a built-in System.Result<T> type in the base class library, similar to Rust's Result<T, E>", false),
+                        new QuizOptionSeed("The Result pattern requires a 'result' contextual keyword introduced in C# 12", false),
+                        new QuizOptionSeed("Result<T> is a feature of nullable reference types and only works under #nullable enable", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Exceptions and exception handling", "https://learn.microsoft.com/en-us/dotnet/csharp/fundamentals/exceptions/", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("Design guidelines for exceptions", "https://learn.microsoft.com/en-us/dotnet/standard/design-guidelines/exception-throwing", LinkType.OfficialDocs),
+            ],
+            prerequisites: [lesson1]);
+
+        var lesson2Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson2.Slug,
+        [
+            "Hand-roll the Result<TValue, TError> struct from this lesson (or your own minimal version) and write a method that returns it instead of throwing for one 'expected failure' case in your own code",
+            "Write calling code that branches on IsSuccess/IsFailure without a try/catch block, then deliberately read .Value on a failure Result to see the InvalidOperationException it throws",
+            "Pick one exception in your own codebase and decide out loud whether it represents a truly unexpected condition or an expected, recoverable one that would fit the Result pattern better",
+        ]);
+
+        var module = BuildModule(topicId, "csharp-modern-syntax-and-error-handling", "Modern Syntax & Error Handling",
+            "Modern C# 12/13 collection expression syntax and the spread operator for building arrays, lists, and spans, followed by the Result pattern for expected, recoverable failures as a hand-rolled contrast to throwing exceptions.",
+            75, [lesson1, lesson2], sortOrder: 16);
+
+        return (module, [lesson1Checklist, lesson2Checklist]);
+    }
+
+    private static (Module, List<ChecklistSeed>) BuildCSharpLowLevelAndDiagnosticsModule(int topicId)
+    {
+        var lesson1 = BuildLesson(
+            slug: "unsafe-code-pointers-and-stackalloc",
+            title: "Unsafe Code, Pointers & stackalloc",
+            summary: "The unsafe keyword and its three forms, raw pointers and pointer arithmetic, why fixed exists to pin managed memory against a moving GC, and stackalloc -- both the classic unsafe form and the modern Span<T> form that needs no unsafe context at all.",
+            estimatedMinutes: 40,
+            objectives:
+            [
+                "Explain what the unsafe keyword does and identify its three forms: a method modifier, a block modifier, and a whole-type modifier",
+                "Write and reason about a raw pointer declaration, a dereference, and pointer arithmetic over an array",
+                "Explain why the fixed statement is required when taking a pointer into a managed array or string, and what could go wrong without it",
+                "Use stackalloc assigned directly to a Span<T> without an unsafe context, and explain why that's safe when raw pointer stackalloc isn't",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    The **`unsafe`** keyword opens an *unsafe context* -- a region of code where C# allows raw pointer types (`int*`, `byte*`, and so on) and pointer arithmetic, neither of which is legal in ordinary ("safe") C#. It comes in three forms. As a **method modifier** (`public static unsafe void DoWork()`), the entire method body is an unsafe context. As a **block modifier** (`unsafe { ... }`), only that block is unsafe, and the surrounding method stays ordinary safe code before and after it. As a **type modifier** (`public unsafe class Thing`), every member of that type is implicitly inside an unsafe context. None of this compiles at all, in any form, unless the project sets `<AllowUnsafeBlocks>true</AllowUnsafeBlocks>` in its `.csproj` -- without that setting, the compiler rejects unsafe code outright with a build error, which is by far the most common point of confusion the first time someone tries this.
+
+                    A **pointer** is a variable that holds a raw memory address instead of a value. `int* p = &someInt;` takes the *address* of `someInt` (the `&` operator) and stores it in `p`. `*p` **dereferences** the pointer -- it reads (or, on the left of an assignment, writes) the value stored at that address. Pointers also support **pointer arithmetic**: for an `int* p` pointing into an array, `p++` doesn't advance by one byte, it advances by `sizeof(int)` bytes -- one whole element -- so walking an array with a pointer looks like `for (...) { /* use *p */ p++; }` instead of indexing with `[i]`.
+
+                    The **`fixed`** statement exists because of the garbage collector. Ordinary managed objects -- arrays, strings, class instances -- can be *moved* in memory by a compacting GC during a collection, and the runtime quietly updates every managed reference to point at the new location. A raw pointer is not a managed reference the GC knows how to update -- it's just a number. If the GC moved an array while a raw pointer held the address of one of its elements, that pointer would now point at whatever happens to occupy the old address (stale data, another object's memory, or nothing at all). `fixed (int* p = someArray) { ... }` **pins** the array for the duration of the block -- it tells the GC "do not move this object until the block ends" -- so the pointer stays valid the whole time it's in scope. Taking the address of an ordinary local variable (`&someInt` where `someInt` is a plain stack-based local, not a field inside a movable heap object) doesn't need `fixed`, because that memory is on the stack and the GC never relocates the stack.
+
+                    **`stackalloc`** allocates a block of memory directly on the current method's stack frame instead of the managed heap -- it needs no garbage collection at all, because it's reclaimed automatically the instant the method returns, exactly like any other local variable. The classic form, `int* p = stackalloc int[10];`, produces a raw pointer and therefore requires an unsafe context. Since C# 7.2, though, you can write `Span<int> buffer = stackalloc int[10];` **without `unsafe` and without `AllowUnsafeBlocks`** -- the compiler wraps the stack-allocated memory in a `Span<T>`, which is bounds-checked and safe to index, instead of handing you a raw pointer. This is the version worth reaching for by default: same zero-heap-allocation, zero-GC benefit as the unsafe form, with none of the risk.
+
+                    In practice, real `unsafe`/pointer code is rare in typical business or web application code -- most of what a web API, a service layer, or a typical LOB application does is well served by ordinary safe C#. The places it genuinely earns its keep are interop with native libraries (marshaling raw buffers across a P/Invoke boundary) and extreme, measured hot-path performance work where even the small overhead of bounds-checked `Span<T>` access matters. Reaching for `unsafe` because it sounds fast, without an actual interop requirement or a profiler pointing at the exact line, is solving a problem you don't have while taking on real risk (memory corruption, crashes) you didn't have before.
+                    """, 1),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **The three forms of unsafe context**
+
+                    - Method modifier -- `public static unsafe void Method(...)`: the whole method body is unsafe
+                    - Block modifier -- `unsafe { ... }`: only that block is unsafe, inside an otherwise safe method
+                    - Type modifier -- `public unsafe class Thing { ... }`: every member is implicitly unsafe
+                    - Required either way: `<AllowUnsafeBlocks>true</AllowUnsafeBlocks>` in the `.csproj`, or none of it compiles
+
+                    **Pointers**
+
+                    - `int* p = &someInt;` -- `&` takes the address of a variable
+                    - `*p` -- dereference: read or write the value at that address
+                    - `p++` on an `int*` advances by `sizeof(int)` bytes (one element), not one byte
+                    - Pointer types can be fields, parameters, and locals -- but only inside an unsafe context
+
+                    **fixed**
+
+                    - `fixed (int* p = array) { ... }` -- pins `array` so a compacting GC cannot move it while `p` is in scope
+                    - Needed for a raw pointer into anything the GC can relocate (arrays, strings); NOT needed for the address of a plain stack local
+
+                    **stackalloc**
+
+                    - `int* p = stackalloc int[10];` -- raw pointer form, requires `unsafe`
+                    - `Span<int> buffer = stackalloc int[10];` -- safe form (C# 7.2+), no `unsafe`, bounds-checked, no `AllowUnsafeBlocks` needed
+                    - Both are stack memory: zero heap allocation, reclaimed automatically when the method returns
+
+                    **When this is actually worth reaching for**
+
+                    - Native interop (P/Invoke buffer marshaling) and measured, extreme hot-path performance -- not typical business/web app code
+                    """, 2),
+                Block(BlockType.CodeSnippet, "unsafe, Pointers, fixed, and the Safe stackalloc Alternative", BodyFormat.PlainText, """
+                    // Requires <AllowUnsafeBlocks>true</AllowUnsafeBlocks> in the .csproj for
+                    // everything in this first half -- without it, none of this compiles.
+
+                    // Form 1: "unsafe" as a whole-TYPE modifier -- every member below is
+                    // implicitly inside an unsafe context.
+                    public unsafe class UnsafeCounter
+                    {
+                        private int* _pointer;
+
+                        public UnsafeCounter(int* pointer) => _pointer = pointer;
+
+                        public int Read() => *_pointer; // dereference: read the value at the address
+                    }
+
+                    public static class PointerBasics
+                    {
+                        // Form 2: "unsafe" as a METHOD modifier -- only this method's body is
+                        // an unsafe context; the rest of the (ordinary, safe) class is untouched.
+                        public static unsafe void SwapViaPointers(int* a, int* b)
+                        {
+                            int temp = *a;
+                            *a = *b;
+                            *b = temp;
+                        }
+
+                        public static unsafe void PointerArithmeticOverArray()
+                        {
+                            int[] numbers = { 10, 20, 30, 40, 50 };
+
+                            // "fixed" pins the array in place so the GC cannot move it while a raw
+                            // pointer into it is in use -- without this, a compacting GC could
+                            // relocate the array between two pointer operations, leaving the
+                            // pointer referencing stale or unrelated memory.
+                            fixed (int* firstElement = numbers)
+                            {
+                                int* p = firstElement;
+
+                                for (int i = 0; i < numbers.Length; i++)
+                                {
+                                    Console.WriteLine(*p); // dereference: read the int this pointer points at
+                                    p++;                   // pointer arithmetic: advance by one int (4 bytes)
+                                }
+
+                                SwapViaPointers(firstElement, firstElement + 1); // swaps numbers[0] and numbers[1]
+                            }
+                        }
+
+                        public static void MixedMethod()
+                        {
+                            int value = 42;
+
+                            // Form 3: "unsafe" as a BLOCK modifier -- everything outside this
+                            // block is ordinary safe code. No "fixed" is needed here because
+                            // "value" is a plain stack local, not an object the GC can relocate.
+                            unsafe
+                            {
+                                int* p = &value; // & takes the address of a local variable
+                                Console.WriteLine(*p);
+                            }
+                        }
+                    }
+
+                    // ---- The modern, SAFE alternative for a plain stack buffer ----
+                    // No "unsafe" keyword and no AllowUnsafeBlocks needed at all: stackalloc
+                    // assigned directly to a Span<T> is safe, bounds-checked, and still
+                    // entirely stack memory with zero GC involvement.
+                    public static class SafeStackBuffer
+                    {
+                        public static int SumOfSquares(int count)
+                        {
+                            Span<int> buffer = stackalloc int[count]; // stack memory, not heap
+
+                            for (int i = 0; i < buffer.Length; i++)
+                                buffer[i] = i * i;
+
+                            int total = 0;
+                            foreach (int value in buffer)
+                                total += value; // Span<T> indexing is bounds-checked, unlike raw pointer[i]
+
+                            return total; // buffer is gone the instant this method returns
+                        }
+                    }
+                    """, 3, language: "csharp"),
+                Block(BlockType.Diagram, "Why fixed Pins the Array Against a Moving GC", BodyFormat.AsciiArt, """
+                    Managed heap (a compacting GC is free to move objects)
+                    +---------------------------+
+                    | int[] numbers              |   <-- before "fixed", the GC could relocate
+                    | [10][20][30][40][50]       |       this array during a collection
+                    +---------------------------+
+
+                    fixed (int* firstElement = numbers) { ... }
+                        "pin this object -- do not move it until the block ends"
+
+                    +---------------------------+
+                    | int[] numbers   (PINNED)   |
+                    | [10][20][30][40][50]       |
+                    +---------------------------+
+                      ^
+                      firstElement (int*)     p++ walks this pointer forward
+                                               one element (4 bytes) at a time
+
+                    Outside the fixed block: the pin is released, the GC may move the
+                    array again -- so the pointer must not be used past this point.
+
+                    Stack (the GC never moves this at all)
+                    +---------------------------+
+                    | Span<int> buffer            |   <-- stackalloc'd directly into a Span<T>:
+                    | via stackalloc               |       no raw pointer, nothing to pin,
+                    +---------------------------+       nothing that can dangle
+                    """, 4),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Default to `Span<T>`/`Memory<T>` and the safe `Span<int> buffer = stackalloc int[n];` form for any low-allocation buffer work -- reach for raw pointers and a genuine `unsafe` context only when there's a real requirement neither can satisfy, almost always native interop (marshaling a buffer across a P/Invoke call) or a specific, profiler-verified hot path.
+
+                    Keep unsafe blocks as small and short-lived as possible, and wrap them behind an ordinary safe public API -- the rest of the codebase should never need to know a method's implementation happens to use pointers internally. Set `<AllowUnsafeBlocks>true</AllowUnsafeBlocks>` only on the specific project that genuinely needs it, not solution-wide, so the surface area of code that's even allowed to use pointers stays deliberately small.
+                    """, 5),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    A common question is "why does `fixed` exist at all -- what would go wrong without it?" The expected answer names the compacting garbage collector directly: a raw pointer is just a number, not a managed reference the GC updates when it relocates an object, so without pinning, a GC compaction between two pointer operations could leave the pointer referencing memory that no longer holds what it used to.
+
+                    Also expect "does `stackalloc` always require `unsafe`?" -- the precise answer is no: `int* p = stackalloc int[10]` does, because it produces a raw pointer, but `Span<int> buffer = stackalloc int[10]` (C# 7.2+) doesn't, because the result is a bounds-checked `Span<T>`, not a pointer. Getting this distinction exactly right is what separates "has read about it" from "has actually used it."
+                    """, 6),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Forgetting `<AllowUnsafeBlocks>true</AllowUnsafeBlocks>` in the `.csproj` and being confused when even a trivial `unsafe` block fails to compile -- this is the single most common stumbling block, since the error surfaces as a compiler complaint about the `unsafe` keyword itself rather than anything obviously related to project settings.
+
+                    Also common: assuming *every* use of `stackalloc` needs `unsafe`, and reflexively wrapping a `Span<int> buffer = stackalloc int[n];` line in an unsafe block or method it doesn't need -- the safe, `Span<T>`-typed form was specifically designed not to require that. And using a raw pointer obtained inside a `fixed` block after the block has ended (storing it in a field, returning it, using it later) -- once the block exits, the object is no longer pinned and the pointer can no longer be trusted to point at anything meaningful.
+                    """, 7),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    Raw pointers and `unsafe` are like reaching directly into a warehouse's shelving with your bare hands while the automated shelf-repositioning system is still running -- normally the system (the GC) is free to slide shelves around at any time to keep things tidy, and it always updates the warehouse's own records when it does. Your bare hand, though, is holding a raw shelf-coordinate that nobody updates for you. `fixed` is putting up a "do not move this shelf" sign for exactly as long as your hand is inside it -- the moment you take your hand out (the block ends), the sign comes down and the shelf is fair game to move again.
+
+                    `stackalloc` assigned to a `Span<T>` is a different, safer setup entirely: it's your own personal folding table you set up next to your own workstation, use for a moment, and fold back up the second you're done -- nobody else's system ever needed to know it existed, and there was never a shelf-coordinate to worry about in the first place.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "Why does the fixed statement exist when taking a raw pointer into a managed array?",
+                    "A raw pointer is just an address, not a managed reference the garbage collector updates. A compacting GC is free to relocate a managed array during a collection; fixed pins the array in place for the duration of the block so the pointer stays valid the whole time it's in scope.",
+                    [
+                        new QuizOptionSeed("It allocates the array on the stack instead of the heap", false),
+                        new QuizOptionSeed("It pins the array so a compacting garbage collector cannot relocate it while a raw pointer into it is in use", true),
+                        new QuizOptionSeed("It converts the array into a read-only Span<T>", false),
+                        new QuizOptionSeed("It marks the array as thread-safe for concurrent pointer access", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "Which of these requires an unsafe context (and therefore AllowUnsafeBlocks) to compile?",
+                    "int* p = &someInt; produces a raw pointer, which only compiles inside an unsafe context. Span<int> buffer = stackalloc int[10]; is the safe, bounds-checked form introduced in C# 7.2 -- it needs neither unsafe nor AllowUnsafeBlocks.",
+                    [
+                        new QuizOptionSeed("Span<int> buffer = stackalloc int[10];", false),
+                        new QuizOptionSeed("int* p = &someInt;", true),
+                        new QuizOptionSeed("ReadOnlySpan<char> slice = someString.AsSpan(1, 3);", false),
+                        new QuizOptionSeed("buffer.Slice(0, 5) on an existing Span<int>", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Unsafe code, pointer types, and function pointers", "https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/unsafe-code", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("stackalloc expression", "https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/operators/stackalloc", LinkType.OfficialDocs),
+            ]);
+
+        var lesson1Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson1.Slug,
+        [
+            "Add <AllowUnsafeBlocks>true</AllowUnsafeBlocks> to a scratch console project's .csproj, then write and run a method that swaps two ints via int* pointers",
+            "Write a method that uses fixed over an int array and walks it with pointer arithmetic (p++), then remove the fixed statement and read the resulting compiler error",
+            "Write a method using Span<int> buffer = stackalloc int[20]; with no unsafe keyword and no AllowUnsafeBlocks setting, and confirm it compiles and runs",
+        ]);
+
+        var lesson2 = BuildLesson(
+            slug: "debugging-and-diagnostics-tooling",
+            title: "Debugging & Diagnostics Tooling",
+            summary: "Debug.Assert and [Conditional(\"DEBUG\")] for development-only checks that vanish from Release builds, Trace as the counterpart that survives into production, and Roslyn analyzers plus .editorconfig severity levels for automatically enforced code quality.",
+            estimatedMinutes: 40,
+            objectives:
+            [
+                "Use Debug.Assert to catch invariant violations during development, and explain why the call disappears entirely from Release builds",
+                "Apply [Conditional(\"DEBUG\")] to a custom method so every call site compiles out of Release the same way Debug.Assert and Debug.WriteLine do",
+                "Distinguish Trace from Debug precisely: explain why Trace.WriteLine survives into Release while Debug.WriteLine does not, and when that difference matters",
+                "Explain what a Roslyn analyzer is and how .editorconfig severity levels let a team enforce style and correctness rules automatically as part of the build",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    **`Debug.Assert(condition, message)`** checks that a condition holds and, if it doesn't, halts execution with a diagnostic message -- but only in a **Debug** build. In a **Release** build, the entire call disappears from the compiled output: not "the check is skipped," but the call site itself, including whatever expression was passed as the condition, is never emitted at all. This works because `Debug.Assert` is marked with `[Conditional("DEBUG")]` in the .NET runtime's own source, and the compiler honors that attribute by erasing every call to the method (not just its body) whenever the named symbol -- `DEBUG` -- isn't defined for that build configuration. The right use for `Debug.Assert` is catching **programmer errors and broken internal invariants** during development ("this list should never be empty here," "this argument should always be positive by the time it reaches this private method") -- never validating untrusted external input, since a Release build won't run the check at all.
+
+                    The `[Conditional("DEBUG")]` **attribute** is the exact same mechanism, available for your **own** methods. Mark a method `[Conditional("DEBUG")]` and every call to it, anywhere in the codebase, is compiled out entirely once `DEBUG` isn't defined -- the method must return `void` for this to apply, since a conditionally-erased call obviously can't produce a value for the caller to use. This is genuinely useful for your own development-time logging or diagnostic helpers: write the method once, call it freely throughout the codebase, and trust that none of those calls -- or the cost of evaluating their arguments -- survive into a Release build.
+
+                    This is also exactly where **`Trace` diverges from `Debug`**, which is the core distinction of this lesson: `Debug.WriteLine`, `Debug.Assert`, and the rest of the `System.Diagnostics.Debug` class are all `[Conditional("DEBUG")]` and therefore Debug-build-only. `Trace.WriteLine` and the rest of `System.Diagnostics.Trace`, by contrast, are **not** conditional on `DEBUG` -- they run in both Debug and Release builds. `Trace` calls don't print to a console by default at all; they forward each message to whatever `TraceListener`s the application has configured (a text file, the Windows event log, an Application Insights channel, or nothing, if none are configured). That makes `Trace` the right tool for diagnostics that genuinely need to keep working after the application ships to production, while `Debug` is for noise you only ever want during development. Mixing these up -- assuming `Debug.WriteLine` will show up in production, or assuming `Trace.WriteLine` only runs in Debug -- is one of the most commonly confused pairs of APIs in this part of .NET.
+
+                    **Roslyn analyzers** are pieces of code-analysis logic that run as part of the compiler itself during every build, inspecting your source and reporting diagnostics (warnings, errors, or suggestions) the same way the compiler reports a syntax error -- except the rules being checked are about code quality, style, or correctness patterns rather than "does this parse." The .NET SDK ships a set of built-in analyzers on by default; teams commonly add more, like `StyleCop.Analyzers` for formatting/style conventions, or a custom analyzer written for rules specific to their own codebase. An **`.editorconfig`** file lets a team tune exactly how strict each individual rule is, per rule ID, with a line like `dotnet_diagnostic.CA1062.severity = warning` (or `error`, `suggestion`, or `none`) -- one team can make a given rule a hard build failure, another can leave the same rule as a soft suggestion, all without touching a single line of the analyzer or the code it's checking. That turns "please remember to do X" from something a reviewer has to nag about in every pull request into something the build itself enforces automatically, consistently, for every commit.
+                    """, 1),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Debug.Assert**
+
+                    - `Debug.Assert(condition, message)` -- checks an invariant/programmer assumption; Debug-build only
+                    - Compiled out of Release entirely -- the call site itself, and its arguments, are never emitted
+                    - Never use it to validate untrusted external input -- it won't run at all in Release
+
+                    **[Conditional("DEBUG")] on your own methods**
+
+                    - Same erasure mechanism Debug.Assert/Debug.WriteLine use internally, applied to a method you write
+                    - Method must return void
+                    - Every call site (not just the method body) is removed from Release output, including argument evaluation
+
+                    **Debug vs. Trace -- the core distinction**
+
+                    - `Debug.*` (Debug.WriteLine, Debug.Assert, ...) -- Debug-build only, stripped from Release
+                    - `Trace.*` (Trace.WriteLine, TraceSource, ...) -- runs in BOTH Debug and Release
+                    - Trace output goes nowhere without a configured TraceListener (file, event log, App Insights, ...)
+                    - Use Trace for diagnostics that must survive into production; use Debug for development-only noise
+
+                    **Roslyn analyzers & .editorconfig**
+
+                    - Roslyn analyzers -- compile-time code inspection, run as part of every build (built-in SDK analyzers, StyleCop.Analyzers, custom ones)
+                    - `dotnet_diagnostic.<RuleId>.severity = warning|error|suggestion|none` in .editorconfig -- tunes one specific rule's severity
+                    - Lets a team enforce consistent rules automatically at build time instead of via manual code review comments
+                    """, 2),
+                Block(BlockType.CodeSnippet, "Debug.Assert, [Conditional(\"DEBUG\")], and Trace vs. Debug", BodyFormat.PlainText, """
+                    using System.Diagnostics;
+
+                    public record OrderLine(string Sku, int Quantity, decimal UnitPrice);
+
+                    public class OrderProcessor
+                    {
+                        private readonly List<OrderLine> _lines = new();
+
+                        public void AddLine(OrderLine line)
+                        {
+                            // Debug.Assert: a check for a programmer error / broken invariant.
+                            // This entire call -- condition, message, and all -- is compiled out
+                            // of a Release build. It never runs in production, so it must never
+                            // be used to validate untrusted input or enforce real business rules.
+                            Debug.Assert(line.Quantity > 0, "Order line quantity must be positive -- caller passed a bad value");
+
+                            _lines.Add(line);
+                            LogLineAdded(line); // the call itself vanishes in Release -- see [Conditional] below
+                        }
+
+                        // [Conditional("DEBUG")] applies the SAME "erase this call in Release"
+                        // mechanism Debug.Assert/Debug.WriteLine use internally, but to OUR OWN
+                        // method. Every call site -- not just the method body -- is removed from
+                        // the compiled Release output, including evaluation of its arguments.
+                        // The method must return void for this attribute to be valid here.
+                        [Conditional("DEBUG")]
+                        private void LogLineAdded(OrderLine line)
+                        {
+                            Debug.WriteLine($"Added line: {line.Sku} x{line.Quantity}");
+                        }
+
+                        public decimal Checkout()
+                        {
+                            decimal total = 0m;
+                            int lineCount = 0;
+
+                            foreach (OrderLine line in _lines)
+                            {
+                                total += line.Quantity * line.UnitPrice;
+                                lineCount++;
+                            }
+
+                            // Trace.WriteLine runs in BOTH Debug and Release builds -- it relies on
+                            // whatever TraceListeners are configured (a log file, the event log, an
+                            // Application Insights listener, etc.) to actually do something with
+                            // the message. This is the tool for diagnostics that must survive into
+                            // production; Debug.WriteLine above is stripped out of Release entirely.
+                            Trace.WriteLine($"Checkout completed: {lineCount} lines, total {total:C}");
+
+                            return total;
+                        }
+                    }
+                    """, 3, language: "csharp"),
+                Block(BlockType.Diagram, "What Survives the Debug-to-Release Build Boundary", BodyFormat.StructuredSteps, """
+                    [{"label":"Source has Debug.Assert, a [Conditional(\"DEBUG\")] method, and Trace.WriteLine","note":"all three compile and are callable regardless of configuration -- nothing here is a syntax-level Debug-only feature"},{"label":"Build in Debug configuration (DEBUG symbol defined)","note":"Debug.Assert runs and can halt execution; the [Conditional(\"DEBUG\")] method's calls run; Trace.WriteLine also runs"},{"label":"Build in Release configuration (DEBUG symbol not defined)","note":"Debug.Assert calls and every [Conditional(\"DEBUG\")] call site are erased entirely from the compiled output; Trace.WriteLine still runs"},{"label":"Roslyn analyzers run during compilation, in both configurations","note":"built-in SDK analyzers, StyleCop.Analyzers, or custom analyzers report diagnostics as part of the build itself"},{"label":".editorconfig sets dotnet_diagnostic.<RuleId>.severity","note":"the same rule can be a warning for one team and a build-breaking error for another, with zero changes to the analyzer or the code"}]
+                    """, 4),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Use `Debug.Assert` freely for internal invariants you want caught the moment they break during development, but never as a substitute for real validation of anything that could come from outside the process (user input, a network call, a file) -- that needs an actual exception-throwing check that also runs in Release. Reach for `Trace` (with a real `TraceListener` configured -- a file, the event log, or an APM/telemetry sink) for diagnostics that genuinely need to keep working once the application ships; reserve `Debug` for pure development-time noise you're glad to lose in Release.
+
+                    Turn on the analyzers that matter for your team deliberately -- the .NET SDK's built-in analyzers are on by default, but consider adding `StyleCop.Analyzers` or others -- and commit an `.editorconfig` with explicit `dotnet_diagnostic.<RuleId>.severity` settings so every contributor's build enforces the same rules the same way, rather than relying on a reviewer to catch it by eye.
+                    """, 5),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    A frequent question is "what's the difference between Debug.WriteLine and Trace.WriteLine?" The precise answer: `Debug.*` is marked `[Conditional("DEBUG")]` internally and is therefore compiled out of Release builds entirely, while `Trace.*` is not conditional at all and runs in both Debug and Release, provided a `TraceListener` is configured to actually do something with the output. Getting this backwards is an easy way to signal a shaky grasp of the distinction.
+
+                    Also expect "how would you make your own logging helper disappear from Release the same way Debug.Assert does?" -- the expected answer names `[Conditional("DEBUG")]` on your own void-returning method directly, not a runtime `if (Debugger.IsAttached)` check, which still ships the code (and its cost) into Release either way.
+                    """, 6),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Using `Debug.Assert` to validate data that comes from outside the process -- user input, a request body, a file -- on the mistaken assumption it will always run; in Release it won't run at all, so the "validation" silently vanishes exactly where it would have mattered most.
+
+                    Getting `Debug` and `Trace` backwards -- assuming `Trace.WriteLine` is the Debug-only one, or that `Debug.WriteLine` will show up in a production log -- is the single most commonly confused pair of APIs in this space; it's the opposite of how they actually behave. Also common: marking a method `[Conditional("DEBUG")]` that returns a non-`void` value, which the compiler rejects outright, since a call that might be entirely erased can't be relied on to produce a result the caller uses.
+                    """, 7),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    `Debug.Assert` and `Debug.WriteLine` are like the sticky notes and self-checks a contractor leaves around a building site purely for their own use during construction -- torn down and thrown away before the building opens to the public (a Release build), because nobody outside the crew was ever meant to see them. `Trace.WriteLine` is the permanent inspection log bolted to the wall, which keeps recording after opening day -- as long as there's actually a logbook (a configured `TraceListener`) mounted for it to write into; without one, the entries have nowhere to go, but the recording mechanism itself never gets torn out the way the sticky notes do.
+
+                    Roslyn analyzers plus `.editorconfig` are an automated building inspector built directly into the construction process -- flagging code violations as the building goes up, consistently and the same way for every crew member, instead of waiting for a human inspector to walk through with a checklist after someone's already moved in.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "A team wants a diagnostic message written in both Debug and Release builds, as long as a listener is configured to receive it. Which should they use?",
+                    "Trace.WriteLine is not conditional on the DEBUG symbol, so it runs in both Debug and Release builds, relying on a configured TraceListener to actually do something with the message. Debug.WriteLine is marked [Conditional(\"DEBUG\")] and is compiled out of Release entirely.",
+                    [
+                        new QuizOptionSeed("Debug.WriteLine", false),
+                        new QuizOptionSeed("Trace.WriteLine", true),
+                        new QuizOptionSeed("Debug.Assert", false),
+                        new QuizOptionSeed("Debug.Print", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "What happens to a call to a method marked [Conditional(\"DEBUG\")] when the project is built in the Release configuration?",
+                    "The call site itself -- including evaluation of any arguments passed to it -- is removed from the compiled output entirely, the same mechanism Debug.Assert and Debug.WriteLine rely on internally. It isn't merely skipped at runtime; it was never emitted in the first place.",
+                    [
+                        new QuizOptionSeed("The call site, including evaluation of its arguments, is compiled out of the build entirely", true),
+                        new QuizOptionSeed("It throws a MissingMethodException at runtime", false),
+                        new QuizOptionSeed("It still runs, but any exceptions it throws are silently swallowed", false),
+                        new QuizOptionSeed("It logs a build-time warning but the call still executes normally", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("ConditionalAttribute Class", "https://learn.microsoft.com/en-us/dotnet/api/system.diagnostics.conditionalattribute", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("Roslyn analyzers overview", "https://learn.microsoft.com/en-us/dotnet/fundamentals/code-analysis/overview", LinkType.OfficialDocs),
+            ]);
+
+        var lesson2Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson2.Slug,
+        [
+            "Add a Debug.Assert call to a real invariant in one of your own methods, run it in Debug, then build in Release configuration and confirm the assert is gone from the compiled output",
+            "Mark one of your own void-returning helper methods with [Conditional(\"DEBUG\")], call it from two different places, and confirm both call sites disappear from a Release build",
+            "Add a minimal .editorconfig to a project with one dotnet_diagnostic.<RuleId>.severity = warning line, introduce a violation of that rule, and confirm the build reports it",
+        ]);
+
+        var module = BuildModule(topicId, "csharp-low-level-and-diagnostics", "Low-Level C# & Diagnostics",
+            "Raw unsafe/pointer code, stackalloc (both the classic unsafe form and the modern safe Span<T> form), and the debugging and diagnostics tooling -- Debug.Assert, [Conditional(\"DEBUG\")], Trace versus Debug, and Roslyn analyzers with .editorconfig -- that a working C# developer actually reaches for.",
+            80, [lesson1, lesson2], sortOrder: 17);
+
+        return (module, [lesson1Checklist, lesson2Checklist]);
+    }
+
     // ============================== .NET ==============================
 
     private static (Module, List<ChecklistSeed>) BuildDotNetModule(int topicId)
@@ -7739,11 +8473,172 @@ public static class CurriculumContentSeedData
             "Deliberately output-cache a personalized endpoint without a VaryBy header, reproduce the cross-user cache leak with two different simulated users, then fix it with SetVaryByHeader and confirm the leak is gone",
         ]);
 
+        var lesson3 = BuildLesson(
+            slug: "api-documentation-with-openapi-and-swagger",
+            title: "API Documentation with OpenAPI & Swagger",
+            summary: "The difference between OpenAPI (the language-agnostic spec format) and Swagger (the tool ecosystem that popularized it), .NET 9/10's built-in Microsoft.AspNetCore.OpenApi document generator, adding a browsable UI on top with Scalar or Swashbuckle, and enriching generated docs with WithSummary/WithDescription/Produces<T>.",
+            estimatedMinutes: 40,
+            objectives:
+            [
+                "Explain the distinction between OpenAPI, the language-agnostic specification format, and Swagger, the tool ecosystem (including Swagger UI) that originally popularized it",
+                "Generate an OpenAPI document from a Minimal API using the built-in Microsoft.AspNetCore.OpenApi package (AddOpenApi()/MapOpenApi()) with zero extra annotation for the basic case",
+                "Add a browsable documentation UI on top of the generated OpenAPI JSON using either Scalar (Scalar.AspNetCore) or Swashbuckle's bundled Swagger UI",
+                "Enrich generated route documentation with WithSummary(), WithDescription(), and Produces<T>() so consumers see meaningful descriptions instead of raw type shapes",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    "OpenAPI" and "Swagger" get used interchangeably in casual conversation, but they name two different things, and the module's earlier gRPC lesson already brushed past this distinction once -- worth being precise about it here. **OpenAPI** is a language-agnostic specification format (a JSON or YAML document) that describes an HTTP API's shape: its endpoints, the HTTP methods and routes each one responds to, the request and response body schemas, status codes, and so on -- it doesn't care what language or framework produced the API being described. **Swagger** is the name of the tool ecosystem that originally created and popularized that spec (the format was even called "the Swagger specification" before being donated to the OpenAPI Initiative and renamed) -- "Swagger UI" specifically refers to the interactive, browsable HTML page that renders an OpenAPI document as clickable, testable documentation. In short: OpenAPI is the format; Swagger is a (still very common) toolset built around that format, one of several that now exist.
+
+                    .NET 9 shipped a first-party way to generate that OpenAPI document without depending on any third-party package: the `Microsoft.AspNetCore.OpenApi` NuGet package, wired up with `builder.Services.AddOpenApi()` and `app.MapOpenApi()`. For a Minimal API, this requires essentially zero extra annotation for the basic case -- it inspects your route registrations (paths, HTTP methods, route parameters, and the request/response types your handlers actually use) and produces a correct OpenAPI JSON document automatically. The one thing to keep straight: `AddOpenApi()`/`MapOpenApi()` on their own only produce and serve that raw JSON document at an endpoint like `/openapi/v1.json` -- they do not give you a UI page to browse it in. Before this built-in path existed, generating an OpenAPI document in ASP.NET Core meant reaching for **Swashbuckle** (`Swashbuckle.AspNetCore`), a mature third-party package that both generates the document AND bundles an actual Swagger UI page (`app.UseSwagger(); app.UseSwaggerUI();`) in one dependency -- and Swashbuckle remains extremely common in existing codebases and is still a completely reasonable choice today, especially for projects that want the generator and the UI from a single package.
+
+                    If you use the built-in `AddOpenApi()`/`MapOpenApi()` generator and still want a browsable page, you need to add a UI separately. **Scalar** (`Scalar.AspNetCore`) is a newer, lightweight option built specifically to pair with the built-in generator: add the package, call `app.MapScalarApiReference()`, and it reads the JSON document `MapOpenApi()` already serves and renders a clean, interactive docs page (commonly mounted at `/scalar/v1`) with no code generation step of its own. The other option is still Swashbuckle's bundled Swagger UI, which works whether you're using Swashbuckle's own generator or feeding it the output of the built-in one. Either way, the pattern is the same: one piece generates the OpenAPI JSON, and a separate piece renders that JSON as a page a human can click through.
+
+                    A generated document with no further work only tells a consumer the raw shapes involved -- parameter names, a response type's property list -- which is often not enough to actually understand what an endpoint does. Minimal API route registrations support chained calls specifically to enrich that generated documentation: `.WithSummary("...")` sets a short one-line description shown next to the endpoint in the UI, `.WithDescription("...")` adds a longer explanation, and `.Produces<T>(statusCode)` declares which response type and status code an endpoint can return, so the generated schema for that response actually reflects reality instead of ASP.NET Core having to guess from a single observed return path. None of this changes runtime behavior at all -- it's purely metadata that flows into the OpenAPI document -- but it's the difference between documentation a consumer can actually use and a bare list of routes. This is also, practically, why the feature matters: frontend and mobile teams, and any third-party consuming your API, rely on this generated, always-current documentation instead of a hand-written wiki page or README that drifts out of sync with the code the moment someone adds a field and forgets to update the docs.
+                    """, 1),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **OpenAPI vs. Swagger**
+
+                    - OpenAPI -- the language-agnostic spec format (JSON/YAML) describing an API's endpoints, schemas, and responses
+                    - Swagger -- the original tool ecosystem that popularized that format; "Swagger UI" = the interactive browsable docs page specifically
+                    - Format vs. tooling -- don't use the two names interchangeably
+
+                    **Built-in document generation (.NET 9+)**
+
+                    - `Microsoft.AspNetCore.OpenApi` NuGet package
+                    - `builder.Services.AddOpenApi();` -- registers the generator
+                    - `app.MapOpenApi();` -- serves the raw JSON document (e.g. at `/openapi/v1.json`)
+                    - Generates from Minimal API route registrations with zero extra annotation for the basic case
+                    - JSON only -- no UI page by itself
+
+                    **Adding a UI**
+
+                    - Scalar (`Scalar.AspNetCore`) -- `app.MapScalarApiReference();` -- lightweight, pairs with the built-in generator, no generator of its own
+                    - Swashbuckle (`Swashbuckle.AspNetCore`) -- classic third-party package, generates its own document AND bundles Swagger UI (`app.UseSwagger(); app.UseSwaggerUI();`)
+
+                    **Enriching generated docs**
+
+                    - `.WithSummary("...")` -- short one-line description
+                    - `.WithDescription("...")` -- longer explanation
+                    - `.Produces<T>(statusCode)` -- declares response type + status code per endpoint
+                    - All of the above are metadata-only -- zero effect on runtime behavior
+                    """, 2),
+                Block(BlockType.CodeSnippet, "OpenAPI Generation, Scalar UI & Enriched Route Metadata", BodyFormat.PlainText, """
+                    var builder = WebApplication.CreateBuilder(args);
+
+                    // Built-in OpenAPI document generator (Microsoft.AspNetCore.OpenApi, .NET 9+) --
+                    // this produces the raw OpenAPI JSON document. It does NOT serve a browsable UI by itself.
+                    builder.Services.AddOpenApi();
+
+                    var app = builder.Build();
+
+                    if (app.Environment.IsDevelopment())
+                    {
+                        // Exposes the generated OpenAPI document as JSON at /openapi/v1.json
+                        app.MapOpenApi();
+
+                        // Scalar.AspNetCore -- a lightweight UI that reads that JSON document and
+                        // renders a browsable docs page at /scalar/v1. Pairs naturally with the
+                        // built-in AddOpenApi()/MapOpenApi() pair; no code generation step involved.
+                        app.MapScalarApiReference();
+
+                        // Alternative: Swashbuckle.AspNetCore bundles its own generator AND a
+                        // Swagger UI page in one package -- app.UseSwagger(); app.UseSwaggerUI();
+                        // would replace both AddOpenApi()/MapOpenApi() and MapScalarApiReference() above.
+                    }
+
+                    var products = app.MapGroup("/v1/products").WithTags("Products");
+
+                    products.MapGet("/{id:int}", async (int id, ProductDbContext db) =>
+                        await db.Products.FindAsync(id) is { } product
+                            ? Results.Ok(new ProductResponse(product.Id, product.Name, product.Price))
+                            : Results.NotFound())
+                        .WithSummary("Get a product by ID")
+                        .WithDescription("Returns a single product's public-facing fields, or 404 if no product with that ID exists.")
+                        .Produces<ProductResponse>(StatusCodes.Status200OK)
+                        .Produces(StatusCodes.Status404NotFound);
+
+                    products.MapPost("/", async (CreateProductRequest request, ProductDbContext db) =>
+                    {
+                        var product = new Product { Name = request.Name, Price = request.Price };
+                        db.Products.Add(product);
+                        await db.SaveChangesAsync();
+                        return Results.Created($"/v1/products/{product.Id}", new ProductResponse(product.Id, product.Name, product.Price));
+                    })
+                        .WithSummary("Create a new product")
+                        .WithDescription("Creates a product and returns its generated ID and stored fields.")
+                        .Produces<ProductResponse>(StatusCodes.Status201Created)
+                        .Produces(StatusCodes.Status400BadRequest);
+
+                    app.Run();
+
+                    public record ProductResponse(int Id, string Name, decimal Price);
+                    public record CreateProductRequest(string Name, decimal Price);
+                    """, 3, language: "csharp"),
+                Block(BlockType.Diagram, "From Route Registration to Browsable Docs", BodyFormat.StructuredSteps, """
+                    [{"label":"Browser or tool requests /scalar/v1 (or Swagger UI's own page)"},{"label":"UI page loads and fetches the raw OpenAPI JSON document","note":"served by app.MapOpenApi() at /openapi/v1.json, or by Swashbuckle's own /swagger/v1/swagger.json"},{"label":"OpenAPI document generator inspects the app's route registrations","note":"reads WithSummary(), WithDescription(), Produces<T>() metadata plus route parameter and request/response type shapes"},{"label":"UI renders that JSON as an interactive, browsable page","note":"endpoint list, parameters, response schemas, and a 'Try it out' request runner"},{"label":"A consumer -- frontend/mobile dev, third-party integrator -- reads or calls the API using this generated page instead of a separately maintained, hand-written doc"}]
+                    """, 4),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Default to the built-in `AddOpenApi()`/`MapOpenApi()` pair for new .NET 9/10 Minimal APIs -- it ships in the framework, needs no third-party generator dependency, and covers the common case with no extra annotation. Pick a UI deliberately rather than by habit: Scalar if you want something light that just renders the JSON the built-in generator already produces, Swashbuckle if you want a single package that handles both generation and UI (or you're already on it in an existing codebase and switching has no real payoff).
+
+                    Either way, annotate your endpoints with `.WithSummary()`, `.WithDescription()`, and `.Produces<T>()` as you write them, not as a cleanup pass later -- documentation that's part of the same commit as the endpoint is documentation that actually stays accurate, which is the entire point of generating it instead of hand-writing it.
+                    """, 5),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    If asked to explain OpenAPI vs. Swagger, don't just define both -- state the relationship precisely: OpenAPI is the spec format, Swagger is the (now one-of-several) tooling ecosystem built around it, and "Swagger UI" is specifically the browsable page, not the format itself. If asked how you'd add API docs to a new Minimal API in a recent .NET version, name the actual built-in path (`Microsoft.AspNetCore.OpenApi`, `AddOpenApi()`, `MapOpenApi()`) rather than jumping straight to Swashbuckle out of habit, and be ready to explain the one gap in that built-in path: it only serves raw JSON, so a UI (Scalar or Swashbuckle's Swagger UI) is a separate, deliberate addition on top.
+
+                    The detail that separates someone who's actually wired this up from someone reciting package names is knowing that `.WithSummary()`/`.WithDescription()`/`.Produces<T>()` are what make generated docs actually readable, versus a bare list of routes and raw type shapes.
+                    """, 6),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Assuming `builder.Services.AddOpenApi()` and `app.MapOpenApi()` alone give you a Swagger-UI-style browsable page -- they don't; that pair only generates and serves the raw OpenAPI JSON document, and a separate UI package (Scalar or Swashbuckle) has to be added and wired up before there's anything to click through in a browser. Using "OpenAPI" and "Swagger" interchangeably in conversation or in a design doc, which reads as imprecise to anyone who actually knows the difference between the spec format and the tool ecosystem built on top of it.
+
+                    Also common: shipping a Minimal API with no `.WithSummary()`/`.WithDescription()`/`.Produces<T>()` calls at all, so the generated OpenAPI document is technically correct but practically useless -- a consumer sees a route and a raw response type with no explanation of what the endpoint actually does or which status codes to expect, which defeats most of the reason to generate documentation in the first place.
+                    """, 7),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    OpenAPI versus Swagger is like the difference between a blueprint format and a specific brand of blueprint-reading software: OpenAPI is the standardized blueprint format itself -- any architect, anywhere, can read one and know exactly what it means -- while Swagger is the original company that popularized that format and built tools around it, the way a specific brand of drafting software once defined a file format that later became an industry standard used by many competing tools.
+
+                    `AddOpenApi()`/`MapOpenApi()` is like a blueprint printer -- it reliably produces the actual blueprint document -- but nobody hands a stack of raw blueprint pages to a client and calls that "documentation"; you also need a well-lit room with the pages pinned up and labeled clearly (Scalar or Swagger UI) for anyone to actually browse and understand them. And `.WithSummary()`/`.WithDescription()`/`.Produces<T>()` are like the annotations an architect adds directly onto a blueprint -- "load-bearing wall," "emergency exit only" -- without them, a contractor can still technically read the lines and shapes, but the intent behind them is left to guesswork.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "A team calls builder.Services.AddOpenApi() and app.MapOpenApi() in a new .NET 9 Minimal API, then reports that they've 'added Swagger' and expect a browsable docs page at some URL. What's actually true?",
+                    "AddOpenApi()/MapOpenApi() only generate and serve the raw OpenAPI JSON document (e.g. at /openapi/v1.json). They do not produce a browsable UI page on their own -- a separate UI such as Scalar (MapScalarApiReference()) or Swashbuckle's Swagger UI has to be added on top to get an actual page to browse.",
+                    [
+                        new QuizOptionSeed("AddOpenApi()/MapOpenApi() only generate and serve the raw OpenAPI JSON document; a separate UI such as Scalar or Swashbuckle's Swagger UI must be added to get a browsable page", true),
+                        new QuizOptionSeed("AddOpenApi() and MapOpenApi() automatically serve a Swagger UI page identical to Swashbuckle's, with no further configuration needed", false),
+                        new QuizOptionSeed("MapOpenApi() only works if the project also references Swashbuckle.AspNetCore", false),
+                        new QuizOptionSeed("The generated OpenAPI document requires every endpoint to have explicit DataAnnotations before ASP.NET Core can produce it", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "Which statement correctly distinguishes OpenAPI from Swagger?",
+                    "OpenAPI is the language-agnostic specification format describing an API's endpoints, schemas, and responses. Swagger is the original tool ecosystem -- including Swagger UI, the interactive browsable page -- that popularized that format before it was donated to the OpenAPI Initiative.",
+                    [
+                        new QuizOptionSeed("OpenAPI is the language-agnostic specification format describing an API's shape; Swagger is the original tool ecosystem (including Swagger UI) built around that format", true),
+                        new QuizOptionSeed("OpenAPI and Swagger are simply two different names for exactly the same thing, with no meaningful distinction between them", false),
+                        new QuizOptionSeed("Swagger is the specification format, and OpenAPI is the specific interactive UI page used to browse a generated document", false),
+                        new QuizOptionSeed("OpenAPI only applies to gRPC services, while Swagger only applies to REST/JSON Minimal APIs", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("OpenAPI support in ASP.NET Core apps", "https://learn.microsoft.com/en-us/aspnet/core/fundamentals/openapi/overview", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("Generate OpenAPI documents with Microsoft.AspNetCore.OpenApi", "https://learn.microsoft.com/en-us/aspnet/core/fundamentals/openapi/aspnetcore-openapi", LinkType.OfficialDocs),
+            ],
+            prerequisites: [lesson1]);
+
+        var lesson3Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson3.Slug,
+        [
+            "Add Microsoft.AspNetCore.OpenApi to a Minimal API project, wire up AddOpenApi()/MapOpenApi(), and confirm you can view the raw generated JSON document at its served URL",
+            "Add Scalar.AspNetCore (or Swashbuckle.AspNetCore's Swagger UI) on top of that generated document, and confirm you can browse and 'try out' an endpoint from the rendered UI page",
+            "Add WithSummary(), WithDescription(), and Produces<T>() to at least two endpoints, regenerate the docs, and compare the before/after readability of the generated page",
+        ]);
+
         var module = BuildModule(topicId, "aspnet-core-api-design-and-traffic-control", "API Design, Versioning & Traffic Control",
             "Choosing between Minimal APIs and Controllers, organizing endpoints with route groups, versioning and validating requests correctly, then shaping and protecting traffic with ASP.NET Core's built-in rate limiting and output caching middleware.",
-            90, [lesson1, lesson2], sortOrder: 5);
+            130, [lesson1, lesson2, lesson3], sortOrder: 5);
 
-        return (module, [lesson1Checklist, lesson2Checklist]);
+        return (module, [lesson1Checklist, lesson2Checklist, lesson3Checklist]);
     }
 
     private static (Module, List<ChecklistSeed>) BuildDotNetDistributedCommunicationAndObservabilityModule(int topicId)
