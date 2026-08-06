@@ -27,6 +27,11 @@ public static class ExerciseSeedData
             BuildCacheAsideImplementation(lessonIdBySlug["scaling-load-balancing-caching"], tags),
             BuildResolveMergeConflict(lessonIdBySlug["collaborative-git-prs-rebasing-conflicts"], tags),
             BuildCiPipelineYaml(lessonIdBySlug["cicd-pipelines-automated-testing"], tags),
+            BuildFizzBuzz(lessonIdBySlug["csharp-basics-loops"], tags),
+            BuildSumOfAList(lessonIdBySlug["csharp-basics-lists"], tags),
+            BuildCountVowels(lessonIdBySlug["csharp-basics-string-manipulation"], tags),
+            BuildRectangleAreaClass(lessonIdBySlug["csharp-basics-classes"], tags),
+            BuildFilterEvenNumbersLinq(lessonIdBySlug["csharp-basics-linq"], tags),
         ];
     }
 
@@ -729,6 +734,280 @@ public static class ExerciseSeedData
                               - run: dotnet test --no-build
                         """,
                     Language = "yaml",
+                    SortOrder = 1,
+                },
+            ],
+        };
+    }
+
+    private static Exercise BuildFizzBuzz(int lessonId, Dictionary<string, Tag> tags)
+    {
+        var now = DateTime.UtcNow;
+        return new Exercise
+        {
+            LessonId = lessonId,
+            Slug = "fizzbuzz-classic",
+            Title = "FizzBuzz",
+            Prompt = "Write a method that prints the numbers 1 through `n`. But for multiples of 3, print \"Fizz\" instead of the number; for multiples of 5, print \"Buzz\"; and for multiples of both 3 and 5, print \"FizzBuzz\".",
+            DifficultyLevel = DifficultyLevel.Easy,
+            ExerciseType = ExerciseType.Coding,
+            StarterCode = """
+                public void FizzBuzz(int n)
+                {
+                    // Your code here
+                }
+                """,
+            Language = "csharp",
+            IsInterviewChallenge = true,
+            FollowUpQuestions = "How would you rewrite the body of this loop using a switch expression instead of an if/else if chain?",
+            SortOrder = 13,
+            CreatedUtc = now,
+            UpdatedUtc = now,
+            ExerciseTags = [Tagged(tags, "loops"), Tagged(tags, "csharp")],
+            Hints =
+            [
+                new ExerciseHint { Text = "Check divisibility by 15 (3 * 5) FIRST, before checking 3 or 5 alone -- order matters in an if/else if chain.", SortOrder = 1 },
+            ],
+            Solutions =
+            [
+                new ExerciseSolution
+                {
+                    ApproachTitle = "if/else if Chain",
+                    Explanation = "Loop from 1 to n, checking the most specific condition (divisible by both 3 and 5) before the more general ones -- otherwise a multiple of 15 would incorrectly print just \"Fizz\".",
+                    SolutionCode = """
+                        public void FizzBuzz(int n)
+                        {
+                            for (int i = 1; i <= n; i++)
+                            {
+                                if (i % 15 == 0) Console.WriteLine("FizzBuzz");
+                                else if (i % 3 == 0) Console.WriteLine("Fizz");
+                                else if (i % 5 == 0) Console.WriteLine("Buzz");
+                                else Console.WriteLine(i);
+                            }
+                        }
+                        """,
+                    Language = "csharp",
+                    TimeComplexity = "O(n)",
+                    SpaceComplexity = "O(1)",
+                    SortOrder = 1,
+                },
+            ],
+        };
+    }
+
+    private static Exercise BuildSumOfAList(int lessonId, Dictionary<string, Tag> tags)
+    {
+        var now = DateTime.UtcNow;
+        return new Exercise
+        {
+            LessonId = lessonId,
+            Slug = "sum-of-a-list",
+            Title = "Sum of a List",
+            Prompt = "Write a method that takes a `List<int>` and returns the sum of all its elements, without using LINQ's built-in `.Sum()` method.",
+            DifficultyLevel = DifficultyLevel.Easy,
+            ExerciseType = ExerciseType.Coding,
+            StarterCode = """
+                public int SumOfList(List<int> numbers)
+                {
+                    // Your code here
+                }
+                """,
+            Language = "csharp",
+            IsInterviewChallenge = false,
+            FollowUpQuestions = "Now solve it again using LINQ's .Sum() -- how many lines does that take compared to your loop?",
+            SortOrder = 14,
+            CreatedUtc = now,
+            UpdatedUtc = now,
+            ExerciseTags = [Tagged(tags, "lists"), Tagged(tags, "csharp")],
+            Hints =
+            [
+                new ExerciseHint { Text = "Start a running total at 0 before the loop begins, and add each number to it as you go.", SortOrder = 1 },
+            ],
+            Solutions =
+            [
+                new ExerciseSolution
+                {
+                    ApproachTitle = "foreach Loop",
+                    Explanation = "Keep a running total, starting at 0, and add each item in the list to it with foreach.",
+                    SolutionCode = """
+                        public int SumOfList(List<int> numbers)
+                        {
+                            int total = 0;
+                            foreach (int number in numbers)
+                            {
+                                total += number;
+                            }
+                            return total;
+                        }
+                        """,
+                    Language = "csharp",
+                    TimeComplexity = "O(n)",
+                    SpaceComplexity = "O(1)",
+                    SortOrder = 1,
+                },
+            ],
+        };
+    }
+
+    private static Exercise BuildCountVowels(int lessonId, Dictionary<string, Tag> tags)
+    {
+        var now = DateTime.UtcNow;
+        return new Exercise
+        {
+            LessonId = lessonId,
+            Slug = "count-vowels-in-a-string",
+            Title = "Count Vowels in a String",
+            Prompt = "Write a method that counts how many vowels (a, e, i, o, u -- case-insensitive) appear in a given string.",
+            DifficultyLevel = DifficultyLevel.Easy,
+            ExerciseType = ExerciseType.Coding,
+            StarterCode = """
+                public int CountVowels(string text)
+                {
+                    // Your code here
+                }
+                """,
+            Language = "csharp",
+            IsInterviewChallenge = false,
+            FollowUpQuestions = "How would you change this to count vowels only at the START of each word, not anywhere in the string?",
+            SortOrder = 15,
+            CreatedUtc = now,
+            UpdatedUtc = now,
+            ExerciseTags = [Tagged(tags, "strings"), Tagged(tags, "csharp")],
+            Hints =
+            [
+                new ExerciseHint { Text = "Call ToLower() on the string once at the start, so you only need to check 5 lowercase letters instead of 10.", SortOrder = 1 },
+            ],
+            Solutions =
+            [
+                new ExerciseSolution
+                {
+                    ApproachTitle = "foreach + Contains",
+                    Explanation = "Lowercase the string once, then check each character against a small string of vowels using Contains.",
+                    SolutionCode = """
+                        public int CountVowels(string text)
+                        {
+                            string vowels = "aeiou";
+                            int count = 0;
+                            foreach (char c in text.ToLower())
+                            {
+                                if (vowels.Contains(c)) count++;
+                            }
+                            return count;
+                        }
+                        """,
+                    Language = "csharp",
+                    TimeComplexity = "O(n)",
+                    SpaceComplexity = "O(1)",
+                    SortOrder = 1,
+                },
+            ],
+        };
+    }
+
+    private static Exercise BuildRectangleAreaClass(int lessonId, Dictionary<string, Tag> tags)
+    {
+        var now = DateTime.UtcNow;
+        return new Exercise
+        {
+            LessonId = lessonId,
+            Slug = "rectangle-area-class",
+            Title = "Rectangle Area Class",
+            Prompt = "Create a `Rectangle` class with `Width` and `Height` fields set through a constructor, and a method `GetArea()` that returns the rectangle's area.",
+            DifficultyLevel = DifficultyLevel.Easy,
+            ExerciseType = ExerciseType.Coding,
+            StarterCode = """
+                public class Rectangle
+                {
+                    // Your code here
+                }
+                """,
+            Language = "csharp",
+            IsInterviewChallenge = false,
+            FollowUpQuestions = "How would you add a GetPerimeter() method to the same class?",
+            SortOrder = 16,
+            CreatedUtc = now,
+            UpdatedUtc = now,
+            ExerciseTags = [Tagged(tags, "csharp"), Tagged(tags, "oop")],
+            Hints =
+            [
+                new ExerciseHint { Text = "The constructor's only job is to set Width and Height -- GetArea() does the actual math separately, whenever it's called.", SortOrder = 1 },
+            ],
+            Solutions =
+            [
+                new ExerciseSolution
+                {
+                    ApproachTitle = "Class with Constructor",
+                    Explanation = "The constructor stores the two dimensions; GetArea() multiplies them together each time it's called.",
+                    SolutionCode = """
+                        public class Rectangle
+                        {
+                            public double Width;
+                            public double Height;
+
+                            public Rectangle(double width, double height)
+                            {
+                                Width = width;
+                                Height = height;
+                            }
+
+                            public double GetArea()
+                            {
+                                return Width * Height;
+                            }
+                        }
+                        """,
+                    Language = "csharp",
+                    TimeComplexity = "O(1)",
+                    SpaceComplexity = "O(1)",
+                    SortOrder = 1,
+                },
+            ],
+        };
+    }
+
+    private static Exercise BuildFilterEvenNumbersLinq(int lessonId, Dictionary<string, Tag> tags)
+    {
+        var now = DateTime.UtcNow;
+        return new Exercise
+        {
+            LessonId = lessonId,
+            Slug = "filter-even-numbers-linq",
+            Title = "Filter Even Numbers with LINQ",
+            Prompt = "Given a `List<int>`, use LINQ's `Where()` to return only the even numbers, as a new `List<int>`.",
+            DifficultyLevel = DifficultyLevel.Easy,
+            ExerciseType = ExerciseType.Coding,
+            StarterCode = """
+                public List<int> FilterEvenNumbers(List<int> numbers)
+                {
+                    // Your code here
+                }
+                """,
+            Language = "csharp",
+            IsInterviewChallenge = false,
+            FollowUpQuestions = "Now chain a .Select() after your Where() to double each even number before returning it.",
+            SortOrder = 17,
+            CreatedUtc = now,
+            UpdatedUtc = now,
+            ExerciseTags = [Tagged(tags, "linq"), Tagged(tags, "csharp")],
+            Hints =
+            [
+                new ExerciseHint { Text = "n % 2 == 0 is how you check whether a number is even inside the Where() lambda.", SortOrder = 1 },
+            ],
+            Solutions =
+            [
+                new ExerciseSolution
+                {
+                    ApproachTitle = "Where + ToList",
+                    Explanation = "Where() keeps only the items matching the even check; ToList() turns the result back into a real List<int>.",
+                    SolutionCode = """
+                        public List<int> FilterEvenNumbers(List<int> numbers)
+                        {
+                            return numbers.Where(n => n % 2 == 0).ToList();
+                        }
+                        """,
+                    Language = "csharp",
+                    TimeComplexity = "O(n)",
+                    SpaceComplexity = "O(n)",
                     SortOrder = 1,
                 },
             ],
