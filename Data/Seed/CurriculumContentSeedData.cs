@@ -89,6 +89,8 @@ public static class CurriculumContentSeedData
             BuildAiIntegrationVectorSearchAndRagModule(topicIdBySlug["ai-integration"]),
             BuildFrontendJavaScriptAndTypeScriptModule(topicIdBySlug["frontend"]),
             BuildFrontendReactFundamentalsModule(topicIdBySlug["frontend"]),
+            BuildFrontendStylingBuildToolingAndHooksModule(topicIdBySlug["frontend"]),
+            BuildFrontendTestingAndAccessibilityModule(topicIdBySlug["frontend"]),
         };
 
         return (
@@ -25579,6 +25581,697 @@ public static class CurriculumContentSeedData
         return (module, [lesson1Checklist, lesson2Checklist]);
     }
 
+
+    private static (Module, List<ChecklistSeed>) BuildFrontendStylingBuildToolingAndHooksModule(int topicId)
+    {
+        var lesson1 = BuildLesson(
+            slug: "styling-react-and-modern-build-tooling",
+            title: "Styling React & Modern Build Tooling",
+            summary: "CSS Modules, Tailwind, and CSS-in-JS as three real approaches to styling a React app, what a bundler like Vite or webpack actually does, this exact repo's own no-build-step wwwroot/ frontend as a real counter-example, and server-side rendering as a further evolution beyond a client-only app.",
+            estimatedMinutes: 45,
+            objectives:
+            [
+                "Compare plain CSS/CSS Modules, utility-first Tailwind, and CSS-in-JS (styled-components) as styling approaches, explaining the tradeoffs in scoping, bundle size, and learning curve rather than declaring a single winner",
+                "Explain what a build tool/bundler like Vite or webpack actually does: bundling modules, transforming JSX/TypeScript into browser-runnable JS, running a dev server with hot module replacement, and producing an optimized production build",
+                "Describe accurately how this Mentor OS repo's own wwwroot/ frontend avoids a build step entirely -- plain ES modules and a Tailwind CDN script -- and explain what that choice trades away",
+                "Explain, at a high level, what problem server-side rendering (as in Next.js) solves relative to a purely client-rendered app",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    A React app still needs actual CSS somewhere -- JSX doesn't replace CSS, it just changes how you attach it to markup. The plainest approach is an ordinary `.css` file imported for its side effects (`import "./Card.css";`), with class names applied via `className`. The catch: every class name in a plain CSS file lives in one shared, global namespace across the entire app, exactly like a global variable would in code -- a `.card` class defined for one component can silently collide with an unrelated `.card` defined somewhere else, and the fix historically has been a naming convention like BEM (`.card__title--active`) rather than anything the language itself enforces. **CSS Modules** solve the same collision problem with real tooling instead of a naming convention: a file named `Card.module.css` gets processed at build time so each class name is rewritten into something guaranteed-unique (`Card_card__a1b2c`), and you import the result as a JS object (`import styles from "./Card.module.css";`) and reference `styles.card` rather than a plain string -- so a typo in the class name becomes a JS reference error instead of a silent CSS mismatch, and two components can each have their own `.card` class with zero risk of collision.
+
+                    **Tailwind** takes a different angle entirely: utility-first CSS. Instead of writing custom CSS rules at all, you compose small, single-purpose classes directly on the markup -- `className="flex items-center gap-2 rounded-lg bg-slate-800 p-4"` -- where each class does exactly one thing (`flex` turns on flexbox, `p-4` sets padding). There's no naming-collision problem because you essentially stop inventing class names. The normal way to run Tailwind is through a build-time pipeline that scans your actual source files for which utility classes you used, and generates a CSS file containing only those -- everything else in Tailwind's enormous utility catalog gets left out, keeping the shipped CSS small. This *actual* Mentor OS repo uses Tailwind too, but not that way: `wwwroot/index.html` loads it via `<script src="https://cdn.tailwindcss.com">`, the Play CDN build, which ships the whole utility-generation engine to the browser and compiles whatever classes it finds in the DOM into real CSS at page-load time, in JavaScript, rather than a minimal stylesheet having been pre-generated ahead of time by a build step.
+
+                    A third option, **CSS-in-JS** -- `styled-components` being the best-known example -- writes real CSS inside a JS tagged template literal attached directly to a component: `const Card = styled.div\`padding: 1rem; border-radius: 0.5rem;\`;`, and then `<Card>...</Card>` renders as a `div` carrying an auto-generated, automatically-unique class name. Styles are scoped per-component with zero extra tooling on your part, and you can interpolate props straight into the CSS. The tradeoff is a small added runtime (the library itself ships to the browser and does the class-generation work at runtime) and, for some teams, a steeper learning curve mixing CSS syntax inside JS template strings.
+
+                    None of the three approaches is a strict upgrade over the others -- each trades scoping, bundle size, and learning curve differently. Plain CSS has zero JS runtime cost and the shallowest learning curve, but zero automatic scoping. CSS Modules add real scoping with only a small build-time cost and no runtime cost at all -- classes are already fixed strings by the time the browser sees them. Tailwind removes the naming problem entirely and is famously fast to build with once memorized, at the cost of a genuinely steep initial learning curve and markup that can look dense. CSS-in-JS gets automatic per-component scoping and lets styles read props directly, at the cost of a small runtime and an extra library to load.
+
+                    Separately from styling, most real React apps use a **build tool** (also called a bundler) -- **Vite** is the modern default, **webpack** the older tool that still powers a huge amount of existing production code. Both do the same four jobs: they **bundle** many small source files into far fewer files the browser actually requests; they **transform** JSX (and TypeScript, if used) into plain JavaScript the browser can run natively, since browsers have never understood JSX or TS syntax on their own; they run a **dev server** with **hot module replacement** (HMR), which pushes just the changed module into the already-running page instead of a full reload, so most edits appear near-instantly; and they produce an **optimized production build** -- minified code, content-hashed filenames for cache-busting, and often code-splitting so a user's first visit doesn't have to download the entire app up front.
+
+                    This exact Mentor OS repo's own frontend, everything under `wwwroot/`, deliberately has **none of that**. `wwwroot/index.html` loads the app with a single plain tag -- `<script type="module" src="js/main.js">` -- and the browser's own native ES module loader takes it from there, resolving every `import` statement itself (`wwwroot/js/views/dashboard-view.js` imports straight from `../api/progress.js`, `../state.js`, and so on) with no bundler ever rewriting or combining any of it. Views are built with plain DOM calls -- `document.createElement`, setting `.className` and `.textContent` directly -- rather than JSX, precisely because there's no compiler in the pipeline to turn JSX into those calls; JSX is not valid JavaScript a browser can run as-is. For a project this size, this is a legitimate, deliberate architectural choice, not a shortcut someone forgot to fix: there's no bundler config to maintain or debug, no separate build step between saving a file and seeing the result, and refreshing the browser tab *is* the entire build. What it trades away: no JSX (the more verbose `document.createElement` style visible directly in `dashboard-view.js`), a larger Tailwind payload since the CDN script ships and runs the entire utility-compiling engine rather than a tree-shaken stylesheet containing only the classes actually used, and no code-splitting -- every JS module the app needs is its own individual network request, resolved by the browser one file at a time, instead of being bundled and deduplicated ahead of time.
+
+                    One further evolution beyond a client-only Vite (or older Create React App) setup is **server-side rendering (SSR)**, with **Next.js** the most common framework for it. A purely client-rendered app -- whether bundled by Vite or, like this repo, not bundled at all -- ships an initial HTML response that's nearly empty (a bare root element), with the real content only appearing after JavaScript downloads, runs, and fills it in. That's a real cost for a first-time visitor's page-load speed, and a problem for content that needs to be crawlable by search engines that don't fully execute JavaScript. SSR renders the component tree to real HTML on the server (or ahead of time, at build), so the very first response already contains actual content, and React then "hydrates" that HTML on the client to make it interactive. It's a meaningfully bigger architectural commitment than swapping a styling approach or adding a bundler, so treat it here as context for where this space goes next, not something this lesson expects you to set up.
+                    """, 1),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Styling approaches**
+
+                    - Plain CSS -- global class namespace, zero JS runtime cost, easiest to learn, no automatic scoping
+                    - CSS Modules (`Card.module.css`) -- build step rewrites class names uniquely; `import styles from "./Card.module.css"` then `className={styles.card}`
+                    - Tailwind -- utility classes composed directly on markup (`className="flex gap-2 p-4"`); normally tree-shaken at build time to a minimal stylesheet
+                    - This repo's Tailwind: CDN script (`<script src="https://cdn.tailwindcss.com">`) -- compiles classes client-side, at page load, no tree-shaking
+                    - styled-components (CSS-in-JS) -- CSS in a tagged template literal on the component; auto-scoped, small added runtime
+
+                    **Build tools (Vite / webpack)**
+
+                    - Bundle many source files into fewer files
+                    - Transform JSX/TypeScript into plain JS the browser understands
+                    - Run a dev server with hot module replacement (HMR)
+                    - Produce an optimized production build (minified, hashed filenames, code-splitting)
+
+                    **This repo's wwwroot/ -- no build step at all**
+
+                    - `<script type="module" src="js/main.js">` -- browser's native ES module loader resolves imports directly
+                    - Views use `document.createElement` / `.className` / `.textContent` -- no JSX possible without a compiler
+                    - Trades away: JSX, a tree-shaken Tailwind stylesheet, code-splitting -- gains: zero config, instant refresh
+
+                    **Beyond client-only: SSR / Next.js**
+
+                    - Client-only app ships a near-empty root element; JS fills it in after load
+                    - SSR renders real HTML upfront -- helps first paint and search-engine crawlability
+                    """, 2),
+                Block(BlockType.CodeSnippet, "Three Ways to Style the Same Card Component", BodyFormat.PlainText, """
+                    // 1. CSS Modules -- scoped class names via a build step
+                    // Card.module.css:
+                    //   .card { padding: 1rem; border-radius: 0.5rem; background: #1e293b; }
+                    import styles from "./Card.module.css";
+
+                    function CssModuleCard({ title }) {
+                      // styles.card is a build-time-generated unique class name, e.g. "Card_card__a1b2c"
+                      // -- it can never collide with a .card class in a different module.
+                      return <div className={styles.card}>{title}</div>;
+                    }
+
+                    // 2. Tailwind -- utility-first, no custom class names at all
+                    function TailwindCard({ title }) {
+                      return (
+                        <div className="rounded-lg bg-slate-800 p-4 text-slate-50">
+                          {title}
+                        </div>
+                      );
+                    }
+
+                    // 3. styled-components -- CSS-in-JS, scoped per-component automatically
+                    import styled from "styled-components";
+
+                    const StyledCard = styled.div`
+                      padding: 1rem;
+                      border-radius: 0.5rem;
+                      background: #1e293b;
+                      color: white;
+                    `;
+
+                    function CssInJsCard({ title }) {
+                      return <StyledCard>{title}</StyledCard>;
+                    }
+                    """, 3, language: "jsx"),
+                Block(BlockType.Diagram, "Two Build Pipelines: Vite/Webpack vs. This Repo's wwwroot", BodyFormat.AsciiArt, """
+                    A typical Vite/webpack-based React app                 This Mentor OS repo's actual wwwroot/ frontend
+
+                      src/App.jsx, Card.module.css, ...                      wwwroot/js/main.js, views/*.js, css/custom.css
+                            |                                                       |
+                            v                                                       v
+                      Vite/webpack reads the whole                          Browser's own <script type="module">
+                      dependency graph, transforms                          loader reads main.js's imports directly --
+                      JSX/TS -> plain JS, rewrites                          no transform step, no rewriting.
+                      CSS Module class names, bundles
+                      everything into fewer files
+                            |                                                       |
+                            v                                                       v
+                      dev server + HMR while coding --                       Edit a file, refresh the browser --
+                      npm run build for production                          that IS the entire "build"
+                            |                                                       |
+                            v                                                       v
+                      dist/ -- few hashed .js/.css                          index.html's <script src="https://cdn.tailwindcss.com">
+                      files, tree-shaken Tailwind CSS                       ships the whole Tailwind engine and compiles
+                      (only classes actually used)                          utility classes to CSS in the browser, at page load
+                    """, 4),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Pick one primary styling approach per codebase and stay consistent -- mixing CSS Modules, Tailwind, and styled-components freely, with no clear rule for which to use, makes a codebase harder to onboard onto than any single approach's own downsides.
+
+                    Reach for a real build step (Vite is the sensible modern default) the moment an app needs JSX, TypeScript, code-splitting, or a properly tree-shaken Tailwind stylesheet -- the CDN approach this repo's `wwwroot/` uses is a legitimate choice at this project's current size, not something to imitate reflexively once a team or codebase grows past it. If reaching for CSS-in-JS, budget for its runtime cost consciously rather than discovering it in a bundle-size audit later.
+                    """, 5),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    If asked "what does a bundler like Vite or webpack actually do," name the four concrete jobs precisely rather than a vague "it makes React work": bundling modules into fewer files, transforming JSX/TypeScript into plain JS, running a dev server with hot module replacement, and producing an optimized production build.
+
+                    It's also a strong signal to be able to explain, unprompted, that a bundler and a build step are not strictly required for React-style components to run -- JSX is sugar for `React.createElement` calls, which is plain JS a browser can execute directly, and pointing to a real, working example (like this repo's own `wwwroot/`, loading ES modules straight from `<script type="module">` with zero build tooling) demonstrates you understand what the tool is actually buying you, rather than treating it as an unquestioned default.
+                    """, 6),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Assuming a React-style component model *must* have JSX and a bundler to function at all -- neither is required; JSX only exists because `React.createElement(...)` calls are tedious to write by hand, and this repo's own `wwwroot/` frontend runs real component-style logic (in plain JS, via `document.createElement`) with no compiler in the pipeline whatsoever.
+
+                    Assuming the Tailwind CDN script is the *lightweight* choice because it "loads instantly" with no build step -- it's usually the opposite for the actual bytes shipped to the browser: it ships and executes the entire utility-generation engine client-side, which is typically larger than a properly tree-shaken, build-time-generated Tailwind stylesheet containing only the classes a page actually uses.
+
+                    Also common: reaching for CSS-in-JS or CSS Modules purely out of habit on a project where plain CSS (or even the Tailwind CDN approach) would be entirely sufficient, adding tooling complexity a project's actual size doesn't yet justify.
+                    """, 7),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    A bundler is like a shipping warehouse that receives a huge number of small individually-addressed packages (your source files), repacks them into a much smaller number of well-labeled crates (bundled, minified files), and hands the courier (the browser) just those crates instead of making thousands of separate delivery trips. This repo's `wwwroot/` skips the warehouse entirely -- it's more like a corner store where the browser walks in and picks each item off the shelf itself, one at a time, as it needs it; slower per-trip at scale, but there's no warehouse to build, staff, or keep running.
+
+                    CSS Modules versus plain CSS is like nametags at two different events: plain CSS is a small gathering where everyone can just be called by their first name, and collisions are rare enough to survive; CSS Modules is a large conference badge system where the organizers silently print a unique code instead of trusting that no two attendees share a first name.
+
+                    The Tailwind CDN script is like hiring a full tailor on-site who can cut any garment from raw fabric the moment it's needed, versus a build-time Tailwind pipeline, which is like a factory that pre-cuts and ships only the exact garments this particular store actually stocks -- both produce clothes, but one carries the whole tailor shop around with it everywhere it goes.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "This Mentor OS repo's own wwwroot/ frontend loads plain <script type=\"module\"> files and Tailwind via a CDN <script> tag, with no Vite/webpack build step at all. What does that specific choice trade away, compared to an equivalent Vite-based React app?",
+                    "No build step means no compiler to support JSX, no step that scans the actual source for which Tailwind classes are used and generates a minimal stylesheet from just those, and no bundler to split the app into separate chunks loaded on demand -- so this repo trades away JSX, a tree-shaken (smaller) Tailwind stylesheet, and code-splitting, in exchange for zero build tooling to configure or maintain.",
+                    [
+                        new QuizOptionSeed("Nothing -- the two approaches are functionally identical in every respect", false),
+                        new QuizOptionSeed("JSX support, a tree-shaken (smaller) Tailwind stylesheet, and code-splitting, since there's no compiler step to transform JSX or generate a minimal per-page CSS bundle", true),
+                        new QuizOptionSeed("The ability to use ES modules at all, since only bundlers support import/export", false),
+                        new QuizOptionSeed("The ability to use Tailwind utility classes anywhere in the app", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "According to this lesson, what specific problem does server-side rendering (as in Next.js) solve that a purely client-rendered Vite-based app does not?",
+                    "A client-only app's initial HTML response is nearly empty -- a bare root element -- with real content appearing only after JavaScript downloads and runs. SSR renders actual HTML on the server (or at build time) so the first response already contains real content, helping initial page-load speed and the crawlability of content that needs to be indexed by search engines.",
+                    [
+                        new QuizOptionSeed("It removes the need for a JavaScript bundler entirely", false),
+                        new QuizOptionSeed("It sends real, already-rendered HTML on the initial response instead of a near-empty root element that JavaScript fills in later, helping first-paint speed and search-engine crawlability", true),
+                        new QuizOptionSeed("It makes React state updates re-render faster in the browser", false),
+                        new QuizOptionSeed("It replaces the need for useEffect when fetching data", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Tailwind Play CDN", "https://tailwindcss.com/docs/installation/play-cdn", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("Why Vite", "https://vitejs.dev/guide/why.html", LinkType.OfficialDocs),
+            ]);
+
+        var lesson1Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson1.Slug,
+        [
+            "Build the same small card component three ways -- a CSS Module, a Tailwind className, and a styled-components version -- and write down one concrete tradeoff (scoping, bundle size, or learning curve) for each",
+            "Open this repo's wwwroot/index.html and wwwroot/js/views/dashboard-view.js side by side, and identify the exact two lines that mean there is no build step: the <script type=\"module\"> tag and the Tailwind CDN <script> tag",
+            "Scaffold a throwaway app with npm create vite@latest, add one JSX component, and watch the browser update live as you edit the file with the dev server running, to see hot module replacement happen firsthand",
+        ]);
+
+        var lesson2 = BuildLesson(
+            slug: "state-management-and-custom-hooks",
+            title: "State Management & Custom Hooks",
+            summary: "Where useState alone breaks down -- prop drilling and scattered related updates -- and the tools that go beyond it: useReducer for consolidating related transitions, useContext for sharing values without prop drilling, when to reach for Redux Toolkit or Zustand instead, and writing custom hooks under the Rules of Hooks.",
+            estimatedMinutes: 45,
+            objectives:
+            [
+                "Explain the real limits of useState alone -- prop drilling and scattered related state updates -- as the motivation for useReducer and useContext",
+                "Consolidate related state transitions into a single useReducer(state, action) => newState function and dispatch actions instead of multiple independent setters",
+                "Share a value across a component tree with useContext without prop drilling, and describe the Context+useReducer pattern as a lightweight Redux alternative",
+                "Identify when to reach for a dedicated state library (Redux Toolkit, Zustand) instead of Context+useReducer, and write a custom hook that follows the Rules of Hooks",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    `useState`, already covered in this topic's React Fundamentals module, is the right starting point for local component state, but it has real limits once an app grows past a single component or a handful of independent values. The first is **prop drilling**: passing a value down through several layers of components purely so it can reach one deeply nested descendant, even though every component in between has no actual use for it -- each intermediate component still has to know about, accept, and forward a prop it never reads itself, purely as a pass-through. The second is **scattered related state updates**: several `useState` calls that logically change together in response to the same event (submitting a form resets three separate fields; adding an item to a cart needs to update both the item list and a running total) end up as multiple separate setter calls that have to be kept manually in sync, with nothing enforcing that they actually stay consistent with each other.
+
+                    `useReducer` addresses the second problem by consolidating every related state transition into one function with the shape `(state, action) => newState`. Instead of calling several setters directly, a component calls `dispatch({ type: "add", item })`, and a single `reducer` function decides, in one place, exactly what the new state looks like for every kind of action the component can receive. This doesn't change *what* state is -- it's still a `useState`-style snapshot, replaced wholesale on each update, never mutated in place -- it just moves the decision logic for multiple related updates into one function instead of scattering it across several setter calls, which becomes considerably easier to reason about and test as the number of related state values grows.
+
+                    `useContext` addresses the first problem, prop drilling. `createContext(defaultValue)` creates a context object; wrapping a subtree in `<MyContext.Provider value={...}>` makes that value available to every descendant, at any depth, without a single intermediate component needing to accept or forward a prop; and any descendant calls `useContext(MyContext)` to read the current value directly. A very common, deliberately lightweight pattern -- sometimes called a "poor man's Redux" -- pairs `useReducer` with `useContext`: a provider component holds a `useReducer`'s `[state, dispatch]` pair and exposes both through context, so any component anywhere in that subtree can read the current state and dispatch actions against it, without threading either one through props at all.
+
+                    Context plus `useReducer` is genuinely sufficient for a lot of small-to-medium apps, but it isn't a full substitute for a dedicated state management library like **Redux Toolkit** or **Zustand** once certain real needs show up. Reach for one of those instead once state updates are deeply nested and hard to express cleanly inside one reducer function, once you actually need dev-tooling like time-travel debugging (stepping backward and forward through a recorded history of every past state), or once Context's re-render behavior becomes a real, *measured* performance problem rather than a hypothetical one -- every component that calls `useContext(SomeContext)` re-renders whenever that context's value changes, with no built-in way to subscribe to just part of it, which is fine for state that changes occasionally but doesn't scale to state that changes very frequently and is read by many components deep in the tree.
+
+                    A **custom hook** is nothing more than a plain JavaScript function whose name starts with `use`, that itself calls other hooks internally -- `useLocalStorage`, say, calling `useState` and `useEffect` inside its own body. The entire point is extracting and reusing *stateful logic* across multiple components, the way you'd factor out a duplicated block of logic into a shared method, except a custom hook can carry its own `useState`/`useEffect` along with it, and each component that calls it gets its own independent instance of that state -- calling `useLocalStorage("theme", "dark")` from two different components produces two separate, independently-tracked values, not one value shared between them. The **Rules of Hooks** -- only call hooks at the top level of a function, never inside a loop, condition, or nested callback, and only call hooks from a React function component or from another hook -- apply to custom hooks exactly the same as they do to `useState`/`useEffect` directly, precisely because a custom hook is just a thin wrapper around those same underlying hook calls, not a fundamentally different kind of function.
+                    """, 1),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Limits of useState alone**
+
+                    - Prop drilling -- passing a value down through components that don't use it, just to reach one deeply nested child
+                    - Scattered related updates -- several setters that must change together in response to one event, with nothing enforcing they stay in sync
+
+                    **useReducer**
+
+                    - `const [state, dispatch] = useReducer(reducer, initialState);`
+                    - `function reducer(state, action) { switch (action.type) { ... } }` -- one place decides every state transition
+                    - `dispatch({ type: "add", item })` -- replaces calling several setters directly
+
+                    **useContext**
+
+                    - `const MyContext = createContext(defaultValue);`
+                    - `<MyContext.Provider value={...}>{children}</MyContext.Provider>` -- makes a value available to the whole subtree
+                    - `const value = useContext(MyContext);` -- read it directly, at any depth, no prop drilling
+
+                    **Context + useReducer ("poor man's Redux")**
+
+                    - Provider component holds `[state, dispatch]` from useReducer, exposes both via the context value
+                    - Reach for Redux Toolkit / Zustand instead once: updates are deeply nested, you need time-travel devtools, or Context re-renders become a measured perf problem
+
+                    **Custom hooks**
+
+                    - A function starting with `use` that itself calls other hooks (`useLocalStorage`, `useDebounce`)
+                    - Each calling component gets its own independent state -- not one shared value
+                    - Rules of Hooks apply: top-level calls only, only from a React function or another hook
+                    """, 2),
+                Block(BlockType.CodeSnippet, "useReducer + useContext, and a Custom Hook", BodyFormat.PlainText, """
+                    import { createContext, useContext, useReducer, useState, useEffect } from "react";
+
+                    // 1. useReducer -- consolidates related state transitions into one function
+                    const initialState = { items: [], total: 0 };
+
+                    function cartReducer(state, action) {
+                      switch (action.type) {
+                        case "add": {
+                          const items = [...state.items, action.item];
+                          return { items, total: state.total + action.item.price };
+                        }
+                        case "remove": {
+                          const items = state.items.filter(i => i.id !== action.id);
+                          const removed = state.items.find(i => i.id === action.id);
+                          return { items, total: state.total - (removed ? removed.price : 0) };
+                        }
+                        case "clear":
+                          return initialState;
+                        default:
+                          return state;
+                      }
+                    }
+
+                    // 2. useContext -- shares the reducer's state/dispatch without prop drilling
+                    const CartContext = createContext(null);
+
+                    function CartProvider({ children }) {
+                      const [state, dispatch] = useReducer(cartReducer, initialState);
+                      // "Poor man's Redux": a Context.Provider carrying { state, dispatch }
+                      // down the tree, paired with a reducer for the actual state transitions.
+                      return (
+                        <CartContext.Provider value={{ state, dispatch }}>
+                          {children}
+                        </CartContext.Provider>
+                      );
+                    }
+
+                    // Any descendant, no matter how deeply nested, reads the cart directly --
+                    // no prop needs to be threaded through components that don't use it.
+                    function AddToCartButton({ product }) {
+                      const { dispatch } = useContext(CartContext);
+                      return (
+                        <button onClick={() => dispatch({ type: "add", item: product })}>
+                          Add to cart
+                        </button>
+                      );
+                    }
+
+                    // 3. A custom hook -- a function starting with "use" that itself calls
+                    // other hooks, extracting reusable stateful logic out of a component.
+                    function useLocalStorage(key, initialValue) {
+                      const [value, setValue] = useState(() => {
+                        const stored = localStorage.getItem(key);
+                        return stored ? JSON.parse(stored) : initialValue;
+                      });
+
+                      useEffect(() => {
+                        localStorage.setItem(key, JSON.stringify(value));
+                      }, [key, value]);
+
+                      return [value, setValue];
+                    }
+                    """, 3, language: "jsx"),
+                Block(BlockType.Diagram, "Prop Drilling vs. Context + useReducer", BodyFormat.StructuredSteps, """
+                    [{"label":"Without Context: prop drilling","note":"App passes cartState down through Layout, Sidebar, and ProductPanel -- none of which use it -- just to reach AddToCartButton several levels deep"},{"label":"dispatch({ type: \"add\", item }) called from a deeply nested button","note":"No prop threading needed -- useContext(CartContext) reads state/dispatch directly, however deep the component sits"},{"label":"cartReducer(state, action) runs","note":"One function decides the next state for every related transition (add/remove/clear), instead of several separate setters changing in lockstep"},{"label":"CartContext.Provider re-renders with the new { state, dispatch }","note":"Every component that calls useContext(CartContext) re-renders -- fine at small/medium scale, a real cost once many components consume very frequently changing context"}]
+                    """, 4),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Reach for `useReducer` the moment you notice yourself writing multiple `useState` setters that must always change together for the same event -- consolidating them into one reducer function makes the actual rule ("what happens when this action occurs") visible and testable in one place, rather than implied by several setter calls that happen to appear next to each other.
+
+                    Keep a Context value's shape stable and, where it matters, split frequently-changing state into its own smaller context rather than bundling it with rarely-changing state -- since any change to a context's value re-renders every component consuming it, not just the ones that care about the specific piece that changed. Give custom hooks a name that actually starts with `use` even though nothing enforces it syntactically -- React's linter (`eslint-plugin-react-hooks`) uses that naming convention to know which functions to check the Rules of Hooks against.
+                    """, 5),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    If asked "when would you reach for useReducer over several useState calls," the strongest answer names the actual trigger: multiple pieces of state that change together in response to the same events, where consolidating the transition logic into one `(state, action) => newState` function is clearer than several setters that have to be kept manually in sync.
+
+                    If asked to justify choosing Context+useReducer over Redux Toolkit (or the reverse), give the concrete dividing line from this lesson rather than a preference -- reach for a dedicated library once updates are deeply nested, you need real dev tooling like time-travel debugging, or Context's blanket re-render-every-consumer behavior has become a measured, not hypothetical, performance problem.
+                    """, 6),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Introducing `useReducer` (or Context, or a full state library) preemptively, for a single component's local state that a plain `useState` would have handled perfectly well -- added structure has a real cost in code you have to read and maintain, and it should be paying for something concrete: consolidating several related transitions, or genuinely eliminating prop drilling.
+
+                    Putting a context value that changes very frequently (like live coordinates, or a value updating many times per second) directly into a single large Context consumed by many components -- every one of those consumers re-renders on every change, which is exactly the scenario this lesson says should push you toward a dedicated library instead, not toward adding more Context providers.
+
+                    Naming a function `useSomething` purely out of habit, without it actually calling any hooks internally -- and, in the other direction, calling a real hook (`useState`, `useContext`) from inside a helper function that does *not* start with `use`, which breaks the naming convention React's own lint rule relies on to check the Rules of Hooks at all.
+                    """, 7),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    Prop drilling is like relaying a message down a long chain of people at a party, each of whom has to stop what they're doing, listen, and pass it along, even though only the person at the very end actually needed to hear it. `useContext` is like a PA system instead -- announce it once, and anyone in the room who's listening for it hears it directly, with no one in between required to relay anything.
+
+                    `useReducer` is like a restaurant kitchen with one expediter who reads every incoming order ticket and decides exactly what happens next for that ticket, rather than five different cooks each independently guessing what to do and hoping their guesses stay consistent with each other.
+
+                    A custom hook is like a labeled toolbox you can hand to any station on the line: `useLocalStorage` is one specific tool that already knows how to read from and write to storage, and every station that picks up its own copy of that toolbox gets its own independent working set -- not one toolbox shared, and fought over, by everyone at once.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "A form has five related fields where changing one dropdown must reset two of the others, all in response to the same event. Keeping several independent useState calls in sync is getting error-prone. What does this lesson recommend?",
+                    "useReducer consolidates every related state transition into a single (state, action) => newState function, so a single dispatch call updates everything the event should affect in one place, instead of several setters that have to be manually kept consistent with each other.",
+                    [
+                        new QuizOptionSeed("Add a useEffect that watches all five state variables and manually corrects them after every render", false),
+                        new QuizOptionSeed("Consolidate the related transitions into a single useReducer(state, action) => newState function, and dispatch one action per event instead of calling multiple setters directly", true),
+                        new QuizOptionSeed("Move each of the five values into its own separate Context provider", false),
+                        new QuizOptionSeed("Replace useState with plain module-level variables shared across renders", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "Which statement correctly describes the Rules of Hooks as they apply to a custom hook like useLocalStorage?",
+                    "A custom hook is just a function that calls other hooks internally, so it must follow the same rules as any hook: its name must start with use (React's lint tooling relies on this convention), and it can only be called at the top level of a React function component or another hook -- never inside a loop, condition, or nested callback.",
+                    [
+                        new QuizOptionSeed("Custom hooks are exempt from the Rules of Hooks, since they're user-defined rather than built into React", false),
+                        new QuizOptionSeed("A custom hook's name must start with use, and, like any hook, it can only be called at the top level of a React function component or another hook -- never inside a loop, condition, or nested function", true),
+                        new QuizOptionSeed("Custom hooks can only call useState internally, never useEffect or useContext", false),
+                        new QuizOptionSeed("Custom hooks must return JSX, exactly like a component does", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("useReducer", "https://react.dev/reference/react/useReducer", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("Reusing Logic with Custom Hooks", "https://react.dev/learn/reusing-logic-with-custom-hooks", LinkType.OfficialDocs),
+            ],
+            prerequisites: [lesson1]);
+
+        var lesson2Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson2.Slug,
+        [
+            "Convert a component using three or four related useState calls into a single useReducer, writing the reducer's switch statement yourself and dispatching one action per event",
+            "Wrap a small component tree in a Context.Provider carrying { state, dispatch } from a useReducer, and read it from a deeply nested child with useContext instead of passing props down through every intermediate level",
+            "Write your own custom hook (useLocalStorage or useDebounce) that calls useState and useEffect internally, and confirm two different components using it each get their own independent state",
+        ]);
+
+        var module = BuildModule(topicId, "frontend-styling-build-tooling-and-hooks", "Styling, Build Tooling & Custom Hooks",
+            "Styling approaches for a React app -- plain CSS/CSS Modules, utility-first Tailwind, and CSS-in-JS -- contrasted against what a build tool like Vite or webpack actually does (and this exact repo's own no-build-step wwwroot/ frontend as a real counter-example), followed by useReducer, useContext, and custom hooks as the path beyond useState alone.",
+            90, [lesson1, lesson2], sortOrder: 3);
+
+        return (module, [lesson1Checklist, lesson2Checklist]);
+    }
+
+    private static (Module, List<ChecklistSeed>) BuildFrontendTestingAndAccessibilityModule(int topicId)
+    {
+        var lesson1 = BuildLesson(
+            slug: "testing-react-components",
+            title: "Testing React Components",
+            summary: "Why component tests matter, where they sit on the testing pyramid between unit and end-to-end tests, Vitest vs Jest, and React Testing Library's core philosophy of testing behavior rather than implementation.",
+            estimatedMinutes: 40,
+            objectives:
+            [
+                "Explain why component tests matter: catching regressions during a refactor, documenting expected behavior, and giving faster feedback than manually clicking through the app",
+                "Place unit tests, component tests, and end-to-end tests on the testing pyramid and describe the confidence/speed tradeoff each one makes",
+                "Explain React Testing Library's core philosophy -- query the DOM the way a real user would (by role, text, or label) rather than by implementation details like a CSS class or internal state",
+                "Write a component test that renders a component, simulates a user interaction, and asserts on what the user would actually see afterward",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    A **component test** renders a component and interacts with it the way a user would, then asserts on the result. They matter for three concrete reasons: they catch regressions the moment a refactor breaks something, instead of weeks later when a user reports it; they act as living documentation of how a component is *supposed* to behave, which stays accurate because it's checked by a test runner instead of going stale like a comment; and they give far faster feedback than manually clicking through the running app in a browser after every change.
+
+                    Frontend tests are usually described with a **testing pyramid**: a few slow, expensive, high-confidence **end-to-end (e2e) tests** at the top, which drive a full browser against the real running app (Playwright, Cypress); a larger middle layer of **component tests**, which render a single component in a lightweight test environment, interact with it, and assert on the result; and the widest base of fast, cheap **unit tests**, which test a single function or hook in isolation with no rendering at all. Each layer trades confidence for speed: a unit test tells you almost nothing about whether the UI actually works, but runs in milliseconds; an e2e test proves the whole real system works end to end, but is slow and comparatively expensive to write and maintain. Component tests are the sweet spot this lesson focuses on -- realistic enough to catch genuine UI bugs, fast and stable enough to run constantly.
+
+                    **Vitest** is the modern default test runner, especially in a project already using Vite for its build tooling -- it reuses the same config and transform pipeline, so tests run fast with near-zero setup. **Jest** is the older, still extremely common alternative, and the one you're more likely to find in an existing large codebase. For basic usage the two are largely API-compatible: `describe`, `it`/`test`, and `expect` work almost identically in both, so skills transfer directly between them; the differences mostly show up in configuration and more advanced mocking features.
+
+                    **React Testing Library (RTL)** is the standard tool for writing component tests against React, and it has one guiding philosophy that matters more than any individual API: **test behavior, not implementation**. Concretely, that means querying the rendered DOM the way a real user (or a screen reader) would perceive it -- by visible text (`getByText`), by an associated label (`getByLabelText`), or by accessible role and name (`getByRole("button", { name: "Save" })`) -- rather than by something only the code knows about, like a CSS class name (`.btn-primary`) or a component's internal state variable. A test written against role/text/label keeps passing through a refactor that changes *how* a component is built (different internal state, a different CSS framework) as long as it still *behaves* the same for the user, and it correctly fails when the user-visible behavior actually breaks -- which is exactly what a good test should do.
+
+                    A minimal example: a `Counter` component renders a count and an "Increment" button. A test for it renders the component, simulates a real click on the button using `userEvent` (which fires the full realistic sequence of events a browser would -- pointer down, focus, click -- rather than `fireEvent`'s single synthetic event), and then asserts that the text the user would see has changed from "Count: 0" to "Count: 1". Nothing in that test touches the component's internal `useState` call directly -- it only observes what a user observes.
+                    """, 1),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Testing pyramid**
+
+                    - Unit test -- a single function/hook, no rendering, fastest, least confidence about the actual UI
+                    - Component test -- render + interact + assert, the focus of this lesson
+                    - End-to-end (e2e) test -- a real browser drives the real running app, slowest, highest overall confidence
+
+                    **Runners**
+
+                    - Vitest -- modern default, especially alongside Vite; reuses the same build config
+                    - Jest -- older, still very common, largely API-compatible with Vitest for basic `describe`/`it`/`expect` usage
+
+                    **RTL query priority (most to least preferred)**
+
+                    - `getByRole("button", { name: "Submit" })` -- matches how assistive tech and sighted users both perceive the element
+                    - `getByLabelText("Email")` -- for form fields associated with a visible label
+                    - `getByText("Welcome back")` -- for plain visible text
+                    - `getByTestId("submit-btn")` -- last resort only, when no accessible query is possible
+
+                    **Interacting**
+
+                    - `userEvent.setup()` then `await user.click(el)` / `await user.type(el, "text")` -- simulates the full realistic event sequence, always awaited
+                    - `fireEvent.click(el)` -- fires one synthetic event directly; lower-level, less realistic than `userEvent`
+
+                    **Asserting**
+
+                    - `expect(screen.getByText("Count: 1")).toBeInTheDocument()`
+                    - `expect(screen.getByRole("button", { name: "Save" })).toBeDisabled()`
+                    """, 2),
+                Block(BlockType.CodeSnippet, "A Counter Component and Its RTL Test", BodyFormat.PlainText, """
+                    // Counter.jsx
+                    function Counter() {
+                      const [count, setCount] = useState(0);
+
+                      return (
+                        <div>
+                          <p>Count: {count}</p>
+                          <button onClick={() => setCount(count + 1)}>Increment</button>
+                        </div>
+                      );
+                    }
+
+                    // Counter.test.jsx
+                    import { render, screen } from "@testing-library/react";
+                    import userEvent from "@testing-library/user-event";
+                    import { describe, it, expect } from "vitest"; // swap for Jest's globals -- same shape
+                    import Counter from "./Counter";
+
+                    describe("Counter", () => {
+                      it("increments the displayed count when the button is clicked", async () => {
+                        const user = userEvent.setup();
+                        render(<Counter />);
+
+                        // Assert on what a user sees -- not on the component's internal state.
+                        expect(screen.getByText("Count: 0")).toBeInTheDocument();
+
+                        // getByRole: query by accessible role + accessible name, the way a
+                        // screen reader (and a sighted user scanning for a button) would.
+                        const button = screen.getByRole("button", { name: "Increment" });
+                        await user.click(button);
+
+                        expect(screen.getByText("Count: 1")).toBeInTheDocument();
+                      });
+                    });
+                    """, 3, language: "jsx"),
+                Block(BlockType.Diagram, "The Testing Pyramid", BodyFormat.AsciiArt, """
+                                  /\
+                                 /e2e\        <- fewest, slowest, real browser + real app
+                                /------\
+                               /component\    <- render + interact + assert (this lesson)
+                              /------------\
+                             / unit tests   \ <- most, fastest, a single function/hook alone
+                            /------------------\
+
+                    Speed:      unit tests > component tests > e2e tests
+                    Confidence: e2e tests   > component tests > unit tests
+
+                    Component tests are the sweet spot: realistic enough to catch real
+                    UI bugs, fast and stable enough to run on every save.
+                    """, 4),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Prefer queries in this order: `getByRole` first (it mirrors what assistive tech and sighted users both perceive), then `getByLabelText` for form fields, then `getByText`, and reach for `getByTestId` only when no accessible query is genuinely possible -- it should feel like a last resort, not a default habit.
+
+                    Prefer `userEvent` over `fireEvent` for interactions, since it fires the same realistic sequence of events (focus, pointer, keyboard) a real browser would rather than one synthetic event -- and remember every `userEvent` call is asynchronous, so it must be `await`ed. Assert on visible, user-facing output (text, disabled state, an item appearing/disappearing) rather than reaching into a component's internal state or props -- if a test only passes by inspecting internals, it's testing implementation, not behavior.
+                    """, 5),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    If asked what makes React Testing Library different from something like Enzyme (an older tool that let tests inspect a component's internal state and props directly), lead with the philosophy, not the API: RTL deliberately makes it hard to query by implementation details, forcing tests to interact with the DOM the way a real user would. That's what "test behavior, not implementation" means in practice, and it's the single most important idea to be able to articulate about frontend testing. If asked to justify writing component tests instead of "just more e2e tests," point to the pyramid: e2e tests are slower, more brittle (a real backend, real network, more moving parts to flake), and more expensive to maintain, so a healthy suite leans on many fast component tests and reserves e2e tests for a handful of critical, whole-system flows.
+                    """, 6),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Querying by CSS class or `container.querySelector(".btn-primary")` instead of an accessible query -- it couples the test to styling/implementation details that can change without any real behavior changing (a false failure), or fail to catch a real behavior break if the class survives a refactor (a false pass).
+
+                    Forgetting to `await` a `userEvent` call (`user.click(button)` without `await`) -- since `userEvent` methods are asynchronous, skipping `await` lets the assertion run before the interaction has actually finished, producing flaky, order-dependent test failures.
+
+                    Also common: writing a test that inspects a component's internal state or calls its internal functions directly instead of asserting on rendered output, and over-relying on snapshot tests that pass even when the rendered output silently regresses, because nobody reviews a giant snapshot diff carefully.
+                    """, 7),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    Testing behavior instead of implementation is like a driving examiner grading a road test: the examiner watches whether the car actually stops at the stop sign and merges safely -- observable behavior -- rather than popping the hood mid-test to inspect which specific engine parts fired in which order. The car can be re-engineered entirely (a different engine, different wiring) and the examiner's test still passes, as long as it still stops at the stop sign; but if it rolls through the sign, no amount of "the engine internals looked correct" saves it.
+
+                    The testing pyramid is like a home inspection process: a quick unit test is like checking a single outlet with a tester (fast, narrow, tells you almost nothing about the whole house); a component test is like verifying one room's wiring, plumbing, and outlets together (realistic, still fast); an e2e test is like having the power company connect the whole house to the real grid and confirming every room works together (thorough, but slow and expensive to redo for every small change).
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "Where do component tests sit on the frontend testing pyramid, and what tradeoff do they make compared to a pure unit test and a full end-to-end test?",
+                    "Component tests render an actual component and interact with it, trading a little speed (versus an isolated unit test with no rendering) for a lot more realism, and trading e2e-level whole-system confidence for far more speed and stability than a full browser-driven end-to-end test. That middle-ground tradeoff is exactly why they're the main focus of frontend testing day to day.",
+                    [
+                        new QuizOptionSeed("Component tests are the slowest and least useful of the three, so most projects should skip them entirely", false),
+                        new QuizOptionSeed("Component tests trade a little speed for realism versus a pure unit test, and trade full end-to-end realism for far more speed and stability versus a browser e2e test", true),
+                        new QuizOptionSeed("Component tests and unit tests are exactly the same technique with a different name", false),
+                        new QuizOptionSeed("End-to-end tests should be the primary form of test in a suite, since they run the fastest of the three", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "A test finds and clicks a submit button using `container.querySelector(\".btn-primary\")`. Following React Testing Library's core philosophy, what's the problem, and what should replace it?",
+                    "RTL's core philosophy is to test behavior the way a real user experiences it, not implementation details like a CSS class name. Querying by class couples the test to styling/implementation -- it can fail when nothing about real behavior changed, or keep passing when real behavior actually breaks. It should be replaced with an accessible query such as screen.getByRole(\"button\", { name: /submit/i }), which queries by the role and name a real user (or assistive tech) would perceive.",
+                    [
+                        new QuizOptionSeed("There's no real problem -- querying by CSS class is RTL's officially recommended first choice", false),
+                        new QuizOptionSeed("Querying by class couples the test to implementation details instead of user-visible behavior; it should be replaced with an accessible query like getByRole(\"button\", { name: /submit/i })", true),
+                        new QuizOptionSeed("The only issue is that querySelector runs slightly slower than getByRole, with no philosophy involved", false),
+                        new QuizOptionSeed("The fix is to give the test direct access to the component's internal state instead of querying the DOM at all", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Guiding Principles - Testing Library", "https://testing-library.com/docs/guiding-principles/", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("Vitest - Getting Started", "https://vitest.dev/guide/", LinkType.OfficialDocs),
+            ]);
+
+        var lesson1Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson1.Slug,
+        [
+            "Build a small component (a counter or a controlled text input) and write a Vitest/RTL test that renders it, simulates a click or keystroke with userEvent, and asserts on the text a user would actually see afterward",
+            "Take that same test and, if any query uses a CSS class or getByTestId, rewrite it to use getByRole/getByLabelText/getByText instead, then explain out loud why the rewritten version survives more kinds of refactors",
+            "Sort three tests you've written (or plan to write) into the pyramid -- one true unit test, one component test, one you'd only trust a real end-to-end tool to catch -- and justify each placement in one sentence",
+        ]);
+
+        var lesson2 = BuildLesson(
+            slug: "web-accessibility-fundamentals",
+            title: "Web Accessibility Fundamentals",
+            summary: "Why accessibility matters, semantic HTML as the foundation, ARIA attributes as a last resort rather than a replacement for the right element, keyboard navigation, and a real accessibility audit of this repo's own wwwroot frontend.",
+            estimatedMinutes: 40,
+            objectives:
+            [
+                "Explain why web accessibility matters: real users with visual, motor, auditory, or cognitive disabilities depend on assistive technology to use software at all",
+                "Choose semantic HTML elements (button, nav, main, header, a correctly ordered heading hierarchy) so assistive tech gets correct behavior for free, instead of recreating it by hand on a generic div",
+                "Apply ARIA attributes (aria-label, aria-labelledby, aria-live, role) only where semantic HTML can't fill the gap, following the guideline that no ARIA is better than bad ARIA",
+                "Verify that every interactive element on a page is reachable and operable using only Tab, Shift+Tab, Enter, and Space -- no mouse",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    Accessibility (shortened **a11y** -- "a", 11 letters, "y") isn't a nice-to-have polish item. Real users with visual, motor, auditory, or cognitive disabilities rely on assistive technology -- screen readers, keyboard-only navigation, voice control, switch devices -- to use software at all, and a meaningful percentage of any real user base needs this to actually function, not merely to be more comfortable. Shipping inaccessible UI doesn't make it slightly worse for some users -- for a screen-reader user hitting an unlabeled icon button, or a keyboard-only user stuck unable to close a custom modal, it can mean the feature is completely unusable.
+
+                    The foundation is **semantic HTML**: using the element whose meaning actually matches what you're building, instead of a generic `<div>` with a click handler bolted on. A real `<button>` gets keyboard focusability, Enter/Space activation, and a correct screen-reader announcement ("button, Save") entirely for free, with zero extra code -- a `<div onClick={...}>` gets none of that automatically, and reproducing it by hand (tabindex, a keydown handler, a role, a focus style) is easy to get subtly wrong. The same logic applies to landmark elements (`<nav>`, `<main>`, `<header>`) -- they let a screen reader jump straight to "the navigation" or "the main content" -- and to heading hierarchy: `<h1>` through `<h6>` should nest in order (an `<h2>` under an `<h1>`, an `<h3>` under that `<h2>`), never skipped purely because a lower heading level happened to look visually smaller. Skipping levels breaks the outline a screen-reader user navigates by.
+
+                    **ARIA attributes** -- `aria-label`, `aria-labelledby`, `aria-live`, `role`, and others -- exist to patch a real gap semantic HTML genuinely can't fill on its own: labeling an icon-only button, associating a label with a custom widget, or announcing a dynamic update. The critical caveat is that ARIA should be a **last resort**, not a replacement for using the right element in the first place -- a commonly cited, genuinely true guideline is **"no ARIA is better than bad ARIA."** Slapping `role="button"` onto a `<div>` and calling it done, without also replicating focusability and Enter/Space handling, actively misleads assistive tech into promising behavior that isn't really there -- worse than making no accessibility claim at all.
+
+                    **Keyboard navigation** is the other pillar: every interactive element on a page must be reachable and operable using only Tab, Shift+Tab, Enter, and Space -- no mouse. A very common, very real bug is a custom dropdown or modal built entirely with mouse-oriented click handlers that a keyboard-only user simply cannot open, navigate inside, or close -- they can Tab onto the trigger, but nothing happens on Enter, or once open there's no way to Tab back out or press Escape to dismiss it.
+
+                    This repo's own frontend (`wwwroot/`) is a real codebase worth auditing directly. `wwwroot/index.html` includes `<div id="route-announcer" class="sr-only" aria-live="polite"></div>` -- and `wwwroot/js/router.js` sets `announcer.textContent = document.title;` after every single route change. That pattern solves a real problem: this app uses hash-based routing (`location.hash`), which never triggers a full page reload, so a screen reader has no natural moment to notice the visible content changed. Setting text inside a `polite` live region gives assistive tech an explicit signal to announce the new page, without stealing keyboard focus from wherever the user currently is -- a genuinely good, real example of `aria-live` used correctly. `wwwroot/js/components/nav-bar.js` and `wwwroot/js/views/dashboard-view.js` also show good real patterns: the mobile-menu toggle is a real `<button>` (not a div) with `aria-label="Toggle navigation menu"`, `aria-expanded`, and `aria-controls` set and kept in sync; the dashboard's topic cards are real `<button type="button">` elements rather than clickable `<div>`s; and decorative icon/arrow glyphs are marked `aria-hidden="true"` so a screen reader skips over them instead of announcing meaningless symbols. But the same nav bar has a real gap: the mobile panel it opens has no Escape-key handler to close it, and closing it never returns keyboard focus to the toggle button -- a keyboard-only user can open the panel, but has no keyboard-only way to dismiss it other than tabbing all the way through to a nav link and activating it.
+                    """, 1),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Semantic HTML first**
+
+                    - `<button>` not `<div onClick>` -- free focusability, Enter/Space activation, correct announced role
+                    - `<nav>`, `<main>`, `<header>` -- landmark elements a screen reader can jump straight to
+                    - `<h1>` … `<h6>` in order, never skipped -- the outline assistive tech navigates by
+
+                    **ARIA (last resort, not a replacement)**
+
+                    - `aria-label="Close dialog"` -- accessible name for an icon-only control with no visible text
+                    - `aria-labelledby="id"` -- points to an existing visible element to use as the label
+                    - `aria-live="polite"` -- announces a dynamic content change without stealing focus (`"assertive"` interrupts immediately -- use sparingly)
+                    - `role="..."` -- only when no native element already has the right role; wrong/incomplete ARIA is worse than none
+
+                    **Keyboard navigation**
+
+                    - Tab / Shift+Tab -- move focus forward/backward through every interactive element
+                    - Enter / Space -- activate the focused control (native buttons/links get this for free)
+                    - Escape -- must close any custom dropdown/modal/menu you opened
+                    - Smoke test: unplug the mouse and try to complete the whole flow with the keyboard alone
+
+                    **This repo, concretely**
+
+                    - `wwwroot/index.html` -- `#route-announcer` with `aria-live="polite"`
+                    - `wwwroot/js/router.js` -- sets `announcer.textContent = document.title` after every route change
+                    """, 2),
+                Block(BlockType.CodeSnippet, "Semantic HTML, ARIA as Last Resort, and a Live Region", BodyFormat.PlainText, """
+                    <!-- Bad: not focusable, no Enter/Space activation, announced as plain text -->
+                    <div class="btn" onclick="save()">Save</div>
+
+                    <!-- Good: keyboard focus, Enter/Space activation, and a correct
+                         screen-reader announcement all come for free -->
+                    <button type="button" onclick="save()">Save</button>
+
+                    <!-- An icon-only button has no visible text, so ARIA genuinely
+                         earns its place here -- this is what "last resort" looks like -->
+                    <button type="button" aria-label="Close dialog">
+                      <svg aria-hidden="true">...</svg>
+                    </button>
+
+                    <!-- role="button" on a div only fakes the announced role -- it does NOT
+                         add keyboard focus or Enter/Space handling by itself. Adding those
+                         back by hand is exactly the "bad ARIA" the guideline warns about. -->
+                    <div role="button" tabindex="0"
+                         onclick="save()"
+                         onkeydown="if (event.key === 'Enter' || event.key === ' ') save()">
+                      Save (manually reimplemented -- prefer a real button instead)
+                    </div>
+
+                    <!-- The real pattern from this repo's wwwroot/index.html: a live region
+                         that announces route changes for hash-based routing, which never
+                         triggers a real page reload/announcement on its own -->
+                    <div id="route-announcer" class="sr-only" aria-live="polite"></div>
+
+                    <script>
+                      // wwwroot/js/router.js, run after every hash route change:
+                      // announcer.textContent = document.title;
+                    </script>
+                    """, 3, language: "html"),
+                Block(BlockType.Diagram, "Should This Need ARIA at All?", BodyFormat.AsciiArt, """
+                    Can a native semantic element do this job?
+                       (button, a, nav, main, header, input, ...)
+                              |
+                             YES ---------> Use it. Focusability, keyboard activation,
+                              |             and the correct announced role are all free.
+                              NO
+                              |
+                              v
+                    Does an ARIA attribute correctly describe what's
+                    already there, filling a real, remaining gap?
+                              |
+                             YES ---------> Add the minimal ARIA needed
+                              |             (aria-label, aria-live, role, etc.)
+                              NO
+                              |
+                              v
+                       Do not guess. An incomplete or wrong ARIA attribute
+                       is worse than none: "No ARIA is better than Bad ARIA"
+                                (W3C ARIA Authoring Practices Guide)
+                    """, 4),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Reach for the correct semantic element first, every time -- `<button>` for anything clickable, `<a href>` for anything that navigates, a correctly nested heading hierarchy -- and only add ARIA to patch a gap that genuinely remains afterward, such as labeling an icon-only control or announcing a dynamic update via `aria-live`.
+
+                    Give every icon-only interactive element an `aria-label` (or visually-hidden text), and mark purely decorative icons `aria-hidden="true"` so a screen reader skips them instead of reading out meaningless symbol names. Periodically test a whole flow using only Tab, Shift+Tab, Enter, and Space -- with the mouse physically unplugged, if you want to be rigorous -- since this is the single fastest way to catch a keyboard trap or an unreachable control before a real user does.
+                    """, 5),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    If asked when to use ARIA, lead with the guideline itself: "no ARIA is better than bad ARIA" -- ARIA should patch a genuine gap semantic HTML can't fill, never replace choosing the right element in the first place, because an incomplete reimplementation (a role with no matching keyboard behavior) actively misleads assistive tech rather than helping it. If asked to explain `aria-live`, be precise about the two common values: `"polite"` waits for the screen reader to finish whatever it's currently announcing before speaking the update (appropriate for something like a route change or a saved-confirmation message), while `"assertive"` interrupts immediately (reserved for urgent, rare cases like an error that blocks the user's next action) -- and being able to point to this repo's own `#route-announcer` in `wwwroot/index.html`, updated from `wwwroot/js/router.js`, as a concrete real example of `"polite"` used correctly is a strong, specific answer.
+                    """, 6),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Building a clickable `<div>` or `<span>` with only an `onClick` handler and no `tabindex`, no keydown handling for Enter/Space, and no accessible role -- a mouse user never notices, but a keyboard-only or screen-reader user simply cannot activate it at all.
+
+                    Adding `role="button"` (or any role) to an element without also reimplementing everything native buttons get for free -- keyboard focus, Enter/Space activation, a visible focus style -- which produces exactly the "bad ARIA" the guideline warns against: assistive tech is told "this behaves like a button" when it demonstrably doesn't.
+
+                    Also common, and present in this very repo: a custom dropdown, menu, or panel (like the mobile nav panel in `wwwroot/js/components/nav-bar.js`) that a keyboard user can open by tabbing to its trigger and pressing Enter, but that has no Escape-key handler to close it and never returns focus to the trigger button afterward -- leaving a keyboard-only user with an incomplete, one-directional interaction instead of a fully operable one.
+                    """, 7),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    Semantic HTML is like a building constructed to standard building code: ramps, automatic doors, and marked exits are already there because the code required them, with no extra design effort. A `<div>` rebuilt to act like a button is like a custom side door you welded on yourself -- it might look identical from the outside, but nobody guaranteed it opens for a wheelchair, and if you forgot a hinge, it simply doesn't open for some people at all, even though it looks fine to everyone else walking by.
+
+                    `aria-live="polite"` is like a considerate announcer at a train station: it waits for the current announcement to finish before calmly stating "the train has changed platforms," rather than talking over whoever is already mid-sentence. `aria-live="assertive"` is the fire alarm instead -- it interrupts everything immediately, which is exactly why it should be rare, reserved for genuinely urgent updates rather than routine ones.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "A team adds role=\"button\", tabindex=\"0\", and a manual keydown handler to a <div> instead of just using a <button>. According to the 'no ARIA is better than bad ARIA' guideline, what's the concern?",
+                    "A real <button> gets keyboard focusability, Enter/Space activation, and a correct screen-reader announcement entirely for free. Manually recreating that on a div is easy to get subtly wrong -- a missed key, a missing focus style, an incomplete handler -- and an incomplete or incorrect reimplementation actively misleads assistive tech into expecting behavior that isn't fully there, which is worse than making no ARIA claim at all. The right fix is almost always to use the real semantic element instead of reimplementing its behavior by hand.",
+                    [
+                        new QuizOptionSeed("ARIA attributes only affect visual styling, not screen readers, so there's no real concern", false),
+                        new QuizOptionSeed("A manual reimplementation is easy to get subtly wrong, and an incomplete or incorrect one misleads assistive tech worse than having no ARIA at all -- using a real <button> avoids the problem entirely", true),
+                        new QuizOptionSeed("Adding role=\"button\" automatically supplies full keyboard support with no additional code needed", false),
+                        new QuizOptionSeed("ARIA attributes always override the underlying element's real behavior automatically, so the div now behaves identically to a button", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "In this repo's wwwroot/index.html, a #route-announcer element is set with aria-live=\"polite\" and its text is updated in router.js after every route change. What real problem is this specific pattern solving?",
+                    "This app uses hash-based routing (changing location.hash), which never triggers a full page reload, so a screen reader has no natural moment -- like a fresh page load -- to notice that the visible content changed. Setting the text of a polite live region after each route change gives assistive tech an explicit signal to announce the new page, without stealing keyboard focus away from wherever the user currently is.",
+                    [
+                        new QuizOptionSeed("It's a purely visual loading spinner shown during slow network requests", false),
+                        new QuizOptionSeed("Hash-based routing never reloads the page, so this live region explicitly tells assistive tech a new view is showing, without moving keyboard focus", true),
+                        new QuizOptionSeed("It exists to trap keyboard focus inside the new view until the user presses Tab", false),
+                        new QuizOptionSeed("It automatically redirects the browser to a different URL", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("ARIA - MDN", "https://developer.mozilla.org/en-US/docs/Web/Accessibility/ARIA", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("Web Accessibility Initiative (WAI) - Introduction", "https://www.w3.org/WAI/fundamentals/accessibility-intro/", LinkType.OfficialDocs),
+            ],
+            prerequisites: [lesson1]);
+
+        var lesson2Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson2.Slug,
+        [
+            "Open wwwroot/index.html and wwwroot/js/router.js in this repo, find the #route-announcer element and the line that sets announcer.textContent, and explain in your own words why hash-based routing needs this aria-live region at all",
+            "Audit wwwroot/js/components/nav-bar.js by operating the whole nav bar (desktop links, search, and the mobile menu toggle) using only Tab/Shift+Tab/Enter/Space with no mouse -- confirm the toggle button's aria-expanded/aria-controls/aria-label are correct, then find that the mobile panel has no Escape-key handler and never returns focus to the toggle button, and add one of those two missing behaviors yourself",
+            "Take one clickable div/span you've built in your own project (or find one on any real site), convert it to a semantically correct <button> (or add the missing tabindex/keydown/role support if a real button genuinely isn't an option), and verify Tab, Enter, and Space all work on it",
+        ]);
+
+        var module = BuildModule(topicId, "frontend-testing-and-accessibility", "Testing & Accessibility",
+            "Component testing with Vitest/Jest and React Testing Library's test-behavior-not-implementation philosophy, followed by web accessibility fundamentals -- semantic HTML, ARIA as a last resort, keyboard navigation, and a real accessibility audit of this repo's own wwwroot frontend.",
+            80, [lesson1, lesson2], sortOrder: 4);
+
+        return (module, [lesson1Checklist, lesson2Checklist]);
+    }
 
     // ============================== Shared builders ==============================
 
