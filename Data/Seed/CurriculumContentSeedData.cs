@@ -47,6 +47,7 @@ public static class CurriculumContentSeedData
             BuildCSharpJsonSerializationModule(topicIdBySlug["csharp"]),
             BuildCSharpModernSyntaxAndErrorHandlingModule(topicIdBySlug["csharp"]),
             BuildCSharpLowLevelAndDiagnosticsModule(topicIdBySlug["csharp"]),
+            BuildCSharpExpressionTreesAndChannelsModule(topicIdBySlug["csharp"]),
             BuildDotNetModule(topicIdBySlug["dotnet"]),
             BuildDotNetProductionReadinessModule(topicIdBySlug["dotnet"]),
             BuildDotNetScalingAndResilienceModule(topicIdBySlug["dotnet"]),
@@ -54,6 +55,7 @@ public static class CurriculumContentSeedData
             BuildDotNetApiDesignAndTrafficControlModule(topicIdBySlug["dotnet"]),
             BuildDotNetDistributedCommunicationAndObservabilityModule(topicIdBySlug["dotnet"]),
             BuildDotNetResilientHttpCallsAndErrorHandlingModule(topicIdBySlug["dotnet"]),
+            BuildDotNetSignalRAndMinimalApiExtensibilityModule(topicIdBySlug["dotnet"]),
             BuildDsaModule(topicIdBySlug["dsa"]),
             BuildDsaGraphsModule(topicIdBySlug["dsa"]),
             BuildDsaLinkedListsAndHeapsModule(topicIdBySlug["dsa"]),
@@ -6504,6 +6506,395 @@ public static class CurriculumContentSeedData
 
     // ============================== .NET ==============================
 
+    private static (Module, List<ChecklistSeed>) BuildCSharpExpressionTreesAndChannelsModule(int topicId)
+    {
+        var lesson1 = BuildLesson(
+            slug: "building-and-traversing-expression-trees",
+            title: "Building & Traversing Expression Trees",
+            summary: "Going past Func<T> vs. Expression<Func<T>> as a contrast: constructing an expression tree by hand with the System.Linq.Expressions factory methods, compiling it into a callable delegate, and writing a custom ExpressionVisitor -- the actual mechanism EF Core uses to turn a lambda into SQL.",
+            estimatedMinutes: 40,
+            objectives:
+            [
+                "Explain how this lesson builds on Func<T> vs. Expression<Func<T>>, and state precisely why a data structure of Expression nodes can be inspected and translated while a compiled delegate cannot",
+                "Construct an expression tree by hand using Expression.Parameter, Expression.Constant, a comparison factory method, and Expression.Lambda, equivalent to a hand-written lambda",
+                "Call .Compile() on a hand-built expression tree and invoke the resulting delegate, explaining what .Compile() actually produces",
+                "Write a custom ExpressionVisitor subclass that inspects or rewrites nodes in a tree, and explain why this is the mechanism behind LINQ providers, validation frameworks, and mocking libraries",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    The earlier lesson on lambdas and extension methods introduced the contrast between `Func<int, bool> f = n => n > 10;` (compiled straight to IL -- executable code you can call immediately) and `Expression<Func<int, bool>> e = n => n > 10;` (compiled instead into a **data structure**: a tree of `Expression` objects describing "parameter `n`, greater-than, constant `10`"). That lesson stopped at the observation that `IQueryable<T>` providers like EF Core need the expression-tree form. This lesson goes further: how do you actually *build* one of those trees yourself, node by node, without writing a lambda at all -- and once you have one, how do you *look inside it* and *change it*?
+
+                    The `System.Linq.Expressions` namespace exposes the same factory methods the C# compiler itself calls behind the scenes whenever it compiles a lambda into an `Expression<T>`. `Expression.Parameter(typeof(int), "x")` creates a `ParameterExpression` node representing an input variable named `x` of type `int` -- this is the tree's equivalent of the `x` in `x => x > 10`. `Expression.Constant(10)` creates a `ConstantExpression` node wrapping the literal value `10`. `Expression.GreaterThan(left, right)` creates a `BinaryExpression` node representing the `>` comparison between two child expressions -- it doesn't evaluate anything, it just describes the comparison as data. Finally, `Expression.Lambda<Func<int, bool>>(body, parameters)` wraps a body expression and its parameter list into a top-level `Expression<Func<int, bool>>`, the same type you'd get from writing the lambda directly. Every node in the resulting tree is immutable data sitting on the heap, not a single instruction has executed yet.
+
+                    Once you have that tree -- whether the compiler built it from a lambda or you built it by hand with factory methods -- calling **`.Compile()`** walks the tree and emits actual IL at runtime, handing back an ordinary invocable delegate (`Func<int, bool>` in this example). Only *then* does anything execute. This is precisely the boundary EF Core straddles: your `.Where(u => u.Age > 18)` lambda is captured as an `Expression<Func<User, bool>>` tree, and EF Core's LINQ provider never calls `.Compile()` on it at all for query purposes -- instead it walks the tree itself and emits `WHERE Age > 18` as SQL text. `.Compile()` is what you reach for only when you want the tree to actually *run as C#*, not be translated into something else.
+
+                    Walking a tree by hand with a chain of `is` checks and casts works but gets unwieldy fast, so `System.Linq.Expressions` ships **`ExpressionVisitor`**, an abstract base class built specifically for this. It implements a `Visit` method for every node type (`VisitBinary`, `VisitConstant`, `VisitParameter`, and so on) that, by default, recursively visits every child node and rebuilds an equivalent tree -- a pure "walk the whole thing and change nothing" identity transform. Subclass it and override just the node-type methods you care about: override `VisitConstant` to log or collect every constant value the tree contains, or to swap a constant's value for another one and return a *new* node (expression trees are immutable, so "editing" a node always means building and returning a replacement, never mutating in place). This exact pattern -- subclass `ExpressionVisitor`, override the handful of node types you care about, call `base.Visit...(node)` or return a replacement -- is precisely how EF Core's query translator, FluentValidation's rule-expression parsing, and mocking frameworks like Moq all work under the hood: none of them run your lambda as code, all of them walk it as data.
+                    """, 1),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Picking up from Func<T> vs. Expression<Func<T>>**
+
+                    - `Func<T>` -- compiled to IL, already executable, opaque to inspection
+                    - `Expression<Func<T>>` -- compiled to a tree of `Expression` nodes, inspectable, transformable, and translatable
+
+                    **Building a tree by hand (System.Linq.Expressions factory methods)**
+
+                    - `Expression.Parameter(typeof(int), "x")` -- a `ParameterExpression` node, the `x` in `x => ...`
+                    - `Expression.Constant(10)` -- a `ConstantExpression` node wrapping a literal
+                    - `Expression.GreaterThan(left, right)` -- a `BinaryExpression` node for `>` (also: `LessThan`, `Equal`, `AndAlso`, ...)
+                    - `Expression.Lambda<Func<int, bool>>(body, parameters)` -- wraps a body + parameter list into the top-level tree
+
+                    **From tree to delegate**
+
+                    - `.Compile()` walks the tree and emits real IL at runtime, returning an invocable delegate
+                    - Nothing executes until `.Compile()` is called (or a provider translates the tree into something else entirely)
+
+                    **ExpressionVisitor**
+
+                    - Abstract base class with a `Visit...` method per node type (`VisitBinary`, `VisitConstant`, `VisitParameter`, ...)
+                    - Default behavior: recursively visit every child, rebuild an equivalent (unchanged) tree
+                    - Override only the node types you care about; return a NEW node to change something -- trees are immutable
+                    - This exact pattern underlies EF Core's query translation, validation frameworks, and mocking libraries
+                    """, 2),
+                Block(BlockType.CodeSnippet, "Building, Compiling, and Visiting an Expression Tree by Hand", BodyFormat.PlainText, """
+                    using System.Linq.Expressions;
+
+                    // ---- 1. Build "x => x > 10" node by node, with no lambda syntax at all ----
+                    ParameterExpression parameter = Expression.Parameter(typeof(int), "x");   // x
+                    ConstantExpression threshold = Expression.Constant(10);                    // 10
+                    BinaryExpression comparison = Expression.GreaterThan(parameter, threshold); // x > 10
+
+                    Expression<Func<int, bool>> handBuilt =
+                        Expression.Lambda<Func<int, bool>>(comparison, parameter); // wraps body + params
+
+                    Console.WriteLine(handBuilt); // prints "x => (x > 10)" -- the tree's own ToString()
+
+                    // ---- 2. Nothing has executed yet -- .Compile() turns the tree into a real delegate ----
+                    Func<int, bool> isAboveThreshold = handBuilt.Compile();
+                    Console.WriteLine(isAboveThreshold(15)); // True
+                    Console.WriteLine(isAboveThreshold(5));  // False
+
+                    // ---- 3. A custom ExpressionVisitor: find every constant in a tree ----
+                    public class ConstantCollectorVisitor : ExpressionVisitor
+                    {
+                        public List<object?> FoundConstants { get; } = new();
+
+                        protected override Expression VisitConstant(ConstantExpression node)
+                        {
+                            FoundConstants.Add(node.Value);
+                            return base.VisitConstant(node); // unchanged: just observing, not rewriting
+                        }
+                    }
+
+                    var collector = new ConstantCollectorVisitor();
+                    collector.Visit(handBuilt.Body); // walks "x > 10", recording every constant it finds
+                    Console.WriteLine(string.Join(", ", collector.FoundConstants)); // 10
+
+                    // ---- 4. A custom ExpressionVisitor that REWRITES the tree: swap the constant ----
+                    public class ConstantReplacerVisitor : ExpressionVisitor
+                    {
+                        private readonly object _replacement;
+                        public ConstantReplacerVisitor(object replacement) => _replacement = replacement;
+
+                        protected override Expression VisitConstant(ConstantExpression node) =>
+                            Expression.Constant(_replacement, node.Type); // trees are immutable: return a NEW node
+                    }
+
+                    var replacer = new ConstantReplacerVisitor(100);
+                    Expression rewrittenBody = replacer.Visit(handBuilt.Body); // "x > 100" instead of "x > 10"
+                    var rewrittenLambda = Expression.Lambda<Func<int, bool>>(rewrittenBody, parameter);
+                    Func<int, bool> isAbove100 = rewrittenLambda.Compile();
+                    Console.WriteLine(isAbove100(15));  // False -- now compared against 100, not 10
+                    Console.WriteLine(isAbove100(150)); // True
+
+                    // This is the same shape EF Core's LINQ provider uses on .Where(u => u.Age > 18):
+                    // it never calls .Compile() for translation -- it walks the tree with visitor-style
+                    // logic and emits "WHERE Age > 18" as SQL text instead of running C#.
+                    """, 3, language: "csharp"),
+                Block(BlockType.Diagram, "From Factory Methods to a Compiled Delegate, and the Visitor's Path Through the Tree", BodyFormat.AsciiArt, """
+                    Hand-built, node by node (no lambda syntax used at all):
+
+                      Expression.Parameter(typeof(int), "x")     -->  ParameterExpression "x"
+                      Expression.Constant(10)                    -->  ConstantExpression 10
+                      Expression.GreaterThan(x, 10)               -->        BinaryExpression ">"
+                                                                            /              \
+                                                                  ParameterExpression   ConstantExpression
+                                                                        "x"                  10
+                      Expression.Lambda<Func<int,bool>>(body, x)  -->  Expression<Func<int,bool>>
+                                                                        (wraps the tree above)
+
+                                       |
+                                       |  .Compile()  (walks the tree, emits real IL)
+                                       v
+
+                                 Func<int, bool>  <-- an ordinary, invocable delegate
+                                 isAboveThreshold(15) -> True
+
+                    ExpressionVisitor walking the same "x > 10" tree:
+
+                      Visit(BinaryExpression ">")
+                        -> VisitBinary: visits Left, then Right, rebuilds the node
+                             -> Visit(ParameterExpression "x")   -> VisitParameter (unchanged)
+                             -> Visit(ConstantExpression 10)     -> VisitConstant
+                                    - collector: records 10
+                                    - replacer:   returns a NEW ConstantExpression(100)
+                    """, 4),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Reach for hand-built expression trees only when you're writing infrastructure that genuinely needs to inspect or translate logic rather than just run it -- a dynamic query builder, a validation-rule engine, a mocking library, or a custom `IQueryable<T>` provider. For ordinary application code, write a lambda and let the compiler build the tree (or the delegate) for you; manually chaining `Expression.Parameter`/`Expression.Constant`/`Expression.Lambda` calls is verbose and easy to get subtly wrong compared to letting the compiler do it.
+
+                    When writing a custom `ExpressionVisitor`, override only the specific `Visit*` node-type methods your logic actually needs, and always call `base.Visit*(node)` (or return an equivalent rebuilt node) for everything else, so the rest of the tree is still traversed and rebuilt correctly instead of silently dropped.
+
+                    Never try to mutate a node in place -- `Expression` types are immutable by design. "Changing" a tree always means building and returning a new node (or a new subtree) from an override, exactly like `ConstantReplacerVisitor` returning a fresh `Expression.Constant(...)` rather than trying to set `node.Value`.
+                    """, 5),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    A strong follow-up to "what's the difference between Func<T> and Expression<Func<T>>?" is "how would you actually build one of those trees yourself?" The expected answer names the concrete factory methods -- `Expression.Parameter`, `Expression.Constant`, a comparison method like `Expression.GreaterThan`, and `Expression.Lambda` to wrap it all up -- and states clearly that none of it executes until `.Compile()` (or a provider's own translation logic) processes the tree.
+
+                    Also expect "how does EF Core turn a C# lambda into SQL, mechanically?" The precise answer: the lambda is captured as an `Expression<Func<T,bool>>` tree, not compiled code; EF Core's query translator walks that tree (using visitor-style logic, the same shape as a custom `ExpressionVisitor`) and emits SQL text from what it finds, instead of ever running the lambda as C#. Naming `ExpressionVisitor` specifically, and knowing that "editing" a tree means returning new nodes rather than mutating existing ones, both signal real hands-on experience rather than surface-level familiarity.
+                    """, 6),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Trying to mutate an existing `Expression` node's property directly (there usually isn't a public setter to do this) instead of building and returning a new node from an `ExpressionVisitor` override -- expression trees are immutable, and the entire visitor pattern is built around "return a replacement," not "change this in place."
+
+                    Overriding a `Visit*` method on a custom `ExpressionVisitor` and forgetting to call `base.Visit*(node)` (or return an equivalent rebuilt node) for the cases you don't otherwise handle -- this silently breaks traversal into the rest of the tree, so children of that node type never get visited at all, rather than failing loudly.
+
+                    Calling `.Compile()` on an expression tree that's about to be handed to an `IQueryable<T>` provider, on the assumption it's a harmless no-op step -- for LINQ-to-Objects (`Func<T>`) that's normal, but for something you intend a provider like EF Core to translate, you want to hand over the *tree itself*, not a compiled delegate the provider can no longer inspect.
+                    """, 7),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    A hand-built expression tree is like writing out a recipe as a structured, labeled diagram -- "Step: compare; Left input: x; Right input: 10; Operator: greater-than" -- instead of just cooking the dish yourself. Nobody has eaten anything yet; you've only described, in inspectable form, what cooking it *would* involve. Calling `.Compile()` is finally handing that diagram to a cook who follows it and produces the actual dish (a runnable delegate). But a restaurant critic (EF Core's LINQ provider) doesn't want the finished dish at all -- they want the diagram itself, so they can rewrite it as a different set of instructions entirely (SQL) for an entirely different kitchen (the database engine).
+
+                    An `ExpressionVisitor` is like a proofreader who reads through that diagram step by step, following a checklist for each kind of instruction they encounter. A proofreader who only checks spelling (collects constants) reads every step but changes nothing; a proofreader with authority to correct numbers (replaces constants) crosses out an old value and writes in a new one on a *fresh copy* of the page, since the original recipe card is never scribbled on directly.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "You build a tree with Expression.Parameter, Expression.Constant, Expression.GreaterThan, and Expression.Lambda, then never call .Compile() on it. What has actually executed so far?",
+                    "Every one of these factory methods only constructs immutable Expression node objects describing the logic as data -- none of them run any comparison or produce a boolean result. Nothing executes until .Compile() emits real IL and returns an invocable delegate, or until something else (like a LINQ provider) walks the tree and translates it into another form.",
+                    [
+                        new QuizOptionSeed("The greater-than comparison has already run once, to validate the tree", false),
+                        new QuizOptionSeed("Nothing has executed -- the factory methods only build a tree of data describing the logic", true),
+                        new QuizOptionSeed("The parameter has been assigned a default value of 0 and the comparison evaluated against it", false),
+                        new QuizOptionSeed("Expression.Lambda immediately compiles the tree internally, so it has already executed", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "Why does EF Core's LINQ provider rely on Expression<Func<T,bool>> and a visitor-style tree walk instead of just calling .Compile() and running the lambda directly?",
+                    "Calling .Compile() would only ever produce a delegate that runs as ordinary C#, in-process -- it could never become a SQL WHERE clause. EF Core needs the lambda captured as inspectable tree data specifically so its query translator can walk the nodes (the same pattern as a custom ExpressionVisitor) and emit SQL text describing equivalent logic for the database engine to execute instead.",
+                    [
+                        new QuizOptionSeed(".Compile() is slower than a visitor-based tree walk, so EF Core avoids it purely for performance", false),
+                        new QuizOptionSeed("Because the tree form is inspectable data the provider can translate into SQL, whereas a compiled delegate is opaque, already-executable code that could only ever run locally", true),
+                        new QuizOptionSeed("Func<T,bool> cannot be used with any generic type parameter, so Expression<Func<T,bool>> is required for compilation to succeed", false),
+                        new QuizOptionSeed("EF Core actually does call .Compile() internally and just caches the resulting delegate for reuse", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Expression trees (C#)", "https://learn.microsoft.com/en-us/dotnet/csharp/advanced-topics/expression-trees/", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("ExpressionVisitor Class", "https://learn.microsoft.com/en-us/dotnet/api/system.linq.expressions.expressionvisitor", LinkType.OfficialDocs),
+            ]);
+
+        var lesson1Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson1.Slug,
+        [
+            "Build an expression tree by hand for x => x > 10 using Expression.Parameter, Expression.Constant, Expression.GreaterThan, and Expression.Lambda, then call .Compile() and invoke it against a few values",
+            "Write a custom ExpressionVisitor that overrides VisitConstant to collect every constant value in a tree, then run it against a hand-built or compiler-generated expression tree",
+            "Write a second ExpressionVisitor that overrides VisitConstant to return a replacement ConstantExpression, compile the rewritten tree, and confirm the new delegate uses the swapped-in value",
+        ]);
+
+        var lesson2 = BuildLesson(
+            slug: "system-threading-channels-for-producer-consumer",
+            title: "System.Threading.Channels for Producer/Consumer",
+            summary: "Coordinating producer and consumer tasks the modern, async-native way -- Channel.CreateBounded vs. CreateUnbounded, the Writer/Reader split, await foreach over ReadAllAsync(), and why Channels supersede BlockingCollection<T> in async code.",
+            estimatedMinutes: 40,
+            objectives:
+            [
+                "Explain the producer/consumer coordination problem Channels solve, and why an async-native answer matters more than a thread-blocking one in modern code",
+                "Distinguish Channel.CreateUnbounded<T>() from Channel.CreateBounded<T>(capacity), and explain precisely what backpressure a bounded channel applies that an unbounded one does not",
+                "Use the Writer/Reader split correctly: WriteAsync and Complete() on the writer side, ReadAllAsync() with await foreach (or ReadAsync()) on the reader side",
+                "Explain why Channels are a better fit than BlockingCollection<T> for async code, naming specifically what BlockingCollection<T> does that's an anti-pattern on a thread-pool thread",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    The producer/consumer problem is one of the oldest in concurrent programming: one or more **producers** generate items, one or more **consumers** process them, and something in between has to hand items over safely -- without corrupting shared state, and ideally without letting a fast producer pile up unbounded work faster than consumers can keep up. `System.Threading.Channels` is the modern, `async`/`await`-native answer to this in .NET. Its predecessor, `System.Collections.Concurrent.BlockingCollection<T>`, solves the same coordination problem but does it by **blocking a thread** -- calling `Take()` on an empty collection parks the calling thread until an item shows up. That was a reasonable design when most .NET concurrency was thread-based, but in a modern `async` codebase, blocking a thread-pool thread while waiting is a real anti-pattern: it ties up a thread that could otherwise be servicing other work, and under load it can starve the thread pool. A `Channel<T>` solves the identical problem with `await`, not blocking -- a consumer waiting for the next item asynchronously yields the thread back to the pool instead of parking it.
+
+                    A channel is created with one of two factory methods. **`Channel.CreateUnbounded<T>()`** creates a channel with no capacity limit -- a producer's `WriteAsync` call always completes immediately (well, synchronously in practice) because there's always room. The risk is exactly what it sounds like: if producers ever outpace consumers for a sustained period, the channel's internal queue can grow without bound, consuming more and more memory with nothing pushing back. **`Channel.CreateBounded<T>(capacity)`** creates a channel with a fixed maximum number of items in flight. This is where real **backpressure** comes from: once the channel is full, a producer's `WriteAsync` call doesn't throw or drop the item -- it `await`s, asynchronously, until a consumer reads an item and frees up a slot. That single property is the entire reason to prefer a bounded channel by default: it naturally throttles a fast producer down to the speed its consumers can actually sustain, without anyone blocking a thread to make that happen.
+
+                    Every channel exposes two halves through its `.Writer` and `.Reader` properties, and each side only exposes the operations that side should be doing. On the **writer** side: `await channel.Writer.WriteAsync(item)` adds an item (awaiting if the channel is bounded and full), and `channel.Writer.Complete()` (optionally passed an exception) signals "no more items are coming" -- this is the producer's way of telling every consumer the stream has ended. On the **reader** side: `channel.Reader.ReadAllAsync()` returns an `IAsyncEnumerable<T>`, built specifically to pair with `await foreach (var item in channel.Reader.ReadAllAsync())` -- the loop yields each item as it becomes available and **ends automatically and gracefully** once the writer calls `Complete()` and every already-queued item has been drained, no manual "are we done yet" check required. `channel.Reader.ReadAsync()` is the lower-level, one-item-at-a-time alternative, useful when you need more explicit control over the read loop than `await foreach` gives you.
+
+                    Multiple consumers can read from the very same channel concurrently -- each item is delivered to exactly one consumer, so spinning up several consumer tasks that all `await foreach` over the same `channel.Reader.ReadAllAsync()` naturally load-balances the work across them, with the channel itself handling the coordination safely. This makes `Channel<T>` a strong default whenever you need one or more producers to hand work off to one or more consumers in an async pipeline -- a background processing queue, a fan-out/fan-in pipeline stage, or anywhere `BlockingCollection<T>` would previously have been reached for, but where blocking a thread to wait is no longer acceptable.
+                    """, 1),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Why Channels over BlockingCollection<T>**
+
+                    - `BlockingCollection<T>.Take()` blocks the calling thread while waiting -- a thread-pool thread sitting idle is wasted capacity
+                    - `Channel<T>` waits with `await` -- the thread is released back to the pool while waiting, not parked
+                    - In modern async code, blocking a thread-pool thread to wait is an anti-pattern; Channels are the async-native replacement
+
+                    **Creating a channel**
+
+                    - `Channel.CreateUnbounded<T>()` -- no capacity limit; WriteAsync never waits; memory can grow unboundedly if producers outpace consumers
+                    - `Channel.CreateBounded<T>(capacity)` -- fixed capacity; a full channel makes WriteAsync `await` until a slot frees up (real backpressure)
+
+                    **Writer side (`channel.Writer`)**
+
+                    - `await channel.Writer.WriteAsync(item)` -- adds an item, awaiting if bounded and full
+                    - `channel.Writer.Complete()` -- signals "no more items"; lets readers know the stream is ending
+
+                    **Reader side (`channel.Reader`)**
+
+                    - `channel.Reader.ReadAllAsync()` -- returns an IAsyncEnumerable<T>, pairs with `await foreach`
+                    - `await foreach (var item in channel.Reader.ReadAllAsync())` -- ends automatically once Complete() is called and every queued item is drained
+                    - `channel.Reader.ReadAsync()` -- lower-level, one item at a time
+
+                    **Multiple consumers**
+
+                    - Several consumer tasks can `await foreach` over the same Reader.ReadAllAsync() concurrently -- each item goes to exactly one consumer, naturally load-balancing the work
+                    """, 2),
+                Block(BlockType.CodeSnippet, "A Bounded Channel with One Producer and Two Consumers", BodyFormat.PlainText, """
+                    using System.Threading.Channels;
+
+                    // Bounded to 10 in-flight items: once full, WriteAsync below will
+                    // asynchronously await instead of blocking a thread, applying real
+                    // backpressure against a producer that's outrunning its consumers.
+                    Channel<int> channel = Channel.CreateBounded<int>(capacity: 10);
+
+                    async Task ProduceAsync()
+                    {
+                        for (int i = 1; i <= 30; i++)
+                        {
+                            // Awaits (yields the thread, doesn't block it) if the channel is
+                            // already full, until a consumer frees up a slot by reading an item.
+                            await channel.Writer.WriteAsync(i);
+                            Console.WriteLine($"Produced {i}");
+                        }
+
+                        // Signals "no more items are coming." Without this, every consumer's
+                        // await foreach below would wait forever for one more item that never arrives.
+                        channel.Writer.Complete();
+                    }
+
+                    async Task ConsumeAsync(string consumerName)
+                    {
+                        // ReadAllAsync() returns an IAsyncEnumerable<int>. This loop yields each
+                        // item as it becomes available, and ends automatically and gracefully
+                        // once the writer calls Complete() and every already-queued item has
+                        // been drained -- no manual "are we done" flag needed.
+                        await foreach (int item in channel.Reader.ReadAllAsync())
+                        {
+                            Console.WriteLine($"{consumerName} processing {item}");
+                            await Task.Delay(10); // simulate work
+                        }
+
+                        Console.WriteLine($"{consumerName} finished -- channel is complete and drained");
+                    }
+
+                    // One producer, two concurrent consumers competing for the same items --
+                    // each item is delivered to exactly one consumer, load-balancing naturally.
+                    Task producerTask = ProduceAsync();
+                    Task consumerTask1 = ConsumeAsync("Consumer-A");
+                    Task consumerTask2 = ConsumeAsync("Consumer-B");
+
+                    await Task.WhenAll(producerTask, consumerTask1, consumerTask2);
+                    Console.WriteLine("All done -- producer completed and both consumers drained the channel");
+
+                    // ---- Contrast: the older, thread-blocking BlockingCollection<T> shape ----
+                    // var workQueue = new BlockingCollection<int>(boundedCapacity: 10);
+                    // workQueue.Add(item);      // blocks the calling THREAD if full, doesn't await
+                    // workQueue.Take();          // blocks the calling THREAD while waiting for an item
+                    // workQueue.CompleteAdding(); // BlockingCollection's equivalent of Writer.Complete()
+                    // In an async codebase, both Add and Take here tie up a real thread while
+                    // waiting -- exactly what Channel<T>'s WriteAsync/ReadAllAsync avoid.
+                    """, 3, language: "csharp"),
+                Block(BlockType.Diagram, "Bounded Channel Backpressure: Producer Awaits Instead of Blocking", BodyFormat.AsciiArt, """
+                    Channel.CreateBounded<int>(capacity: 10)
+
+                      Writer side                    Bounded buffer (max 10)         Reader side
+                      ------------                   ---------------------          -----------
+                      await Writer.WriteAsync(i)  -->  [ i ][ i ][ i ] ... (<=10) --> await foreach over
+                                                                                       Reader.ReadAllAsync()
+                      If the buffer is FULL:
+                        WriteAsync does NOT throw,
+                        does NOT drop the item, and
+                        does NOT block the thread --
+                        it "awaits" (yields the                                       Consumer-A  <-- item
+                        thread back to the pool)                                      Consumer-B  <-- item
+                        until a consumer frees a slot                                 (each item goes to
+                                                                                        exactly ONE consumer)
+
+                      Writer.Complete() called
+                      after the last item  ------>  buffer drains to empty  ------->  await foreach ends
+                                                                                       automatically once
+                                                                                       every item is read
+
+                    Compare: BlockingCollection<T>.Add(item) / .Take() -- same shape, but the
+                    calling THREAD is blocked/parked while waiting, not merely awaited.
+                    """, 4),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Default to `Channel.CreateBounded<T>(capacity)` over `CreateUnbounded<T>()` whenever a producer could plausibly outpace its consumers -- the bounded form's automatic backpressure (a full channel makes `WriteAsync` await) is a real safeguard against unbounded memory growth, while an unbounded channel offers no such protection at all.
+
+                    Always call `Complete()` on the writer side once production is finished, in a `finally` block if the producer might throw -- without it, every consumer's `await foreach` over `ReadAllAsync()` waits forever for an item that will never come, since the loop only ends once `Complete()` has been called and the channel is fully drained.
+
+                    In an `async` codebase, prefer `Channel<T>` over `BlockingCollection<T>` by default. Reach for `BlockingCollection<T>` only in genuinely thread-based (non-async) code, since blocking a thread-pool thread to wait for work is exactly the anti-pattern Channels were built to eliminate.
+                    """, 5),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    A frequent question is "why would you choose Channel<T> over BlockingCollection<T> in a modern service?" The precise answer names the mechanism, not just a vibe: `BlockingCollection<T>.Take()` (and a full collection's `Add()`) block the calling thread outright, while `Channel<T>`'s `WriteAsync`/`ReadAllAsync` wait with `await`, releasing the thread back to the pool instead of parking it. In an `async` codebase built on the thread pool, blocking a pool thread to wait is a real anti-pattern that can contribute to thread-pool starvation under load.
+
+                    Also expect "what happens if a bounded channel is full when you call WriteAsync?" -- the exact answer is that the call asynchronously awaits until a consumer reads an item and frees a slot; it does not throw, drop the item, or block the thread. And "how does a consumer's await foreach over ReadAllAsync() know when to stop?" -- it ends automatically once the writer calls Complete() and every item already queued has been drained, with no manual flag or sentinel value required.
+                    """, 6),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Forgetting to call `channel.Writer.Complete()` once the producer is done -- every consumer's `await foreach (var item in channel.Reader.ReadAllAsync())` then waits forever for one more item that will never arrive, since that's the loop's only real termination signal. Wrap production in a `try`/`finally` and call `Complete()` in the `finally` so it still happens even if the producer throws partway through.
+
+                    Reaching for `Channel.CreateUnbounded<T>()` by default without considering whether a fast producer could ever outpace consumers -- an unbounded channel applies no backpressure at all, so a sustained mismatch can grow the internal queue's memory usage without limit, exactly the failure mode a bounded channel's awaiting `WriteAsync` is designed to prevent.
+
+                    Treating `Channel<T>` and `BlockingCollection<T>` as interchangeable and mixing thread-blocking calls (`Take()`, a full `Add()`) into otherwise `async` code -- doing so reintroduces the exact thread-blocking behavior Channels exist to avoid, even though the surrounding method signature says `async Task`.
+                    """, 7),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    A bounded channel is like a conveyor belt with a fixed number of trays between a kitchen (producer) and the servers plating food (consumers). If every tray slot is full, the kitchen doesn't jam the belt or fling food onto the floor -- the cook simply pauses, hands free, until a server clears a tray, then resumes. That pause is backpressure: it naturally slows the kitchen down to match how fast the servers can actually plate dishes, without the cook standing there rigidly blocking the whole kitchen doorway.
+
+                    `BlockingCollection<T>` is an older version of the same conveyor belt, except the cook physically freezes in place, hands still full, unable to do anything else at all until a slot opens -- a real person (thread) tied up and unusable for any other task while they wait. A `Channel<T>`'s cook, by contrast, steps away to help with something else (the thread returns to the pool) and simply comes back the instant a slot is free.
+
+                    `Writer.Complete()` is the kitchen manager announcing "no more dishes tonight" -- every server keeps clearing trays already on the belt, but once the belt is empty and that announcement has been made, they know to stop waiting for anything more, instead of standing around indefinitely for a dish that's never coming.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "A producer calls await channel.Writer.WriteAsync(item) against a Channel.CreateBounded<T>(10) that is currently full. What happens?",
+                    "A bounded channel's WriteAsync applies real backpressure: when the channel is full, the call asynchronously awaits -- yielding the calling thread back to the pool rather than blocking it -- until a consumer reads an item and frees a slot. It does not throw, silently drop the item, or block the thread outright.",
+                    [
+                        new QuizOptionSeed("It throws an InvalidOperationException immediately because the channel is full", false),
+                        new QuizOptionSeed("It silently drops the item and returns a completed task right away", false),
+                        new QuizOptionSeed("It asynchronously awaits, without blocking the calling thread, until a consumer reads an item and frees a slot", true),
+                        new QuizOptionSeed("It blocks the calling thread outright until space is available, identical to BlockingCollection<T>.Add", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "Two consumer tasks both run await foreach (var item in channel.Reader.ReadAllAsync()) against the same channel. The producer finishes writing and calls channel.Writer.Complete(). What happens to the two await foreach loops?",
+                    "ReadAllAsync()'s await foreach ends automatically and gracefully once Complete() has been called on the writer and every item already queued has been drained -- no manual completion flag or sentinel value is needed. Each already-queued item goes to exactly one of the two consumers, and once the channel is empty and complete, both loops end.",
+                    [
+                        new QuizOptionSeed("Both loops throw an exception the moment Complete() is called, since the channel becomes invalid", false),
+                        new QuizOptionSeed("Both loops end automatically once Complete() has been called and every already-queued item has been drained", true),
+                        new QuizOptionSeed("Only one of the two consumers' loops ends; the other waits forever", false),
+                        new QuizOptionSeed("The loops keep running indefinitely; Complete() only affects the Writer, not any Reader", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("System.Threading.Channels overview", "https://learn.microsoft.com/en-us/dotnet/core/extensions/channels", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("Channel<T> Class", "https://learn.microsoft.com/en-us/dotnet/api/system.threading.channels.channel-1", LinkType.OfficialDocs),
+            ]);
+
+        var lesson2Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson2.Slug,
+        [
+            "Build a bounded channel with one producer task and one consumer task using await foreach over ReadAllAsync(), confirm it terminates cleanly after the producer calls Complete()",
+            "Add a second consumer task reading from the same channel and observe how the produced items get split across both consumers",
+            "Swap Channel.CreateBounded<T>(small capacity) for Channel.CreateUnbounded<T>() with a producer much faster than the consumer, and observe the difference in how quickly items queue up",
+        ]);
+
+        var module = BuildModule(topicId, "csharp-expression-trees-and-channels", "Expression Trees & Modern Concurrency Primitives",
+            "Building and traversing expression trees by hand with System.Linq.Expressions and a custom ExpressionVisitor -- the actual mechanism behind EF Core's LINQ translation -- plus System.Threading.Channels for modern, async-native producer/consumer coordination in place of the thread-blocking BlockingCollection<T>.",
+            80, [lesson1, lesson2], sortOrder: 18);
+
+        return (module, [lesson1Checklist, lesson2Checklist]);
+    }
+
     private static (Module, List<ChecklistSeed>) BuildDotNetModule(int topicId)
     {
         var lesson1 = BuildLesson(
@@ -9423,6 +9814,360 @@ public static class CurriculumContentSeedData
     }
 
     // ============================== DSA ==============================
+
+    private static (Module, List<ChecklistSeed>) BuildDotNetSignalRAndMinimalApiExtensibilityModule(int topicId)
+    {
+        var lesson1 = BuildLesson(
+            slug: "signalr-real-time-communication",
+            title: "Real-Time Communication with SignalR",
+            summary: "Pushing data from the server to connected browser clients the instant something happens -- a notification, a chat message, a live dashboard update -- via SignalR's Hub abstraction and groups, instead of the client polling on a timer.",
+            estimatedMinutes: 45,
+            objectives:
+            [
+                "Explain the problem SignalR solves -- server-to-client push without client-side polling -- and how it automatically negotiates a transport (WebSockets, falling back to Server-Sent Events or long polling)",
+                "Describe the Hub abstraction: a class inheriting Hub whose public methods clients can invoke remotely, and how a hub calls back to clients via Clients.Caller, Clients.All, and Clients.Group(name)",
+                "Use SignalR groups (Groups.AddToGroupAsync) to broadcast to a named subset of connections instead of every connected client",
+                "Contrast SignalR with gRPC streaming and state which one is the correct choice for pushing live updates to a web page versus typed service-to-service RPC",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    Most of what an API does is answer a question a client just asked -- but some problems are the opposite shape: the server needs to tell a client something the instant it happens, with no request ever having been sent for it. A live notification badge, a chat message arriving in a conversation someone has open, a dashboard number updating the moment a new order comes in -- none of these fit "client asks, server answers." The naive fix is polling: have the browser ask "anything new?" every few seconds. It works, but it wastes requests on every poll that finds nothing new, and it's never actually real-time -- there's always up to one polling interval of lag between the event happening and the client finding out.
+
+                    **SignalR** is ASP.NET Core's answer to this specific problem: a library for pushing data from the server to connected clients in real time. Its defining trick is that it doesn't force you to pick a single transport mechanism and hope every client and network supports it -- it negotiates automatically. It prefers **WebSockets** (a genuine persistent, full-duplex connection) when the client and network support it, and falls back to **Server-Sent Events** or, as a last resort, **long polling** when they don't. Critically, none of that fallback logic is something you write -- you write one Hub, the client library handles negotiating which transport it actually got, and your server-side code never needs to know or care which one is in use for a given connection.
+
+                    The core abstraction you build against is the **Hub**: a class inheriting `Hub` whose public methods clients can invoke remotely -- effectively an RPC endpoint for real-time calls, the same way a controller action is an RPC endpoint for a normal HTTP request. But a Hub can also do the opposite: call back out to connected clients whenever it wants, not just in response to an incoming call. `Clients.Caller` sends a message back to just the connection that invoked the current method; `Clients.All` broadcasts to every connection currently connected to the hub; `Clients.Group(groupName)` broadcasts to a named subset. That last one matters a lot in practice, because "broadcast to literally everyone" is rarely what you actually want.
+
+                    That's what **groups** are for: `await Groups.AddToGroupAsync(Context.ConnectionId, groupName)` adds the current connection to a named group, and from then on `Clients.Group(groupName)` (or `Clients.OthersInGroup(groupName)`, which excludes the caller) reaches only the connections in that group -- everyone viewing the same chat room, the same dashboard, the same order's status page -- instead of every connection the hub has ever accepted. A hub is registered onto a URL clients connect to with `app.MapHub<MyHub>("/hubs/notifications")` in `Program.cs`, and client libraries exist for JavaScript/TypeScript and .NET, so both a web page and another .NET service can connect to the same hub.
+
+                    It's worth being precise about how this differs from gRPC streaming, which is covered elsewhere in this topic: gRPC's server-streaming and bidirectional-streaming call shapes are for typed, contract-first RPC -- defined in a `.proto` file, generated into strongly-typed C# -- between services (or clients) you control end to end over HTTP/2, and a browser can't originate a raw gRPC call without a grpc-web proxy layer in front of it. SignalR is specifically for server-to-browser-client real-time push: it ships first-class JavaScript/TypeScript and .NET client libraries, needs no proxy layer, and is the practical, idiomatic ASP.NET Core answer to "I need to push live updates to a web page" -- not a competing way to do the same job as gRPC, but the right tool for a different half of the real-time-communication problem.
+                    """, 1),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **The Hub abstraction**
+
+                    - `public class MyHub : Hub` -- public methods on it are invoked remotely by clients (like an RPC endpoint for real-time calls)
+                    - `Clients.Caller` -- reply to just the connection that invoked the current method
+                    - `Clients.All` -- broadcast to every connection currently connected to the hub
+                    - `Clients.Group(groupName)` -- broadcast to only the connections in one named group
+                    - `Clients.OthersInGroup(groupName)` -- same as above, but excludes the caller
+
+                    **Groups**
+
+                    - `await Groups.AddToGroupAsync(Context.ConnectionId, groupName);` -- add the current connection to a named group
+                    - `await Groups.RemoveFromGroupAsync(Context.ConnectionId, groupName);` -- remove it
+                    - Lets the server target "everyone viewing this chat room/dashboard," not literally everyone connected
+
+                    **Transport negotiation (automatic, not something you write)**
+
+                    - WebSockets (preferred, full-duplex) -> Server-Sent Events (fallback) -> long polling (last resort)
+                    - Client library negotiates which one it got; your Hub code doesn't change either way
+
+                    **Registering a hub**
+
+                    - `builder.Services.AddSignalR();`
+                    - `app.MapHub<MyHub>("/hubs/notifications");` in `Program.cs`
+
+                    **SignalR vs. gRPC streaming, at a glance**
+
+                    - SignalR -- server-to-browser-client push, JS/TypeScript/.NET client libraries, no proxy needed
+                    - gRPC streaming -- typed, contract-first RPC between services/clients you control, over HTTP/2, needs grpc-web for a browser
+                    """, 2),
+                Block(BlockType.CodeSnippet, "A Minimal SignalR Hub with Groups", BodyFormat.PlainText, """
+                    // Hubs/NotificationHub.cs -- a Hub is SignalR's core abstraction: a class
+                    // inheriting Hub whose public methods clients can invoke remotely (like an
+                    // RPC endpoint for real-time calls), and which can call back to connected
+                    // clients via Clients.Caller, Clients.All, or Clients.Group(name).
+                    public class NotificationHub : Hub
+                    {
+                        // Invoked BY a client, e.g. the JS client calling:
+                        //   connection.invoke("JoinGroup", "dashboard-42");
+                        // Adds this connection to a named group so later broadcasts can target
+                        // "everyone viewing this dashboard" instead of every connected client.
+                        public async Task JoinGroup(string groupName)
+                        {
+                            await Groups.AddToGroupAsync(Context.ConnectionId, groupName);
+                        }
+
+                        // Also invoked BY a client, e.g.
+                        //   connection.invoke("SendMessage", "dashboard-42", "order #42 just shipped");
+                        // Broadcasts to every OTHER connection in the group -- Clients.OthersInGroup
+                        // excludes the caller; Clients.Group(groupName) would include the caller too.
+                        public async Task SendMessage(string groupName, string message)
+                        {
+                            await Clients.OthersInGroup(groupName).SendAsync("messageReceived", Context.ConnectionId, message);
+                        }
+
+                        // SignalR calls this automatically when a connection drops -- a good place
+                        // to clean up any of your OWN tracking structures for that connection,
+                        // since group membership itself is cleared by SignalR already.
+                        public override async Task OnDisconnectedAsync(Exception? exception)
+                        {
+                            await base.OnDisconnectedAsync(exception);
+                        }
+                    }
+
+                    // Program.cs -- registering SignalR and mapping the hub to a URL clients connect to.
+                    builder.Services.AddSignalR();
+
+                    var app = builder.Build();
+                    app.MapHub<NotificationHub>("/hubs/notifications");
+                    """, 3, language: "csharp"),
+                Block(BlockType.Diagram, "Transport Negotiation, Then a Hub Method Call and a Group Broadcast", BodyFormat.AsciiArt, """
+                    Client                                        ASP.NET Core Server
+
+                      |--- negotiate connection -------------------->|
+                      |<-- "here's what I support" -----------------|
+                      |                                              |
+                      |=== WebSockets (preferred) ===================|   \
+                      |=== Server-Sent Events (fallback) ============|    } SignalR picks ONE
+                      |=== Long polling (last resort) ================|   /   automatically
+
+                      |--- connection.invoke("JoinGroup", "d-42") -->|   Hub method call (client -> server)
+                      |                                              |
+                      |                                    [ Hub: Groups.AddToGroupAsync(...) ]
+                      |                                              |
+                      |                             (some other event happens server-side)
+                      |                                              |
+                      |<-- Clients.Group("d-42").SendAsync(...) -----|   Server -> every client in group "d-42"
+                      |<-- Clients.Group("d-42").SendAsync(...) -----|   (a second browser tab, same group)
+
+                    No client sent a request for that last message -- the server pushed it
+                    on its own schedule, to exactly the connections in the group, and no
+                    connection outside "d-42" received anything at all.
+                    """, 4),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Use groups instead of `Clients.All` for anything scoped to a specific resource -- a chat room, one dashboard, one order's status page -- so the number of connected users overall doesn't determine who receives an irrelevant broadcast. Add a connection to its group in a Hub method invoked when the client subscribes, and remove it in `OnDisconnectedAsync` (or an explicit leave method) so group membership doesn't quietly accumulate stale connections.
+
+                    Keep Hub methods thin and delegate to injected services for actual business logic -- a Hub supports constructor injection like any other ASP.NET Core class, but it's a transport endpoint, not where domain logic should live. For server-initiated broadcasts from outside a hub entirely (a background service, another endpoint that just finished processing something), inject `IHubContext<MyHub>` rather than trying to instantiate or call into the Hub directly -- hubs are only meant to be activated per-connection/per-invocation by the SignalR runtime itself, not `new`'d up by other code.
+                    """, 5),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    If asked "how would you push live updates to a browser without polling," name SignalR specifically and lead with automatic transport negotiation -- WebSockets falling back to Server-Sent Events or long polling -- as the reason it's a single API surface regardless of what the client's network or browser actually supports, rather than something you'd hand-roll per transport.
+
+                    Be ready to distinguish it from gRPC streaming precisely, since both involve a stream of server-originated messages: gRPC streaming is typed, contract-first RPC (via a `.proto` file) between services or clients you control end to end over HTTP/2; SignalR is the practical, idiomatic ASP.NET Core answer specifically for pushing updates to a web page, ships first-class JS/TypeScript and .NET client libraries, and doesn't need a browser proxy layer the way raw gRPC does. And mention groups unprompted -- `Clients.All` doesn't scale to "notify only the people watching this order," and interviewers listen for whether you know `Groups.AddToGroupAsync` exists for exactly that case.
+                    """, 6),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Broadcasting via `Clients.All` for something that's actually scoped to one resource -- a chat room, one order's status -- which forces every connected client to receive (and client-side filter out) messages meant for someone else, when `Groups.AddToGroupAsync` plus `Clients.Group(groupName)` would target only the relevant subset in the first place. As the app grows connections, that "just filter it client-side" approach means every single connected client's bandwidth and CPU cost scales with total broadcast volume across the whole app, not with what that one client actually needs to see.
+
+                    Also common: forgetting that SignalR cleans up its own group membership on disconnect, but any separate tracking structure your own code built (a cache mapping "who's currently in this group" for a UI feature) does not get cleaned up automatically -- that needs its own logic in `OnDisconnectedAsync`. And trying to call a Hub method directly, or `new` up a Hub instance, from other code to push a message -- Hubs aren't meant to be instantiated that way; inject `IHubContext<MyHub>` instead, which is the supported way to push messages into a hub's connections from outside it.
+                    """, 7),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    `Clients.All` is an office intercom that pages every single desk in the building for every announcement, whether or not it's relevant to that desk. Groups is that office switching to per-floor paging zones instead: joining a group is like the third floor plugging into "zone 3," and someone announcing a third-floor-only water outage pages just zone 3 -- everyone on other floors never hears an announcement that has nothing to do with them, and the system doesn't get any noisier just because the building added more floors. And SignalR's automatic transport negotiation is like a delivery service that tries the front door first, and only falls back to the side entrance or the loading dock if the front door happens to be locked that day -- the package still arrives either way, and the sender never had to decide in advance which entrance to use.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "A dashboard page needs to receive a live update the instant a metric changes on the server, without the browser polling an endpoint on an interval. Which ASP.NET Core technology is built specifically for this, and why?",
+                    "SignalR is built for server-to-client push: it lets the server send data to connected clients on its own schedule, automatically negotiating WebSockets (falling back to Server-Sent Events or long polling) instead of the client having to ask on a timer.",
+                    [
+                        new QuizOptionSeed("SignalR, because it lets the server push data to connected clients on its own schedule, negotiating WebSockets/SSE/long polling automatically instead of the client asking on an interval", true),
+                        new QuizOptionSeed("gRPC, because its HTTP/2 transport lets a browser call it directly without any additional proxy", false),
+                        new QuizOptionSeed("A plain REST GET endpoint polled every second, since ASP.NET Core has no dedicated server-push mechanism", false),
+                        new QuizOptionSeed("Minimal API route groups, because they support long-lived connections by default", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "A chat app has thousands of connections spread across dozens of separate chat rooms. What is the correct way for a message sent by one user to reach only the other users in the same room?",
+                    "Add each connection to a SignalR group named for its room via Groups.AddToGroupAsync when it joins, then broadcast a message with Clients.Group(roomName) or Clients.OthersInGroup(roomName) -- this targets exactly the connections in that room instead of every connection the hub has ever accepted.",
+                    [
+                        new QuizOptionSeed("Add each connection to a group named for its room via Groups.AddToGroupAsync, then broadcast with Clients.Group(roomName) or Clients.OthersInGroup(roomName)", true),
+                        new QuizOptionSeed("Call Clients.All.SendAsync(...) for every message and have each client-side script filter out messages for rooms it isn't in", false),
+                        new QuizOptionSeed("Create a separate Hub class for every chat room that currently exists", false),
+                        new QuizOptionSeed("Use Clients.Caller.SendAsync(...) for every message so it reaches the sender, who then forwards it to the room", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Introduction to SignalR", "https://learn.microsoft.com/en-us/aspnet/core/signalr/introduction", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("SignalR hubs", "https://learn.microsoft.com/en-us/aspnet/core/signalr/hubs", LinkType.OfficialDocs),
+            ]);
+
+        var lesson1Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson1.Slug,
+        [
+            "Scaffold a NotificationHub inheriting Hub with a JoinGroup method and a SendMessage method that broadcasts via Clients.OthersInGroup, then map it with app.MapHub<NotificationHub>('/hubs/notifications') in Program.cs",
+            "Connect two separate browser tabs (or a console client) to the hub using the SignalR JS or .NET client, join both to the same group, and confirm a message invoked from one tab is received by the other but not by a third tab that joined a different group",
+            "Inject IHubContext<NotificationHub> into a plain ASP.NET Core service (not the hub itself) and call SendAsync from outside any client connection, confirming a server-initiated broadcast reaches a connected client with no client having invoked anything first",
+        ]);
+
+        var lesson2 = BuildLesson(
+            slug: "minimal-api-file-uploads-and-endpoint-filters",
+            title: "File Uploads & Minimal API Filters",
+            summary: "Accepting file uploads in a Minimal API via IFormFile -- and why the client-declared content type can't be trusted blindly -- plus IEndpointFilter, which attaches cross-cutting logic to specific routes without writing pipeline-wide middleware.",
+            estimatedMinutes: 40,
+            objectives:
+            [
+                "Bind a single uploaded file via IFormFile or multiple files via IFormFileCollection/List<IFormFile> as Minimal API endpoint parameters",
+                "Read an uploaded file's contents safely with OpenReadStream() or CopyToAsync(), and explain why the client-supplied ContentType and file name must be validated, not trusted",
+                "Implement IEndpointFilter's InvokeAsync method to inspect or short-circuit a request, using context.GetArgument<T>(index) to read a specific endpoint argument",
+                "Register a filter on one route or a whole route group via AddEndpointFilter<T>(), and explain how that differs in scope from global middleware registered via app.Use(...)",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    Accepting an uploaded file in a Minimal API doesn't require any manual multipart parsing -- you just declare a parameter of type `IFormFile` and ASP.NET Core binds it automatically from a `multipart/form-data` request, matching it to the form field with the same name. For multiple files in the same request, the parameter type is `IFormFileCollection` (or `List<IFormFile>`), and each one binds the same way. Once you have the `IFormFile`, you read its contents with `file.OpenReadStream()` (a `Stream` over the uploaded bytes, useful when you need to process the content yourself) or, more commonly for saving it somewhere, `await file.CopyToAsync(destinationStream)`, which streams the upload directly to its destination -- disk, blob storage, wherever -- without buffering the entire file into memory first.
+
+                    The practical trap with file uploads is trusting what the client claims about the file. `file.ContentType` and `file.FileName` are exactly what the client's multipart request declared in its headers -- strings the client wrote, not facts the server verified by inspecting the actual bytes. A request can declare `ContentType: image/png` and attach something that isn't a PNG at all, or isn't even an image. A thorough validation step checks the file's size (`file.Length`) against an explicit maximum before doing anything with it, and treats the declared content type as a hint rather than a guarantee -- if what the file actually is genuinely matters (not just what extension or MIME type it claims), that means inspecting the real bytes (a file's magic-byte signature) server-side, not trusting the label the client put on it.
+
+                    Separately from file uploads, Minimal APIs have their own answer to "I need to run some logic around a request without writing full middleware": **`IEndpointFilter`**. Full ASP.NET Core middleware, registered with `app.Use(...)`, applies globally -- every single request flows through it, regardless of which route it's headed to, so scoping middleware to "just these five routes" means hand-writing a path check inside the middleware itself. `IEndpointFilter` solves the more common case of "this logic only applies to a handful of endpoints" at the registration layer instead: you implement one method, `InvokeAsync(EndpointFilterInvocationContext context, EndpointFilterDelegate next)`, which runs specifically around the endpoints it's attached to.
+
+                    Inside `InvokeAsync`, `context.GetArgument<T>(index)` reads one of the endpoint's own parameters by its position, letting the filter inspect (or, for mutable types, modify) what the handler is about to receive -- a validation filter, for instance, can read the request body argument and check it before the handler ever sees it. Calling `await next(context)` continues the pipeline -- to the next registered filter, if any, and eventually to the endpoint handler itself -- while returning a result directly instead of calling `next(context)` short-circuits the request right there, e.g. returning a 400 from a failed validation check without the handler ever running.
+
+                    Registering a filter is what gives it its scope: `.AddEndpointFilter<MyFilter>()` chained onto a single route registration attaches it to just that route, while `app.MapGroup("/api").AddEndpointFilter<MyFilter>()` attaches it to every route registered under that `RouteGroupBuilder` at once. Either way, the scope is explicit and declared at the routes you actually attach it to -- unlike `app.Use(...)` middleware, which is scoped to "everything" by default and has to be narrowed manually if you want anything less than that.
+                    """, 1),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **File uploads in Minimal APIs**
+
+                    - Single file -- an `IFormFile` parameter, bound from a matching `multipart/form-data` form field
+                    - Multiple files -- `IFormFileCollection` or `List<IFormFile>`
+                    - `file.OpenReadStream()` -- a `Stream` over the uploaded content
+                    - `await file.CopyToAsync(destinationStream);` -- streams the upload to its destination without buffering the whole file in memory
+                    - Never treat `file.ContentType` / `file.FileName` as verified facts -- they're exactly what the client's request declared, not guaranteed
+
+                    **IEndpointFilter**
+
+                    - `ValueTask<object?> InvokeAsync(EndpointFilterInvocationContext context, EndpointFilterDelegate next)`
+                    - `context.GetArgument<T>(index)` -- read a specific endpoint parameter by position
+                    - `await next(context)` -- continue to the next filter (if any), then the endpoint handler
+                    - Return a result directly instead of calling `next(context)` -- short-circuits the request before the handler runs
+
+                    **Registering a filter**
+
+                    - `.AddEndpointFilter<MyFilter>()` chained onto one route -- scoped to that route only
+                    - `app.MapGroup("/api").AddEndpointFilter<MyFilter>();` -- scoped to every route in that group
+                    - vs. `app.Use(...)` middleware -- applies globally, to every request regardless of route
+                    """, 2),
+                Block(BlockType.CodeSnippet, "A Validation IEndpointFilter and a Minimal API File Upload Endpoint", BodyFormat.PlainText, """
+                    // Filters/ValidateWidgetRequestFilter.cs -- cross-cutting validation logic
+                    // scoped to specific routes, not the whole pipeline.
+                    public class ValidateWidgetRequestFilter : IEndpointFilter
+                    {
+                        public async ValueTask<object?> InvokeAsync(
+                            EndpointFilterInvocationContext context, EndpointFilterDelegate next)
+                        {
+                            var request = context.GetArgument<CreateWidgetRequest>(0);
+
+                            if (string.IsNullOrWhiteSpace(request.Name) || request.Quantity <= 0)
+                            {
+                                // Short-circuit: the handler below never runs.
+                                return Results.Problem("Name is required and Quantity must be positive.", statusCode: 400);
+                            }
+
+                            // Valid -- continue to the next filter (if any), then the endpoint handler.
+                            return await next(context);
+                        }
+                    }
+
+                    // Program.cs -- route registration, filter scoping, and a file upload endpoint.
+                    var app = builder.Build();
+
+                    // Filter applied to ONE route only -- unrelated routes are unaffected.
+                    app.MapPost("/widgets", (CreateWidgetRequest request) => Results.Created($"/widgets/{request.Name}", request))
+                       .AddEndpointFilter<ValidateWidgetRequestFilter>();
+
+                    // Filter applied to every route in a group at once, via MapGroup(...).
+                    var reportsGroup = app.MapGroup("/reports").AddEndpointFilter<ValidateWidgetRequestFilter>();
+                    reportsGroup.MapPost("/monthly", (CreateWidgetRequest request) => Results.Ok(request));
+
+                    // Minimal API file upload -- IFormFile is bound automatically from a
+                    // multipart/form-data request; no manual multipart parsing required.
+                    app.MapPost("/uploads/avatar", async (IFormFile file) =>
+                    {
+                        const long maxBytes = 5 * 1024 * 1024; // 5 MB
+                        var allowedContentTypes = new[] { "image/png", "image/jpeg" };
+
+                        // file.ContentType/file.FileName are CLIENT-DECLARED -- validate before trusting.
+                        if (file.Length == 0 || file.Length > maxBytes || !allowedContentTypes.Contains(file.ContentType))
+                        {
+                            return Results.Problem("File must be a PNG/JPEG under 5 MB.", statusCode: 400);
+                        }
+
+                        var path = Path.Combine("uploads", $"{Guid.NewGuid()}.png");
+                        await using var destination = File.Create(path);
+                        await file.CopyToAsync(destination); // streams the upload; doesn't buffer it fully in memory
+
+                        return Results.Ok(new { path });
+                    });
+                    """, 3, language: "csharp"),
+                Block(BlockType.Diagram, "Endpoint Filter Scoped to a Route vs. Global Middleware", BodyFormat.AsciiArt, """
+                    Global middleware (app.Use(...)) -- applies to EVERY request, regardless of route:
+
+                      Request --> [ MW1 ] --> [ MW2 ] --> [ MW3 ] --> routing --> handler
+
+                    Endpoint filters (.AddEndpointFilter<T>()) -- scoped to the routes they're attached to:
+
+                      POST /widgets  (filter attached)              POST /health  (no filter attached)
+                            |                                              |
+                            v                                              v
+                      [ ValidateWidgetRequestFilter.InvokeAsync ]     handler runs directly,
+                            |   context.GetArgument<CreateWidgetRequest>(0)  no filter involved
+                            |
+                            |-- invalid --> return Results.Problem(...)   (short-circuit, handler never runs)
+                            |
+                            |-- valid ------> await next(context) --> handler runs
+
+                    Same filter attached to a whole group instead (MapGroup("/reports").AddEndpointFilter<T>()):
+                    every route registered under that group runs through it; routes outside the
+                    group -- like /widgets or /health above -- are entirely unaffected.
+                    """, 4),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Validate uploaded files against an explicit allow-list of content types and a maximum size before doing anything else with them -- `file.ContentType`/`file.FileName` are exactly what the client's request declared, never a verified fact, so base trust on your own server-side checks (size, and if it truly matters, the file's real byte signature), not the client's claim. Stream large uploads straight to their destination with `CopyToAsync(destinationStream)` rather than buffering the whole file into a `byte[]` or `MemoryStream` first -- loading every concurrent upload fully into memory is an easy way to exhaust server memory under load.
+
+                    Reach for `IEndpointFilter` rather than full middleware when cross-cutting logic only applies to a handful of routes, or one route group -- middleware registered via `app.Use()` runs for literally every request, so scoping it to a subset means hand-writing your own "is this the right path" check inside it, when `AddEndpointFilter<T>()` (or `MapGroup(...).AddEndpointFilter<T>()`) already scopes the logic correctly at registration time.
+                    """, 5),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    If asked how you'd validate a request or add cross-cutting logic to only some Minimal API routes, don't default to "write middleware" -- name `IEndpointFilter` specifically as the mechanism built for exactly that granularity, and be ready to state its two moving pieces precisely: `context.GetArgument<T>(index)` to read an argument, and choosing to call `await next(context)` versus returning a result directly to short-circuit.
+
+                    On file uploads, mention the trust boundary unprompted: `IFormFile.ContentType` and `FileName` come from the client's request, not from server-side inspection of the actual bytes, so a thorough answer validates file size and, if it genuinely matters, the real file signature -- not just the declared content type string.
+                    """, 6),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Trusting `file.ContentType` (or the extension in `file.FileName`) as proof of what a file actually is, then acting on that trust -- e.g. saving whatever the client labeled `image/png` straight into a folder served as static images without checking the real bytes, which lets a client upload something else entirely under a misleading content type. A related mistake: reading an uploaded file fully into memory (a `MemoryStream` or `byte[]` buffer) before checking `file.Length` against a limit -- by the time the whole thing is buffered, the memory cost you were trying to guard against has already been paid.
+
+                    Also common: reaching for global middleware (`app.Use(...)`) to validate one specific route's request shape, then hand-writing an `if (context.Request.Path == "/widgets")` check inside it to scope the logic -- that's exactly what `AddEndpointFilter<T>()` on the specific route (or route group) already does declaratively, without every request in the app paying the cost of running through logic meant for one endpoint.
+                    """, 7),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    Global middleware is a security checkpoint at a building's only entrance -- everyone walks through it no matter which office they're visiting, so whatever it checks has to make sense for every single visitor. An endpoint filter is an additional check installed at the door of one specific office, or one whole floor -- only people going there get stopped and asked for something (an ID, an appointment confirmation), while everyone heading to a different floor walks past without ever encountering it. And trusting `IFormFile.ContentType` is like accepting a package at the front desk purely because the sender wrote "fragile -- glass" on the label -- it's a reasonable hint, but no one at the desk actually opened the box to check, so the label alone shouldn't decide how the package gets handled from there on.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "A Minimal API endpoint needs to accept a single uploaded profile picture. Which parameter type should the endpoint method accept, and what does the client's request need to look like?",
+                    "An IFormFile parameter is bound automatically from a multipart/form-data request with a matching form field for the file -- no manual multipart parsing is required in the endpoint code.",
+                    [
+                        new QuizOptionSeed("An IFormFile parameter; the client must send the request as multipart/form-data with a matching form field for the file", true),
+                        new QuizOptionSeed("A byte[] parameter; the client sends the raw bytes as the request body with Content-Type: application/octet-stream", false),
+                        new QuizOptionSeed("A string parameter containing a Base64-encoded version of the file", false),
+                        new QuizOptionSeed("An IFormFileCollection parameter, since a single IFormFile is not supported in Minimal APIs", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "A team wants request validation applied only to the five routes under /reports, not to every route in the app. What's the correct ASP.NET Core mechanism, and why not just use app.Use() middleware instead?",
+                    "IEndpointFilter, registered via AddEndpointFilter<T>() on those routes (or their route group via MapGroup), is scoped precisely to the routes it's attached to. Middleware registered with app.Use() runs for every request regardless of route, so scoping it to five specific routes would require hand-written path checks inside the middleware itself.",
+                    [
+                        new QuizOptionSeed("IEndpointFilter, registered via AddEndpointFilter<T>() on those routes (or the route group) -- app.Use() middleware runs for every request regardless of route, requiring hand-written path checks to scope it", true),
+                        new QuizOptionSeed("app.Use() middleware, since ASP.NET Core middleware is automatically scoped to the routes it's declared nearest to in Program.cs", false),
+                        new QuizOptionSeed("A custom ActionFilterAttribute, since IEndpointFilter is only available in MVC controllers, not Minimal APIs", false),
+                        new QuizOptionSeed("There's no way to scope logic to a subset of routes short of duplicating it in every route's handler", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Upload files in ASP.NET Core", "https://learn.microsoft.com/en-us/aspnet/core/mvc/models/file-uploads", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("Filters in Minimal API apps", "https://learn.microsoft.com/en-us/aspnet/core/fundamentals/minimal-apis/min-api-filters", LinkType.OfficialDocs),
+            ],
+            prerequisites: [lesson1]);
+
+        var lesson2Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson2.Slug,
+        [
+            "Build a Minimal API POST endpoint accepting an IFormFile, validate its Length and ContentType against an explicit allow-list before saving, then upload a file whose extension doesn't match its declared ContentType and confirm your validation actually rejects it",
+            "Write an IEndpointFilter that reads an argument via context.GetArgument<T>(index), returns Results.Problem(...) to short-circuit on an invalid value, and calls await next(context) otherwise; attach it to one route with .AddEndpointFilter<T>() and confirm a valid request still reaches the handler",
+            "Attach the same filter to a whole route group via MapGroup(...).AddEndpointFilter<T>(), add a second unrelated route outside that group, and confirm the filter runs for every route in the group but not for the route outside it",
+        ]);
+
+        var module = BuildModule(topicId, "aspnet-core-signalr-and-minimal-api-extensibility", "Real-Time Communication & Minimal API Extensibility",
+            "SignalR hubs and groups for pushing real-time server-to-client updates over automatically-negotiated transports, plus extending Minimal APIs with file uploads via IFormFile and cross-cutting IEndpointFilter logic scoped to specific routes.",
+            85, [lesson1, lesson2], sortOrder: 8);
+
+        return (module, [lesson1Checklist, lesson2Checklist]);
+    }
 
     private static (Module, List<ChecklistSeed>) BuildDsaModule(int topicId)
     {
