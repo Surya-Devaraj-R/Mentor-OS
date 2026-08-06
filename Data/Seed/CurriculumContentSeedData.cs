@@ -22847,8 +22847,30 @@ public static class CurriculumContentSeedData
             "Use $\"...\" string interpolation to print one sentence that combines two of your variables",
         ]);
 
-        var module = BuildModule(topicId, "csharp-basics-getting-started", "Getting Started", "The very first steps in C#: printing text to the screen and storing information in variables.", 40, [lesson1, lesson2], sortOrder: 1);
-        return (module, [lesson1Checklist, lesson2Checklist]);
+        var capstone = new CapstoneProject
+        {
+            Title = "Personal Introduction Program",
+            Description = """
+                Combine everything from this module -- variables, types, and string interpolation -- into a small program that introduces yourself using only what you've learned so far.
+                """,
+            Requirements = """
+                - At least 3 variables of different types (your name as a `string`, your age as an `int`, one more of your choice).
+                - A single `Console.WriteLine` using string interpolation (`$"..."`) that combines all 3 variables into one readable sentence.
+                - A comment above each variable explaining what it stores.
+                """,
+            CreatedUtc = DateTime.UtcNow,
+            UpdatedUtc = DateTime.UtcNow,
+        };
+
+        var capstoneChecklist = new ChecklistSeed(ChecklistOwnerKind.Capstone, "csharp-basics-getting-started",
+        [
+            "Declare an int, a string, and one more variable type, each with a clear, honest name.",
+            "Write one interpolated string that combines all three into a natural sentence.",
+            "Run the program and confirm the printed sentence reads correctly with your own real information.",
+        ]);
+
+        var module = BuildModule(topicId, "csharp-basics-getting-started", "Getting Started", "The very first steps in C#: printing text to the screen and storing information in variables.", 40, [lesson1, lesson2], capstone, sortOrder: 1);
+        return (module, [lesson1Checklist, lesson2Checklist, capstoneChecklist]);
     }
 
     private static (Module, List<ChecklistSeed>) BuildCSharpBasicsNumbersAndLogicModule(int topicId)
@@ -23100,11 +23122,33 @@ public static class CurriculumContentSeedData
             "Change temperature to a value above 30, then a value exactly equal to 15, and confirm which branch runs each time",
         ]);
 
+        var capstone = new CapstoneProject
+        {
+            Title = "Simple Grade Calculator",
+            Description = """
+                Build a small program that takes a numeric score and prints the matching letter grade, using the math and decision-making tools from this module.
+                """,
+            Requirements = """
+                - An `int score` variable you can change and re-run.
+                - An `if`/`else if`/`else` chain that maps score ranges to letter grades (A/B/C/D/F).
+                - Use `%` or `/` somewhere to also print something derived from the score (for example, how many points away from the next grade boundary).
+                """,
+            CreatedUtc = DateTime.UtcNow,
+            UpdatedUtc = DateTime.UtcNow,
+        };
+
+        var capstoneChecklist = new ChecklistSeed(ChecklistOwnerKind.Capstone, "csharp-basics-numbers-and-logic",
+        [
+            "Write the if/else if/else chain covering all 5 letter grades without gaps or overlaps.",
+            "Test it by changing the score to a value in each grade range and confirming the right letter prints each time.",
+            "Add one line of math (using % or /) that prints something extra about the score.",
+        ]);
+
         var module = BuildModule(topicId, "csharp-basics-numbers-and-logic", "Numbers & Logic",
             "Doing basic math with C#'s arithmetic operators (including the classic integer-division surprise) and making a program choose between actions using bool, if/else, and else if.",
-            40, [lesson1, lesson2], sortOrder: 2);
+            40, [lesson1, lesson2], capstone, sortOrder: 2);
 
-        return (module, [lesson1Checklist, lesson2Checklist]);
+        return (module, [lesson1Checklist, lesson2Checklist, capstoneChecklist]);
     }
 
     private static (Module, List<ChecklistSeed>) BuildCSharpBasicsRepetitionAndReuseModule(int topicId)
@@ -23384,11 +23428,33 @@ public static class CurriculumContentSeedData
             "Write a method that returns an int, call it, and store the returned value in a variable",
         ]);
 
+        var capstone = new CapstoneProject
+        {
+            Title = "Multiplication Table Generator",
+            Description = """
+                Write a method that prints a full multiplication table for any number you pass in, using a loop inside the method.
+                """,
+            Requirements = """
+                - A method `PrintTimesTable(int number)` that prints that number's multiplication table from 1 to 10.
+                - Use a `for` loop inside the method.
+                - Call the method at least twice, with two different numbers.
+                """,
+            CreatedUtc = DateTime.UtcNow,
+            UpdatedUtc = DateTime.UtcNow,
+        };
+
+        var capstoneChecklist = new ChecklistSeed(ChecklistOwnerKind.Capstone, "csharp-basics-repetition-and-reuse",
+        [
+            "Write PrintTimesTable(int number) using a for loop from 1 to 10.",
+            "Call it with two different numbers and confirm both tables print correctly.",
+            "Change the loop to print only up to 5 instead of 10, and confirm the output shrinks correctly.",
+        ]);
+
         var module = BuildModule(topicId, "csharp-basics-repetition-and-reuse", "Repetition & Reuse",
             "Loops for repeating instructions and methods for writing reusable, named blocks of code -- the first tools that let a beginner stop copy-pasting code.",
-            40, [lesson1, lesson2], sortOrder: 3);
+            40, [lesson1, lesson2], capstone, sortOrder: 3);
 
-        return (module, [lesson1Checklist, lesson2Checklist]);
+        return (module, [lesson1Checklist, lesson2Checklist, capstoneChecklist]);
     }
 
     private static (Module, List<ChecklistSeed>) BuildCSharpBasicsCollections1Module(int topicId)
@@ -23668,11 +23734,33 @@ public static class CurriculumContentSeedData
             "Write a for loop using numbers.Length to print every number in the array, from first to last",
         ]);
 
+        var capstone = new CapstoneProject
+        {
+            Title = "Contact Book (In-Memory)",
+            Description = """
+                Build a tiny in-memory contact book using a List<string>, letting you add contacts and print the whole list.
+                """,
+            Requirements = """
+                - A `List<string>` to hold contact names.
+                - Code that adds at least 4 contacts to it using `.Add`.
+                - A `foreach` loop that prints every contact, one per line.
+                """,
+            CreatedUtc = DateTime.UtcNow,
+            UpdatedUtc = DateTime.UtcNow,
+        };
+
+        var capstoneChecklist = new ChecklistSeed(ChecklistOwnerKind.Capstone, "csharp-basics-collections-1",
+        [
+            "Create a List<string> and add at least 4 contacts to it using .Add.",
+            "Write a foreach loop that prints every contact.",
+            "Print .Count before and after adding a new contact and confirm the number is correct both times.",
+        ]);
+
         var module = BuildModule(topicId, "csharp-basics-collections-1", "Collections I",
             "Storing more than one value in C#: growable, index-based Lists that can .Add new items, and fixed-size Arrays that use .Length -- the two most basic ways to hold many values at once.",
-            40, [lesson1, lesson2], sortOrder: 4);
+            40, [lesson1, lesson2], capstone, sortOrder: 4);
 
-        return (module, [lesson1Checklist, lesson2Checklist]);
+        return (module, [lesson1Checklist, lesson2Checklist, capstoneChecklist]);
     }
 
     private static (Module, List<ChecklistSeed>) BuildCSharpBasicsOop1Module(int topicId)
@@ -23961,11 +24049,33 @@ public static class CurriculumContentSeedData
             "In your own words, write one sentence explaining why a constructor prevents a Dog from ever being left without a Name or Age",
         ]);
 
+        var capstone = new CapstoneProject
+        {
+            Title = "Simple Bank Account Class",
+            Description = """
+                Model a bank account as a class with a constructor, a balance field, and Deposit/Withdraw methods that keep the balance correct.
+                """,
+            Requirements = """
+                - A `BankAccount` class with a constructor that sets an opening balance.
+                - `Deposit(decimal amount)` and `Withdraw(decimal amount)` methods.
+                - `Withdraw` must refuse to let the balance go negative.
+                """,
+            CreatedUtc = DateTime.UtcNow,
+            UpdatedUtc = DateTime.UtcNow,
+        };
+
+        var capstoneChecklist = new ChecklistSeed(ChecklistOwnerKind.Capstone, "csharp-basics-oop-1",
+        [
+            "Write the BankAccount class with a constructor and a Balance field.",
+            "Implement Deposit and Withdraw, printing the balance after each call.",
+            "Try to withdraw more than the balance holds and confirm your code correctly refuses it.",
+        ]);
+
         var module = BuildModule(topicId, "csharp-basics-oop-1", "Object-Oriented Basics",
             "The first steps into object-oriented C#: what a class is, what an object is, and how a constructor guarantees every object starts out complete.",
-            40, [lesson1, lesson2], sortOrder: 5);
+            40, [lesson1, lesson2], capstone, sortOrder: 5);
 
-        return (module, [lesson1Checklist, lesson2Checklist]);
+        return (module, [lesson1Checklist, lesson2Checklist, capstoneChecklist]);
     }
 
     private static (Module, List<ChecklistSeed>) BuildCSharpBasicsOop2Module(int topicId)
@@ -24260,10 +24370,32 @@ public static class CurriculumContentSeedData
             "In your own words, write one sentence explaining the difference between what Animal (a base class) gives you and what IMakesSound (an interface) gives you.",
         ]);
 
+        var capstone = new CapstoneProject
+        {
+            Title = "Animal Sound Simulator",
+            Description = """
+                Build a small class hierarchy -- a base Animal class, at least two subclasses, and an IMakesSound interface -- exactly like this module's own examples.
+                """,
+            Requirements = """
+                - An `Animal` base class with a `Name` and a constructor.
+                - At least two subclasses (for example `Dog`, `Cat`) using `: Animal` and `base(...)`.
+                - An `IMakesSound` interface with a `MakeSound()` method, implemented differently by each subclass.
+                """,
+            CreatedUtc = DateTime.UtcNow,
+            UpdatedUtc = DateTime.UtcNow,
+        };
+
+        var capstoneChecklist = new ChecklistSeed(ChecklistOwnerKind.Capstone, "csharp-basics-oop-2",
+        [
+            "Write the Animal base class and two subclasses using : Animal and base(...).",
+            "Define IMakesSound and implement it differently in each subclass.",
+            "Create a List<Animal> containing both subclasses and loop through it calling MakeSound() on each.",
+        ]);
+
         var module = BuildModule(topicId, "csharp-basics-oop-2", "Object-Oriented Basics II",
             "Inheritance and interfaces for absolute beginners: how one class can reuse another class's code with `: Animal` and `base(...)`, and how an interface like `IMakesSound` acts as a promise that lets one method work with many different classes.",
-            40, [lesson1, lesson2], sortOrder: 6);
-        return (module, [lesson1Checklist, lesson2Checklist]);
+            40, [lesson1, lesson2], capstone, sortOrder: 6);
+        return (module, [lesson1Checklist, lesson2Checklist, capstoneChecklist]);
     }
 
     private static (Module, List<ChecklistSeed>) BuildCSharpBasicsRealProgramsModule(int topicId)
@@ -24497,11 +24629,33 @@ public static class CurriculumContentSeedData
             "Remove the try/catch around the first int.Parse(badInput) call and run it, to see the program crash instead of handling the error gracefully",
         ]);
 
+        var capstone = new CapstoneProject
+        {
+            Title = "Interactive Number Guessing Game",
+            Description = """
+                Build a number-guessing game that reads player input from the console and safely handles bad input using try/catch.
+                """,
+            Requirements = """
+                - `Console.ReadLine()` to read the player's guess each round.
+                - A `try`/`catch` around the conversion from text to a number, handling `FormatException`.
+                - A loop that keeps asking until the player guesses correctly.
+                """,
+            CreatedUtc = DateTime.UtcNow,
+            UpdatedUtc = DateTime.UtcNow,
+        };
+
+        var capstoneChecklist = new ChecklistSeed(ChecklistOwnerKind.Capstone, "csharp-basics-real-programs",
+        [
+            "Pick a secret number and write a loop that reads a guess each time through Console.ReadLine.",
+            "Wrap the text-to-number conversion in try/catch and print a friendly message on bad input instead of crashing.",
+            "Play the game yourself, including deliberately typing letters instead of a number, to confirm it doesn't crash.",
+        ]);
+
         var module = BuildModule(topicId, "csharp-basics-real-programs", "Real Programs",
             "Two short, hands-on lessons for absolute beginners: reading input typed by the user, and handling errors so bad input doesn't crash your program.",
-            40, [lesson1, lesson2], sortOrder: 7);
+            40, [lesson1, lesson2], capstone, sortOrder: 7);
 
-        return (module, [lesson1Checklist, lesson2Checklist]);
+        return (module, [lesson1Checklist, lesson2Checklist, capstoneChecklist]);
     }
 
     private static (Module, List<ChecklistSeed>) BuildCSharpBasicsCollections2Module(int topicId)
@@ -24754,11 +24908,33 @@ public static class CurriculumContentSeedData
             "Use Substring to pull just the first 3 characters out of a string, and separately pull everything after a position you choose",
         ]);
 
+        var capstone = new CapstoneProject
+        {
+            Title = "Word Frequency Counter",
+            Description = """
+                Take a sentence, split it into words, and count how many times each word appears using a Dictionary<string, int>.
+                """,
+            Requirements = """
+                - Split a multi-word sentence into individual words using `Split`.
+                - A `Dictionary<string, int>` mapping each word to how many times it appears.
+                - A `foreach` loop that prints every word and its count.
+                """,
+            CreatedUtc = DateTime.UtcNow,
+            UpdatedUtc = DateTime.UtcNow,
+        };
+
+        var capstoneChecklist = new ChecklistSeed(ChecklistOwnerKind.Capstone, "csharp-basics-collections-2",
+        [
+            "Split a multi-word sentence into individual words with Split.",
+            "Build a Dictionary<string, int> counting each word's occurrences, using ContainsKey to decide whether to add or increment.",
+            "Print every word/count pair, and test with a sentence that repeats at least one word to confirm the count is right.",
+        ]);
+
         var module = BuildModule(topicId, "csharp-basics-collections-2", "Collections II",
             "Dictionaries for key-based lookup, and the everyday string methods -- Trim, ToUpper/ToLower, Contains, Split, and Substring -- for cleaning up and slicing text.",
-            40, [lesson1, lesson2], sortOrder: 8);
+            40, [lesson1, lesson2], capstone, sortOrder: 8);
 
-        return (module, [lesson1Checklist, lesson2Checklist]);
+        return (module, [lesson1Checklist, lesson2Checklist, capstoneChecklist]);
     }
 
     private static (Module, List<ChecklistSeed>) BuildCSharpBasicsModernControlFlowModule(int topicId)
@@ -25054,11 +25230,33 @@ public static class CurriculumContentSeedData
             "Write your own switch expression that takes an int and returns \"small\", \"medium\", or \"large\" based on ranges you pick",
         ]);
 
+        var capstone = new CapstoneProject
+        {
+            Title = "Traffic Light State Machine",
+            Description = """
+                Model a traffic light as an enum with three states, and use a switch expression to decide what a driver should do at each state.
+                """,
+            Requirements = """
+                - A `TrafficLight` enum with `Red`, `Yellow`, `Green`.
+                - A switch expression (or switch statement) mapping each state to an instruction ("Stop", "Slow down", "Go").
+                - A loop that cycles through all three states and prints the instruction for each.
+                """,
+            CreatedUtc = DateTime.UtcNow,
+            UpdatedUtc = DateTime.UtcNow,
+        };
+
+        var capstoneChecklist = new ChecklistSeed(ChecklistOwnerKind.Capstone, "csharp-basics-modern-control-flow",
+        [
+            "Define the TrafficLight enum with all three states.",
+            "Write a switch expression mapping each state to the correct instruction string.",
+            "Loop through all three enum values and confirm each prints the right instruction.",
+        ]);
+
         var module = BuildModule(topicId, "csharp-basics-modern-control-flow", "Modern Control Flow",
             "Fixed, named value sets with enums and switch statements, plus pattern matching with is and switch expressions -- the modern building blocks for branching logic in C#.",
-            40, [lesson1, lesson2], sortOrder: 9);
+            40, [lesson1, lesson2], capstone, sortOrder: 9);
 
-        return (module, [lesson1Checklist, lesson2Checklist]);
+        return (module, [lesson1Checklist, lesson2Checklist, capstoneChecklist]);
     }
 
     private static (Module, List<ChecklistSeed>) BuildCSharpBasicsModernDataModule(int topicId)
@@ -25325,11 +25523,33 @@ public static class CurriculumContentSeedData
             "Write your own tiny generic method (for example GetLast<T>) and call it with two different types of lists",
         ]);
 
+        var capstone = new CapstoneProject
+        {
+            Title = "Generic Inventory Tracker",
+            Description = """
+                Combine records and generics: model products as a record, then write one generic method that works on a List of any type to find the first item.
+                """,
+            Requirements = """
+                - A `Product` record with `Name` and `Price`.
+                - A generic method `static T GetFirst<T>(List<T> list)` (or similar) that works for both a `List<Product>` and a `List<string>`.
+                - Demonstrate record value-equality by comparing two Product instances with identical data.
+                """,
+            CreatedUtc = DateTime.UtcNow,
+            UpdatedUtc = DateTime.UtcNow,
+        };
+
+        var capstoneChecklist = new ChecklistSeed(ChecklistOwnerKind.Capstone, "csharp-basics-modern-data",
+        [
+            "Define a Product record and create two instances with identical data; confirm == returns true.",
+            "Write a generic method and call it with both a List<Product> and a List<string>.",
+            "Explain out loud why the same generic method works for both without any changes.",
+        ]);
+
         var module = BuildModule(topicId, "csharp-basics-modern-data", "Modern C# Data",
             "One-line data types with records and the <T> placeholder that lets one method work with any type -- two building blocks of everyday, modern C# code.",
-            40, [lesson1, lesson2], sortOrder: 10);
+            40, [lesson1, lesson2], capstone, sortOrder: 10);
 
-        return (module, [lesson1Checklist, lesson2Checklist]);
+        return (module, [lesson1Checklist, lesson2Checklist, capstoneChecklist]);
     }
 
     private static (Module, List<ChecklistSeed>) BuildCSharpBasicsAdvancedModule(int topicId)
@@ -25574,11 +25794,33 @@ public static class CurriculumContentSeedData
             "Explain out loud, in your own words, the difference between async and await, using this lesson's washing machine analogy",
         ]);
 
+        var capstone = new CapstoneProject
+        {
+            Title = "Async Data Processor",
+            Description = """
+                Combine LINQ and async/await: asynchronously "fetch" a list of numbers (simulated with Task.Delay), then filter and transform it with LINQ before printing the result.
+                """,
+            Requirements = """
+                - An async method that simulates fetching data using `await Task.Delay(...)` before returning a `List<int>`.
+                - Use `Where()` and `Select()` on the fetched list to filter and transform it.
+                - Print the final result only after awaiting the fetch and applying the LINQ operators.
+                """,
+            CreatedUtc = DateTime.UtcNow,
+            UpdatedUtc = DateTime.UtcNow,
+        };
+
+        var capstoneChecklist = new ChecklistSeed(ChecklistOwnerKind.Capstone, "csharp-basics-advanced",
+        [
+            "Write an async method that awaits Task.Delay and then returns a List<int>.",
+            "Await that method's result, then use Where() and Select() to filter and transform it.",
+            "Time how long the program takes to run and confirm it roughly matches your Task.Delay duration.",
+        ]);
+
         var module = BuildModule(topicId, "csharp-basics-advanced", "Advanced Basics",
             "Two beginner-friendly building blocks that come up constantly in real C# code: LINQ's Where/Select/OrderBy for working with lists in one line, and async/await for waiting on slow operations without freezing the program.",
-            40, [lesson1, lesson2], sortOrder: 11);
+            40, [lesson1, lesson2], capstone, sortOrder: 11);
 
-        return (module, [lesson1Checklist, lesson2Checklist]);
+        return (module, [lesson1Checklist, lesson2Checklist, capstoneChecklist]);
     }
 
 
