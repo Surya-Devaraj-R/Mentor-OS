@@ -61,12 +61,14 @@ public static class CurriculumContentSeedData
             BuildDsaUnionFindAndWeightedGraphsModule(topicIdBySlug["dsa"]),
             BuildDsaTwoDimensionalAndStringDpModule(topicIdBySlug["dsa"]),
             BuildDsaTriesModule(topicIdBySlug["dsa"]),
+            BuildAdvancedDsaRangeQueriesAndStringMatchingModule(topicIdBySlug["dsa"]),
             BuildSystemDesignModule(topicIdBySlug["system-design"]),
             BuildApiGatewayAndCdnModule(topicIdBySlug["system-design"]),
             BuildConsistentHashingAndCaseStudiesModule(topicIdBySlug["system-design"]),
             BuildDistributedCoordinationModule(topicIdBySlug["system-design"]),
             BuildDistributedTransactionsAndRealTimeCommunicationModule(topicIdBySlug["system-design"]),
             BuildBloomFiltersAndChatSystemCaseStudyModule(topicIdBySlug["system-design"]),
+            BuildEstimationAndClassicCaseStudiesModule(topicIdBySlug["system-design"]),
             BuildSqlModule(topicIdBySlug["sql"]),
             BuildSqlAdvancedModule(topicIdBySlug["sql"]),
             BuildSqlViewsAndOptimizationModule(topicIdBySlug["sql"]),
@@ -12528,6 +12530,430 @@ public static class CurriculumContentSeedData
 
     // ============================== System Design ==============================
 
+    private static (Module, List<ChecklistSeed>) BuildAdvancedDsaRangeQueriesAndStringMatchingModule(int topicId)
+    {
+        var lesson1 = BuildLesson(
+            slug: "segment-trees-and-fenwick-trees",
+            title: "Segment Trees & Fenwick Trees (Range Queries)",
+            summary: "Two data structures that answer 'what's the sum (or min) of this range?' and let you update a single element, both in O(log n) instead of the naive O(n) -- and a concrete rule for which one to reach for.",
+            estimatedMinutes: 45,
+            objectives:
+            [
+                "Explain the inefficiency a naive array leaves on the table -- O(n) per range query or O(n) per point update -- and how both a Fenwick tree and a segment tree bring both operations down to O(log n)",
+                "Describe how a Fenwick tree's i & (-i) trick makes each index responsible for a range determined by its lowest set bit, and trace both Update and PrefixSum through a concrete array",
+                "Describe a segment tree's binary-tree-over-an-array structure, where each node aggregates a range, and explain why it generalizes beyond sum to min/max/gcd and to range updates, unlike a Fenwick tree",
+                "State a concrete rule for choosing a Fenwick tree over a segment tree (and vice versa) based on the query type and whether the aggregate is invertible",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    Suppose an array holds a million elements and two kinds of questions keep arriving: "what's the sum of elements from index L to R?" and "change the value at index i." A plain array answers the first by summing every element in the range -- O(n) per query -- and the second in O(1). A **prefix-sum array**, precomputed once, flips that trade-off: O(1) per range query, but O(n) to rebuild every prefix sum after a single update, because changing one element shifts every prefix sum from that point onward. Neither approach survives a workload that interleaves *many* updates with *many* range queries -- one operation is always stuck at O(n).
+
+                    **Fenwick trees** (also called **Binary Indexed Trees**, or **BIT**) and **segment trees** both solve this by giving up the O(1) query in exchange for making *both* operations O(log n) -- a query never touches more than a logarithmic number of elements, and neither does an update, no matter how large the array is.
+
+                    A Fenwick tree is built on a single trick: each 1-indexed slot `i` in an internal array doesn't store `a[i]` alone -- it stores the sum of a specific range of the original array, and that range's length is exactly `i`'s **lowest set bit**, computed as `i & (-i)` (two's-complement negation flips every bit and adds one, so `i & (-i)` isolates the rightmost `1` bit of `i`). Slot 6 (binary `110`, lowest set bit `2`) covers a range of length 2 ending at index 6; slot 8 (binary `1000`, lowest set bit `8`) covers a range of length 8 ending at index 8. `PrefixSum(i)` walks *backward* through these slots -- start at `i`, add `tree[i]`, then subtract the lowest set bit from `i` and repeat, until `i` reaches 0. `Update(i, delta)` walks *forward* -- start at `i`, add `delta` to `tree[i]`, then add the lowest set bit to `i` and repeat, until `i` exceeds the array's size -- because adding the lowest set bit walks to exactly the next slot whose range also contains the original index. Both walks take O(log n) steps, since an n-element array has only O(log n) bit positions.
+
+                    A segment tree takes a more general approach: build an explicit binary tree over the array, where the root covers the whole range [0, n-1], each node's two children split its range in half, and leaves cover single elements. Every internal node stores the aggregate (sum, min, max, gcd -- whatever the problem calls for) of its entire range, computed from its two children. A range query walks down from the root, and at each node either uses the whole node's precomputed aggregate (if the node's range sits entirely inside the query range), recurses into one child (if the query range sits entirely inside one half), or recurses into both children and combines their results (if the query range straddles the split) -- at most O(log n) nodes are ever visited because the recursion only fans out at the O(log n) levels where the query range's boundary actually crosses a split point. A point update walks straight down to the leaf being changed and back up, recomputing each ancestor's aggregate from its two children -- also O(log n).
+
+                    The key structural difference: a Fenwick tree's trick only works for **invertible** aggregates -- sum (where subtracting a prefix sum from another gives a range sum) is invertible; min and max are not (knowing the min of [0, 10] and the min of [0, 5] tells you nothing about the min of [6, 10]). A segment tree has no such restriction, because it never relies on subtracting one aggregate from another -- it always recomputes directly from the two children's own stored aggregates. That generality is also why segment trees (not Fenwick trees) are the structure that extends cleanly to **range updates** via lazy propagation (deferring an update to a whole range until a query actually needs to descend into it) -- a more advanced technique built on the same node-per-range foundation.
+                    """, 1),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **The problem:** repeated range queries (sum/min/max over [L, R]) interleaved with point updates on the same array.
+
+                    - Plain array: O(1) update, O(n) range query
+                    - Prefix-sum array: O(1) range query, O(n) update (rebuilding every later prefix)
+                    - Fenwick tree / segment tree: O(log n) for BOTH
+
+                    **Fenwick tree (Binary Indexed Tree)**
+
+                    - 1-indexed internal array; slot i stores the sum of a range of length i & (-i) (i's lowest set bit)
+                    - Update(i, delta): add delta to tree[i], then i += i & (-i), repeat until i > n -- O(log n)
+                    - PrefixSum(i): add tree[i] to the running sum, then i -= i & (-i), repeat until i == 0 -- O(log n)
+                    - RangeSum(L, R) = PrefixSum(R) - PrefixSum(L - 1)
+                    - Only works for invertible aggregates (sum) -- not min/max
+
+                    **Segment tree**
+
+                    - Explicit binary tree over the array; each node aggregates its whole range from its two children
+                    - Query: O(log n) nodes visited, combining full-range nodes and recursing where the query range straddles a split
+                    - Update: walk to the leaf, then recompute every ancestor on the way back up -- O(log n)
+                    - Works for ANY aggregate (sum, min, max, gcd...), and extends to range updates via lazy propagation
+
+                    **Which one**
+
+                    - Need only prefix sums / point updates on a sum -> Fenwick tree (less code)
+                    - Need min/max, a non-invertible aggregate, or range updates -> segment tree
+                    """, 2),
+                Block(BlockType.CodeSnippet, "Fenwick Tree: Point Update and Prefix/Range Sum", BodyFormat.PlainText, """
+                    public class FenwickTree
+                    {
+                        private readonly int[] _tree; // 1-indexed internal array; _tree[0] is unused
+                        private readonly int _size;
+
+                        public FenwickTree(int size)
+                        {
+                            _size = size;
+                            _tree = new int[size + 1];
+                        }
+
+                        // Builds a Fenwick tree over a 0-indexed array of values by point-updating
+                        // every position once. O(n log n) overall.
+                        public FenwickTree(int[] values) : this(values.Length)
+                        {
+                            for (var i = 0; i < values.Length; i++)
+                            {
+                                Update(i + 1, values[i]); // convert to the tree's 1-indexed position
+                            }
+                        }
+
+                        // Adds delta to the element at 1-indexed position i. O(log n): walks
+                        // "forward" to every slot whose covered range also contains i.
+                        public void Update(int i, int delta)
+                        {
+                            for (; i <= _size; i += i & (-i))
+                            {
+                                _tree[i] += delta;
+                            }
+                        }
+
+                        // Sum of elements in [1, i], 1-indexed and inclusive. O(log n): walks
+                        // "backward," stripping the lowest set bit off i each step.
+                        public int PrefixSum(int i)
+                        {
+                            var sum = 0;
+                            for (; i > 0; i -= i & (-i))
+                            {
+                                sum += _tree[i];
+                            }
+                            return sum;
+                        }
+
+                        // Sum of elements in [left, right], both 1-indexed and inclusive.
+                        // A range sum is just the difference of two prefix sums -- this only
+                        // works because "sum" is invertible; min/max could not do this.
+                        public int RangeSum(int left, int right)
+                        {
+                            return PrefixSum(right) - PrefixSum(left - 1);
+                        }
+                    }
+
+                    // Usage: values = [1, 2, 3, 4, 5] (positions 1 through 5 inside the tree)
+                    var values = new[] { 1, 2, 3, 4, 5 };
+                    var fenwick = new FenwickTree(values);
+
+                    fenwick.PrefixSum(3);      // 6  -- a[1] + a[2] + a[3] = 1 + 2 + 3
+                    fenwick.RangeSum(2, 4);    // 9  -- a[2] + a[3] + a[4] = 2 + 3 + 4
+
+                    fenwick.Update(3, 2);      // add 2 to the element at position 3 (it becomes 3 + 2 = 5)
+                    fenwick.PrefixSum(3);      // 8  -- a[1] + a[2] + (a[3]+2) = 1 + 2 + 5
+                    fenwick.RangeSum(2, 4);    // 11 -- a[2] + (a[3]+2) + a[4] = 2 + 5 + 4
+                    """, 3, language: "csharp"),
+                Block(BlockType.Diagram, "Fenwick Tree Responsibility Ranges (n = 8)", BodyFormat.AsciiArt, """
+                    Fenwick tree (BIT) responsibility ranges for n = 8
+                    lowbit(i) = i & (-i) = the lowest set bit of i
+
+                    index i :  1     2     3     4     5     6     7     8
+                    lowbit  :  1     2     1     4     1     2     1     8
+                    covers  : [1,1] [1,2] [3,3] [1,4] [5,5] [5,6] [7,7] [1,8]
+
+                    tree[i] stores the SUM over its "covers" range, not just a[i] alone.
+
+                    PrefixSum(6) walk (strip the lowest set bit each step, stop at 0):
+                      i=6 -> add tree[6]  (covers [5,6])   -> i = 6 - 2 = 4
+                      i=4 -> add tree[4]  (covers [1,4])   -> i = 4 - 4 = 0  stop
+                      total = tree[6] + tree[4] = sum(a[5..6]) + sum(a[1..4]) = sum(a[1..6])  correct
+
+                    Update(5, +delta) walk (add the lowest set bit each step, stop past n):
+                      i=5 -> update tree[5]  (covers [5,5]) -> i = 5 + 1 = 6
+                      i=6 -> update tree[6]  (covers [5,6]) -> i = 6 + 2 = 8
+                      i=8 -> update tree[8]  (covers [1,8]) -> i = 8 + 8 = 16 > 8  stop
+                      every slot touched (5, 6, 8) covers a range that CONTAINS index 5 -- that's
+                      exactly why the update walk is correct: it reaches every slot whose stored
+                      sum needs to change, and no others.
+                    """, 4),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Default to a Fenwick tree whenever the problem only needs prefix sums and point updates on a sum -- it's roughly a dozen lines of code with two tiny loops, versus a segment tree's explicit tree construction, recursive query, and recursive update. Reach for the extra complexity of a segment tree only when the problem actually needs it: a non-invertible aggregate (min, max, gcd), or range updates (add delta to every element in [L, R], not just one).
+
+                    Fenwick trees are 1-indexed by construction -- the i & (-i) trick breaks down at index 0 (there is no lowest set bit to strip, so the loop would never terminate). Always allocate the internal array with size n + 1 and start real data at index 1, even if the problem's own array is 0-indexed -- convert with a +1 at the boundary, as the constructor above does.
+                    """, 5),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    The instant a problem says "process Q queries, where each query is either 'update index i' or 'give me the sum/min/max of range [L, R]', interleaved, on a large array," say "Fenwick tree or segment tree" immediately -- that phrasing is the signature of a range-query-with-updates problem, and a naive per-query O(n) scan is what the interviewer is trying to rule out. Then justify which one: "if it's just sum, I'd reach for a Fenwick tree -- it's simpler and sufficient; if it's min/max or needs range updates, I need a segment tree, because Fenwick's technique relies on subtracting one prefix result from another, which only works for invertible aggregates like sum."
+
+                    Be ready to state the complexity precisely: both structures give O(log n) per query and O(log n) per update, O(n) or O(n log n) to build initially, and O(n) space -- and be able to explain why it's O(log n) (the number of bit positions / tree levels in an n-element array), not just recite the number.
+                    """, 6),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Reaching for a Fenwick tree to answer a range-minimum or range-maximum query -- this is a frequent and subtle bug, because the code compiles and even looks like it should work by analogy with range sum ("RangeMin(L, R) = PrefixMin(R) - PrefixMin(L-1)"), but that subtraction is meaningless for min/max: knowing the minimum of [1, 10] and the minimum of [1, 5] tells you nothing about the minimum of [6, 10], because min isn't invertible the way sum is. Range min/max needs a segment tree (or a sparse table, for the static, no-updates case).
+
+                    Off-by-one errors from mixing 0-indexed and 1-indexed positions -- passing a 0-indexed array position directly into a Fenwick tree's Update/PrefixSum (which expect 1-indexed positions) silently corrupts every subsequent query, because i & (-i) at i = 0 never advances the loop. Always convert at the boundary (i + 1 in, i - 1 out), consistently, in exactly one place.
+
+                    Forgetting that a segment tree's update must recompute every ancestor on the path back to the root, not just the leaf -- updating only the leaf leaves every internal node's cached aggregate stale, so subsequent range queries silently return answers based on the old value.
+                    """, 7),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    A Fenwick tree is like a set of nested donation-total tally sheets at a fundraiser, where sheet sizes are chosen so that any running total from the start can be reconstructed by adding up just a handful of sheets, instead of re-adding every single donation from scratch -- and recording one new donation only requires updating the handful of sheets whose range includes that donation, not the entire ledger.
+
+                    A segment tree is like a corporate reporting hierarchy: each manager's number is the sum (or min, or max) of their direct reports' numbers, all the way up to the CEO. Asking "what's the total for the West Coast and Midwest regions combined?" only requires visiting the few managers whose regions line up with that combined ask -- not re-adding every individual salesperson's number from scratch. Changing one salesperson's number only requires updating that one chain of managers directly above them, not the whole company's report.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "A Fenwick tree is built over the array [1, 2, 3, 4, 5] (values at 1-indexed positions 1 through 5). What does PrefixSum(3) return, and why?",
+                    "PrefixSum(3) walks i = 3 (add tree[3]), then i = 3 - (3 & -3) = 3 - 1 = 2 (add tree[2]), then i = 2 - 2 = 0 (stop). That sum equals a[1] + a[2] + a[3] = 1 + 2 + 3 = 6 -- the two visited slots together cover exactly the range [1, 3] without overlap or gaps.",
+                    [
+                        new QuizOptionSeed("6 -- the sum a[1] + a[2] + a[3] = 1 + 2 + 3", true),
+                        new QuizOptionSeed("15 -- the sum of the entire array", false),
+                        new QuizOptionSeed("3 -- just the value stored at position 3", false),
+                        new QuizOptionSeed("1 -- tree[3] alone, without combining any other slot", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "A developer tries to reuse the Fenwick tree's range-sum trick for range minimum, computing 'RangeMin(L, R) = PrefixMin(R) - PrefixMin(L - 1)' by analogy with RangeSum. Why is this wrong?",
+                    "Sum is invertible -- subtracting one prefix sum from another isolates exactly the sum of the range in between. Minimum is not invertible: knowing the minimum of [1, 10] and the minimum of [1, 5] tells you nothing about the minimum of [6, 10], because the smaller range's minimum could have come from anywhere inside it. Range minimum needs a segment tree (or a sparse table for static data), not a Fenwick tree's subtraction trick.",
+                    [
+                        new QuizOptionSeed("Minimum isn't invertible -- subtracting two prefix minimums doesn't isolate the minimum of the range in between, the way subtraction works for sums", true),
+                        new QuizOptionSeed("Fenwick trees can only store non-negative integers, and minimums are sometimes negative", false),
+                        new QuizOptionSeed("PrefixMin would require O(n) time per call, making the subtraction too slow to be useful", false),
+                        new QuizOptionSeed("The i & (-i) trick only produces correct results for arrays whose length is a power of two", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Fenwick Tree (Binary Indexed Tree) -- cp-algorithms.com", "https://cp-algorithms.com/data_structures/fenwick.html", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("Segment Tree -- cp-algorithms.com", "https://cp-algorithms.com/data_structures/segment_tree.html", LinkType.OfficialDocs),
+            ]);
+
+        var lesson1Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson1.Slug,
+        [
+            "Implement a Fenwick tree from scratch (Update and PrefixSum) over the array [1, 2, 3, 4, 5], and confirm by hand that PrefixSum(3) returns 6 and RangeSum(2, 4) returns 9",
+            "Trace the i & (-i) walk on paper for both Update(5, delta) and PrefixSum(6) on an 8-element Fenwick tree, listing exactly which indices get visited and why",
+            "Write one or two sentences explaining why a Fenwick tree's range-sum trick (subtracting two prefix sums) cannot be reused for range minimum or maximum, and name the structure that can",
+        ]);
+
+        var lesson2 = BuildLesson(
+            slug: "string-matching-kmp-and-rabin-karp",
+            title: "String Matching: KMP & Rabin-Karp",
+            summary: "Finding every occurrence of a pattern inside a text in O(n + m) instead of the naive O(n * m) -- KMP's failure function that never re-examines matched text, and Rabin-Karp's rolling hash that compares whole windows in O(1) amortized.",
+            estimatedMinutes: 45,
+            objectives:
+            [
+                "Explain why the naive substring-search approach costs O(n * m), and what specifically KMP and Rabin-Karp each do to avoid re-examining already-matched characters",
+                "Compute the KMP failure function (longest proper prefix that is also a suffix, per prefix of the pattern) by hand for a real pattern, and explain how a mismatch uses it to avoid restarting from scratch",
+                "Describe Rabin-Karp's rolling hash -- computing each window's hash from the previous window's hash in O(1) amortized -- and explain why a hash match still requires a full character comparison",
+                "Implement KMP's failure-function precomputation and matching scan, and correctly report every starting index where a pattern occurs in a text",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    Given a text T of length n and a pattern P of length m, the naive way to find every place P occurs inside T is to try every possible starting position in T and, for each one, compare characters one by one until either a mismatch is found or the whole pattern matches. That's O(n * m) in the worst case -- imagine T is "AAAAAAAAAAAAAAAB" and P is "AAAAAB": nearly every starting position matches several characters before finally failing, and none of that partial-match work is ever reused. Two classic algorithms fix this, in different ways, both reaching O(n + m).
+
+                    **KMP (Knuth-Morris-Pratt)** notices that when a partial match fails partway through the pattern, the characters of T already compared aren't garbage -- they are a known substring, namely a prefix of P itself, and that substring might share a prefix/suffix relationship with an earlier part of P that lets the scan resume without ever stepping backward in T. This is precomputed once, before scanning T at all, as the **failure function** (also called the **partial match table** or **lps array**, for "longest proper prefix which is also a suffix"): for every prefix P[0..i] of the pattern, lps[i] stores the length of the longest proper prefix of that substring that is also a suffix of it. When a mismatch occurs after j characters of the pattern have matched, KMP doesn't restart the pattern from index 0 -- it jumps j back to lps[j-1], because that many characters of the pattern are already known to match what's sitting in T immediately before the mismatch point, without looking at T again to confirm it. The index into T never moves backward -- only the index into P does -- which is exactly what makes the total scan O(n + m): O(m) to build the failure function once, O(n) for the scan, since T's pointer only ever advances.
+
+                    **Rabin-Karp** takes a completely different approach: instead of comparing characters, it compares hashes of each length-m window of T against the hash of P. Computing a fresh hash for every window from scratch would be O(m) per window, no better than naive search -- the trick is a **rolling hash**: because a polynomial hash of a string is a sum where each character's contribution depends on its position, sliding the window over by one character lets the hash be updated in O(1) by removing the outgoing character's contribution (scaled appropriately) and adding the incoming character's contribution, without touching the m - 2 characters in between. Comparing two hashes is O(1), so scanning all n - m + 1 windows costs O(n) amortized. The catch: different strings can, rarely, hash to the same value (a hash collision), so a hash match is only a candidate -- Rabin-Karp always follows it with a real O(m) character-by-character comparison to confirm before reporting a match. In the worst case (many spurious hash collisions), Rabin-Karp degrades toward O(n * m), but with a well-chosen base and modulus this is rare in practice, making its expected time O(n + m).
+
+                    Both algorithms solve the same problem in the same asymptotic time, but for different reasons: KMP's guarantee is worst-case, deterministic, and comes from never re-reading matched text; Rabin-Karp's is expected-case and comes from cheap incremental hashing -- with the same underlying idea, reusing work already done on the previous window or position instead of starting over, showing up in a different form.
+                    """, 1),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **The problem:** find every index in text T (length n) where pattern P (length m) occurs. Naive: O(n * m). Target: O(n + m).
+
+                    **KMP (Knuth-Morris-Pratt)**
+
+                    - Precompute lps[i] for every prefix of P: the length of the longest proper prefix of P[0..i] that's also a suffix of it -- O(m)
+                    - Scan T once: on a mismatch after j matched characters, jump j back to lps[j-1] instead of restarting at 0 -- the index into T never moves backward
+                    - Total: O(m) to build lps + O(n) to scan = O(n + m), worst case, guaranteed
+
+                    **Rabin-Karp**
+
+                    - Hash each length-m window of T with a rolling hash: update in O(1) by removing the outgoing character's contribution and adding the incoming one
+                    - Compare the window's hash to P's hash first -- O(1)
+                    - On a hash match, confirm with a real O(m) character comparison (guards against hash collisions)
+                    - Total: expected O(n + m); worst case (many collisions) degrades toward O(n * m)
+
+                    **Which one**
+
+                    - Need a hard worst-case guarantee -- KMP
+                    - Searching for many patterns against the same text (or combining/comparing hashes cheaply) -- Rabin-Karp
+                    """, 2),
+                Block(BlockType.CodeSnippet, "KMP: Failure Function and Matching Scan", BodyFormat.PlainText, """
+                    public static class Kmp
+                    {
+                        // Builds the "longest proper prefix which is also a suffix" (lps) array.
+                        // lps[i] = length of the longest proper prefix of pattern[0..i] that is
+                        // also a suffix of pattern[0..i]. O(m).
+                        public static int[] BuildFailureFunction(string pattern)
+                        {
+                            var m = pattern.Length;
+                            var lps = new int[m];
+                            var len = 0; // length of the previous longest prefix-suffix match
+                            lps[0] = 0;  // a single character has no proper prefix
+
+                            var i = 1;
+                            while (i < m)
+                            {
+                                if (pattern[i] == pattern[len])
+                                {
+                                    len++;
+                                    lps[i] = len;
+                                    i++;
+                                }
+                                else if (len != 0)
+                                {
+                                    // Don't advance i -- fall back within the pattern using the
+                                    // failure function itself, then retry this same comparison.
+                                    len = lps[len - 1];
+                                }
+                                else
+                                {
+                                    lps[i] = 0;
+                                    i++;
+                                }
+                            }
+
+                            return lps;
+                        }
+
+                        // Finds every starting index in text where pattern occurs. O(n + m).
+                        public static List<int> Search(string text, string pattern)
+                        {
+                            var matches = new List<int>();
+                            if (pattern.Length == 0) return matches;
+
+                            var lps = BuildFailureFunction(pattern);
+                            var n = text.Length;
+                            var m = pattern.Length;
+                            var i = 0; // index into text -- never moves backward
+                            var j = 0; // index into pattern
+
+                            while (i < n)
+                            {
+                                if (text[i] == pattern[j])
+                                {
+                                    i++;
+                                    j++;
+                                    if (j == m)
+                                    {
+                                        matches.Add(i - j); // full pattern matched, starting at i - j
+                                        j = lps[j - 1]; // keep scanning for overlapping matches
+                                    }
+                                }
+                                else if (j != 0)
+                                {
+                                    // Mismatch after some progress: never re-examine text[i] against
+                                    // earlier pattern characters -- jump using the failure function.
+                                    j = lps[j - 1];
+                                }
+                                else
+                                {
+                                    i++; // no progress to fall back on; just advance the text pointer
+                                }
+                            }
+
+                            return matches;
+                        }
+                    }
+
+                    // Usage:
+                    Kmp.BuildFailureFunction("ABABAC");              // [0, 0, 1, 2, 3, 0]
+
+                    Kmp.Search("ABABABABAC", "ABABAC");               // [4]
+                    // (mismatch at i=5 falls back via lps[4]=3 without ever moving i backward)
+
+                    Kmp.Search("ABABACABABAC", "ABABAC");             // [0, 6]
+                    // (two back-to-back, non-overlapping occurrences, both found in one scan)
+                    """, 3, language: "csharp"),
+                Block(BlockType.Diagram, "KMP Failure Function and a Mismatch Recovery", BodyFormat.AsciiArt, """
+                    Pattern: A  B  A  B  A  C
+                    Index:   0  1  2  3  4  5
+                    lps[]:   0  0  1  2  3  0
+
+                    lps[i] = length of the longest proper prefix of pattern[0..i] that is also its suffix
+                      lps[2]=1: "ABA"    -> prefix "A"   equals suffix "A"
+                      lps[3]=2: "ABAB"   -> prefix "AB"  equals suffix "AB"
+                      lps[4]=3: "ABABA"  -> prefix "ABA" equals suffix "ABA"
+                      lps[5]=0: "ABABAC" -> ends in C; no proper prefix matches any suffix
+
+                    Scanning text "ABABABABAC" for pattern "ABABAC":
+
+                      text:   A  B  A  B  A  B  A  B  A  C
+                      index:  0  1  2  3  4  5  6  7  8  9
+
+                      i=0..4: A B A B A all match pattern[0..4]  ->  j reaches 5
+                      i=5:    text[5]='B' vs pattern[5]='C'      ->  MISMATCH
+                              fall back: j = lps[4] = 3   (no re-reading of text -- i stays at 5)
+                      i=5:    text[5]='B' vs pattern[3]='B'      ->  match, j=4, i=6
+                      i=6:    text[6]='A' vs pattern[4]='A'      ->  match, j=5, i=7
+                      i=7:    text[7]='B' vs pattern[5]='C'      ->  MISMATCH
+                              fall back again: j = lps[4] = 3
+                      i=7:    text[7]='B' vs pattern[3]='B'      ->  match, j=4, i=8
+                      i=8:    text[8]='A' vs pattern[4]='A'      ->  match, j=5, i=9
+                      i=9:    text[9]='C' vs pattern[5]='C'      ->  match, j=6=m  ->  MATCH at i-j = 10-6 = 4
+
+                    Every step only ever moves i forward -- the two mismatches were resolved purely
+                    by moving j back using lps, never by re-reading a text character twice.
+                    """, 4),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Build the failure function once, before scanning the text, and never recompute it mid-scan -- its whole value comes from being reusable across every position in T. When implementing the fallback step (j = lps[j - 1]), remember it can require falling back more than once in a row: after falling back, immediately re-compare text[i] against the new pattern[j] again (same i, new j), and structure the code (a while loop, or an else-if chain re-entered on the next outer-loop iteration) so multiple consecutive fallbacks are possible, not just one.
+
+                    For Rabin-Karp, use a large prime modulus and, ideally, two independent hashes (or one large-enough modulus) to make collisions vanishingly rare in practice -- and never skip the confirming character comparison on a hash match, no matter how unlikely a collision seems, since skipping it turns a rare bug into a guaranteed-wrong answer the moment a collision does occur.
+                    """, 5),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    When a problem says "find all occurrences of a pattern in a text" (or "implement strStr()," a classic framing of the exact same problem), immediately name both options and pick one with a reason: "naive is O(n*m); I'll use KMP for a guaranteed O(n+m) worst case," or "Rabin-Karp, if I need to check many patterns cheaply via hash comparisons." Interviewers listening for depth want to hear why KMP avoids re-scanning text -- say it explicitly: "the failure function tells me how much of the pattern is already known to match, so the text pointer never moves backward."
+
+                    If asked to trace the failure function by hand, work it prefix by prefix and say the rule out loud each time: "lps[i] is the longest proper prefix of P[0..i] that's also a suffix of it." Most candidates get this wrong under pressure by confusing "a prefix/suffix of the whole pattern" with "a prefix/suffix of the substring ending at i," which differ at every index except the last.
+                    """, 6),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Computing the failure function as "the prefix of the whole pattern that equals a suffix of the whole pattern," applied uniformly at every index, instead of the correct, index-specific definition: lps[i] is about the prefix/suffix relationship within the substring P[0..i], and that substring -- and therefore the answer -- changes at every index. This is the single most common KMP bug, and it silently produces a wrong table even though the code compiles and looks plausible.
+
+                    Moving the text pointer i backward on a mismatch (mimicking the naive algorithm's "try the next starting position") instead of only ever moving the pattern pointer j back via lps[j-1] -- this defeats the entire point of KMP, since re-examining text characters that were already confirmed to match is exactly the redundant work the failure function exists to eliminate.
+
+                    For Rabin-Karp: getting the rolling hash's outgoing-character term wrong -- it must be scaled by the correct power of the base (corresponding to the leading character's position in the window), not just subtracted as-is. An error there silently produces wrong hashes for every window after the first, while the very first window's hash (computed directly, not rolled) still looks correct, making the bug easy to miss in casual testing.
+                    """, 7),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    KMP is like proofreading a manuscript for a specific misprinted phrase: the moment a mismatch turns up partway into a candidate match, you don't march back to the very next character after where you started checking -- you already know, from the phrase's own internal structure, exactly how many words at the start of the phrase are guaranteed to already line up with what you just read, so you resume checking from there instead of re-reading text you've already confirmed.
+
+                    Rabin-Karp is like a checkpoint that scans each vehicle's license plate instead of inspecting the whole vehicle every time -- comparing plate numbers is instant, and a match only triggers a full physical inspection (the real character-by-character check) to rule out the rare case where two different plates happen to look alike at a glance.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "The KMP failure function for pattern 'ABABAC' is lps = [0, 0, 1, 2, 3, 0]. During a scan, a mismatch occurs right after the first 5 characters of the pattern matched (j = 5, meaning pattern[0..4] matched). What does KMP do next, and why?",
+                    "Set j = lps[4] = 3, and re-compare the same text character (i does not move) against pattern[3] next -- because pattern[0..2] is already known, from the pattern's own structure, to match the 3 text characters immediately before the mismatch, without needing to re-read them.",
+                    [
+                        new QuizOptionSeed("Set j = lps[4] = 3 and re-compare the same text character against pattern[3], without moving the text pointer", true),
+                        new QuizOptionSeed("Restart the pattern comparison at j = 0 against the very next text character, exactly like the naive algorithm", false),
+                        new QuizOptionSeed("Move the text pointer back 5 characters and restart the pattern from j = 0", false),
+                        new QuizOptionSeed("Skip forward 5 characters in the text without adjusting the pattern index", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "Rabin-Karp finds that a text window's rolling hash equals the pattern's hash. What must happen next, and why?",
+                    "A full character-by-character comparison between the window and the pattern, because different strings can occasionally produce the same hash value (a collision) -- reporting a match purely on the hash comparison would risk a false positive whenever a collision occurs.",
+                    [
+                        new QuizOptionSeed("Do a full character-by-character comparison, because a hash match is only a candidate -- collisions can make two different strings hash the same", true),
+                        new QuizOptionSeed("Nothing further -- a hash match is always a guaranteed true match, by definition of a hash function", false),
+                        new QuizOptionSeed("Recompute the same window's rolling hash a second time using the same formula to double-check it", false),
+                        new QuizOptionSeed("Reverse the pattern and compare hashes again to rule out anagram matches", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("Prefix Function (Knuth-Morris-Pratt) -- cp-algorithms.com", "https://cp-algorithms.com/string/prefix-function.html", LinkType.OfficialDocs),
+                new ReferenceLinkSeed("String Hashing (Rabin-Karp) -- cp-algorithms.com", "https://cp-algorithms.com/string/string-hashing.html", LinkType.OfficialDocs),
+            ],
+            prerequisites: [lesson1]);
+
+        var lesson2Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson2.Slug,
+        [
+            "Implement BuildFailureFunction and Search for KMP from scratch, then verify by hand that the lps array for pattern \"ABABAC\" is [0, 0, 1, 2, 3, 0], and that searching text \"ABABABABAC\" finds a match starting at index 4",
+            "Trace by hand what happens when Search hits a mismatch partway through a match -- write down the exact j value before and after the fallback (j = lps[j - 1]), and confirm the text pointer i never moves backward",
+            "Implement a simple rolling hash for Rabin-Karp over a short text and pattern, and deliberately verify that a hash match is followed by a real character comparison before counting it as a confirmed occurrence",
+        ]);
+
+        var module = BuildModule(topicId, "advanced-dsa-range-queries-and-string-matching", "Advanced DSA: Range Queries & String Matching",
+            "Fenwick trees and segment trees for O(log n) range queries and point updates, followed by KMP and Rabin-Karp for finding every occurrence of a pattern in a text in O(n + m) instead of the naive O(n * m).",
+            90, [lesson1, lesson2], sortOrder: 8);
+
+        return (module, [lesson1Checklist, lesson2Checklist]);
+    }
+
     private static (Module, List<ChecklistSeed>) BuildSystemDesignModule(int topicId)
     {
         var lesson1 = BuildLesson(
@@ -14630,6 +15056,303 @@ public static class CurriculumContentSeedData
     }
 
     // ============================== SQL ==============================
+
+    private static (Module, List<ChecklistSeed>) BuildEstimationAndClassicCaseStudiesModule(int topicId)
+    {
+        var lesson1 = BuildLesson(
+            slug: "back-of-envelope-capacity-estimation",
+            title: "Back-of-Envelope Capacity Estimation",
+            summary: "Turning a vague scenario into concrete QPS, storage, and bandwidth numbers using fast, defensible round-number arithmetic -- the foundational skill behind every system design interview.",
+            estimatedMinutes: 35,
+            objectives:
+            [
+                "Convert a 'per day' figure into average QPS using the ~100,000-divisor convention, and explain why that rounding is deliberate rather than sloppy",
+                "Estimate peak QPS as a multiple of average QPS and explain why non-uniform daily traffic makes that necessary",
+                "Estimate storage growth from item count x average item size, and show how a design decision can change that estimate by orders of magnitude",
+                "Apply the full estimation methodology end to end to a concrete scenario, producing QPS, storage, and bandwidth numbers with visible arithmetic",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    **The skill**: back-of-envelope (or "back-of-the-envelope") capacity estimation is the practice of turning a rough, qualitative scenario -- "100 million daily active users," "each user posts twice a day" -- into the concrete numbers an interviewer actually wants to see: queries per second (QPS), storage growth, and bandwidth. The goal is never a precise, verified answer; it's a fast, defensible estimate built from round numbers, stated assumptions, and simple arithmetic that anyone in the room can follow and sanity-check.
+
+                    **Per-day to per-second: divide by ~100,000**. A day has 86,400 seconds (24 x 60 x 60). Interview-style estimation deliberately rounds this to 100,000 -- not because it's more accurate, but because it makes the arithmetic trivial to do in your head or on a whiteboard: dividing by 100,000 is just moving a decimal point. The roughly 15% overestimate this introduces (100,000 vs. the real 86,400) is irrelevant at the level of precision this exercise cares about -- you're trying to land within the right order of magnitude, not the right significant figure. So "10 million actions per day" becomes "10,000,000 / 100,000 = 100 actions per second," instantly.
+
+                    **Average QPS vs. peak QPS**. The per-second number computed above is an *average*, spread evenly across the whole day -- but real traffic is never evenly distributed. Users are awake and active during the day and asleep at night; there are lunchtime spikes, commute spikes, evening spikes. A system sized only for average load falls over during its busiest hour. The standard fix is to estimate **peak QPS** as some multiple of average QPS -- commonly 2x to 3x, sometimes expressed as a "peak-to-average ratio" -- to account for that non-uniformity. There's no universally "correct" multiplier; what matters is naming the concept out loud (traffic isn't flat, so average-case sizing under-provisions for the busiest moments) and picking a defensible number.
+
+                    **Storage estimation**: multiply (item count) x (average size per item) to get storage for a given period, then project that out to a year or five years to see where the number lands. This is also where a *design decision* becomes visible in the arithmetic: storing full-resolution photos vs. storing only thumbnails or metadata can change the storage estimate by two or three orders of magnitude for the exact same user base -- the estimation exercise is often really asking you to notice and justify that trade-off, not just to multiply two numbers together.
+
+                    **Worked example**: a photo-sharing app with 50 million daily active users (DAU), each uploading 2 photos/day, averaging 2 MB per photo.
+                    - Photos/day = 50,000,000 users x 2 photos = 100,000,000 photos/day
+                    - Average write QPS = 100,000,000 / 100,000 = 1,000 writes/sec
+                    - Peak write QPS (3x average) = 1,000 x 3 = 3,000 writes/sec
+                    - Storage/day = 100,000,000 photos x 2 MB = 200,000,000 MB = 200 TB/day
+                    - Storage/year = 200 TB x 365 = 73,000 TB = ~73 PB/year
+                    - If the design instead stores only a 20 KB thumbnail (full-resolution originals pushed to cold storage or discarded after processing): 100,000,000 x 20 KB = 2,000,000,000 KB = ~2 TB/day, or ~730 TB/year -- roughly a 100x reduction in what this tier has to serve quickly, from one design decision.
+                    - Bandwidth: assuming a 10:1 read:write ratio (typical for a read-heavy social app), average read QPS ~= 10,000/sec, and at ~2 MB/photo served that's ~20 GB/sec of average read bandwidth, before even applying a peak multiplier.
+
+                    **Why the method matters more than the number**: no interviewer expects you to derive the "correct" QPS for a hypothetical system -- there isn't one. What they're evaluating is whether you (1) state your assumptions explicitly out loud ("let's assume 2 photos/day per user"), (2) show the arithmetic step by step instead of jumping to a final number, and (3) sanity-check the resulting order of magnitude against something you already know ("73 PB/year sounds like a lot, but it's the same order of magnitude as reported figures for large photo-sharing platforms, so this feels plausible"). A candidate who lands on a "wrong" final number but visibly reasons this way is doing exactly what the exercise tests for; a candidate with a precisely correct number who can't explain how they got there is not.
+                    """, 1),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Per-day -> per-second**: divide by ~100,000 (a rounded stand-in for 86,400 sec/day) -- fast, deliberately approximate arithmetic, not precision
+
+                    **Average QPS** = total daily actions / 100,000
+
+                    **Peak QPS** = average QPS x 2-3 (a peak-to-average ratio) -- traffic isn't flat across the day, so average-case sizing under-provisions for the busiest hour
+
+                    **Storage** = item count x average item size per period, then project to a year (x365) or five years -- a design choice (full data vs. thumbnail/metadata only) can swing this by 2-3 orders of magnitude
+
+                    **Bandwidth** = QPS x average payload size (apply separately to reads and writes if the read:write ratio differs)
+
+                    **What interviewers actually score**: stated assumptions, visible step-by-step arithmetic, and a sanity-checked final order of magnitude -- not an exactly "correct" number
+                    """, 2),
+                Block(BlockType.CodeSnippet, "Worked Example: Photo-Sharing App Capacity Estimate", BodyFormat.PlainText, """
+                    Scenario: photo-sharing app, 50,000,000 DAU, 2 photo uploads/user/day, avg 2 MB/photo
+
+                    Step 1 -- Volume/day
+                      photos/day         = 50,000,000 users x 2 photos     = 100,000,000 photos/day
+
+                    Step 2 -- Average QPS (divide by ~100,000, not 86,400)
+                      avg write QPS      = 100,000,000 / 100,000           = 1,000 writes/sec
+
+                    Step 3 -- Peak QPS (apply a 2-3x peak-to-average ratio)
+                      peak write QPS     = 1,000 x 3                       = 3,000 writes/sec
+
+                    Step 4 -- Storage/day and storage/year
+                      storage/day        = 100,000,000 photos x 2 MB       = 200,000,000 MB = 200 TB/day
+                      storage/year       = 200 TB x 365 days               = 73,000 TB = ~73 PB/year
+
+                    Step 5 -- A design decision changes the number
+                      thumbnails only    = 100,000,000 photos x 20 KB      = 2,000,000,000 KB = ~2 TB/day
+                      thumbnails/year    = 2 TB x 365 days                 = ~730 TB/year (~100x less than full photos)
+
+                    Step 6 -- Read bandwidth (assume a 10:1 read:write ratio for a social app)
+                      avg read QPS       = 1,000 writes/sec x 10           = 10,000 reads/sec
+                      avg read bandwidth = 10,000 reads/sec x 2 MB/photo   = 20,000 MB/sec = ~20 GB/sec
+                    """, 3),
+                Block(BlockType.Diagram, "Estimation Funnel: DAU to QPS and Storage", BodyFormat.AsciiArt, """
+                    "50M DAU, 2 photos/day/user"
+                              |
+                              | x 2 photos/user
+                              v
+                      100,000,000 photos/day
+                              |
+                              | divide by ~100,000 (stand-in for 86,400 sec/day)
+                              v
+                      1,000 writes/sec (average)
+                              |
+                              | x 2-3 (peak-to-average ratio)
+                              v
+                      2,000-3,000 writes/sec (peak)
+
+                    "100,000,000 photos/day x 2 MB/photo"
+                              |
+                              | multiply
+                              v
+                      200 TB/day  --- x365 --->  ~73 PB/year   (full-resolution photos)
+                              |
+                              | design decision: store 20 KB thumbnails instead
+                              v
+                      ~2 TB/day  --- x365 --->  ~730 TB/year   (~100x smaller, same user base)
+                    """, 4),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Always state your assumptions out loud before computing anything ("let's assume 2 posts/user/day, average payload 2 KB") -- an interviewer can only follow and correct your reasoning if the inputs are explicit, and a wrong assumption stated clearly is far better than a hidden one baked silently into a final number.
+
+                    Round aggressively and consistently -- 100,000 seconds/day instead of 86,400, "50 million" instead of "48.3 million" -- the whole point of the exercise is fast, defensible arithmetic, not decimal precision. Keep units visible at every step (KB vs. MB vs. GB vs. TB) so an order-of-magnitude error is easy to catch by eye.
+
+                    Sanity-check your final numbers against something you already know an order of magnitude for before presenting it as your answer.
+                    """, 5),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    Do capacity estimation early in a system design interview, right after clarifying functional requirements and before drawing any architecture -- the resulting QPS and storage numbers are what justify later design decisions (whether you need sharding at all, whether a single database can hold this, whether caching is worth the complexity), so skipping straight to architecture without them makes every later choice look arbitrary.
+
+                    When an interviewer gives you a vague scenario, state an assumption rather than freezing -- "you didn't say average payload size, I'll assume 2 KB per post, similar to a short text update" keeps the exercise moving and demonstrates the exact skill being tested.
+                    """, 6),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Spending several minutes computing a precise number (working out the exact 86,400 seconds/day, or carrying several decimal places through five steps of arithmetic) -- this is the opposite of what the exercise rewards; use round numbers and get to an order-of-magnitude answer quickly.
+
+                    Also common: estimating storage or QPS as a single flat number and never mentioning peak load or a design trade-off (full data vs. metadata/thumbnails) -- an interviewer listening for peak-vs-average reasoning and awareness that storage choices are design decisions will notice the omission even if the arithmetic itself is correct.
+                    """, 7),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    Estimating capacity this way is like a caterer quoting a wedding without weighing every ingredient in advance. They don't calculate the exact number of shrimp for 150 guests down to the unit -- they round to "about 3 pieces per person, so roughly 450, let's plan for 500 to be safe," account for the fact that the appetizer table gets hit hardest right when doors open rather than evenly across the whole event (the "peak" hour), and immediately know that "surf and turf for 150" costs wildly more than "pasta bar for 150" long before a single ingredient is bought. Nobody expects the caterer's headcount math to be exact -- they expect it to be fast, reasonable, and to visibly account for the few factors (guest count, peak serving window, menu choice) that actually swing the final cost.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "Why do back-of-envelope estimates typically convert 'per day' figures to 'per second' by dividing by ~100,000 instead of the precise 86,400 seconds in a day?",
+                    "100,000 is a deliberately rounded stand-in for 86,400 that makes the division trivial (just move a decimal point) -- the exercise cares about landing in the right order of magnitude quickly, not about decimal-accurate figures.",
+                    [
+                        new QuizOptionSeed("Because 100,000 makes the division arithmetic trivial, and the small overestimate is irrelevant at the order-of-magnitude precision the exercise cares about", true),
+                        new QuizOptionSeed("Because 86,400 is mathematically incorrect for the number of seconds in a day", false),
+                        new QuizOptionSeed("Because interviewers require the answer to be expressed in scientific notation", false),
+                        new QuizOptionSeed("Because dividing by 86,400 would produce a negative number", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "A system estimated at 1,000 average QPS is sized for peak load at roughly 2,000-3,000 QPS instead of 1,000. Why?",
+                    "Real-world traffic isn't spread evenly across the day -- there are peak hours (lunchtime, evening, etc.) where load is well above the daily average. Sizing only for the average would leave the system under-provisioned during its busiest period, so a peak-to-average multiplier (commonly 2-3x) is applied.",
+                    [
+                        new QuizOptionSeed("Real-world traffic isn't uniform across the day, so peak-hour load is estimated as a multiple of the daily average to avoid under-provisioning", true),
+                        new QuizOptionSeed("The average QPS figure was calculated incorrectly and needs to be corrected upward", false),
+                        new QuizOptionSeed("Databases always require exactly 3x the estimated average capacity to function at all", false),
+                        new QuizOptionSeed("Peak QPS only matters for read traffic, never for writes", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("System Design Primer: Back-of-the-envelope calculations", "https://github.com/donnemartin/system-design-primer", LinkType.FurtherReading),
+                new ReferenceLinkSeed("Latency Numbers Every Programmer Should Know", "https://colin-scott.github.io/personal_website/research/interactive_latency.html", LinkType.FurtherReading),
+            ]);
+
+        var lesson1Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson1.Slug,
+        [
+            "Pick a real product you use and estimate its average and peak QPS from a guessed DAU and actions/user/day, showing every step of the arithmetic",
+            "Estimate storage for one year of that same scenario under two different design choices (e.g., full media vs. thumbnails/metadata only) and compare the resulting order of magnitude",
+            "Practice narrating your assumptions out loud while estimating, as if talking through it in a live interview, before presenting a final QPS/storage number",
+        ]);
+
+        var lesson2 = BuildLesson(
+            slug: "case-study-url-shortener",
+            title: "Design a URL Shortener",
+            summary: "A full walkthrough of the classic intro system-design question: base62 encoding of an auto-incrementing ID, a cache-aside redirect path, and scaling ID generation past a single counter.",
+            estimatedMinutes: 50,
+            objectives:
+            [
+                "Enumerate the functional requirements of a URL shortener and explain why redirects (reads) vastly outnumber creations (writes)",
+                "Encode an auto-incrementing ID into a short, URL-safe base62 code and explain why base62 is preferred over hex for this purpose",
+                "Design a short_code -> long_url mapping schema and apply the cache-aside pattern to serve hot redirects without hitting the database every time",
+                "Describe at least one real approach (Snowflake-style distributed IDs, or pre-allocated ID ranges) for generating unique IDs at scale without a single bottlenecked counter",
+            ],
+            blocks:
+            [
+                Block(BlockType.Notes, null, BodyFormat.MiniMarkdown, """
+                    **Requirements**: shorten a long URL into a short code; given a short code, redirect to the original long URL. The workload is heavily read-skewed -- every stored URL might be redirected thousands of times, but is only ever created once, so redirects (reads) vastly outnumber creations (writes), often by a ratio of 100:1 or higher -- the same shape of imbalance the estimation lesson earlier in this module teaches you to quantify before designing anything.
+
+                    **Core encoding approach -- base62 over an auto-incrementing ID**: the simplest way to generate a unique short code is to assign every new long URL the next value of an auto-incrementing integer ID, then encode that integer using base62 -- the 62 characters a-z, A-Z, and 0-9. Base62 is preferred over hex (base16) for one practical reason: it packs more information into fewer characters, because each character can represent one of 62 values instead of one of 16. The same integer needs roughly 1.5x as many hex digits as base62 digits -- a shorter code is the entire point of a URL "shortener," so maximizing information density per character, while staying confined to URL-safe characters (no punctuation that needs escaping in a URL path), is exactly what base62 buys you.
+
+                    **How many characters do you need?** With 62 symbols per character, N characters can represent 62^N distinct values. 62^7 = 3,521,614,606,208 -- a little over 3.5 trillion -- so a 7-character base62 code alone can uniquely address well over 3.5 trillion URLs, comfortably more than any single URL shortener is ever likely to need. That's why most real-world short codes land in the 6-8 character range: it's the smallest length that comfortably outlives the service's expected total URL count.
+
+                    **Data model**: a single mapping table (or key-value store) from short_code to long_url, plus metadata such as a creation timestamp, an optional expiration date, and optionally a click/redirect counter. This is a great fit for either a simple relational table (short_code as the primary or unique key, a straightforward indexed point lookup) or a key-value store like Redis/DynamoDB, since every read and write in this system is a single-key lookup or insert -- there's no need for joins or range queries against this table at all.
+
+                    **Read-heavy optimization -- cache-aside**: because redirects vastly outnumber URL creations, the redirect path is a textbook fit for the cache-aside pattern already covered in the scaling-load-balancing-caching lesson earlier in this topic: on a redirect request, check the cache first for short_code -> long_url; on a cache miss, read the mapping from the database, populate the cache, then redirect. On write (a new short URL created), no cache entry needs to exist yet, since it hasn't been read yet -- it gets populated lazily on its first redirect, exactly as cache-aside intends. This lets the overwhelming majority of redirect traffic hit a fast in-memory cache instead of the database on every single click.
+
+                    **Scaling ID generation itself**: a single auto-incrementing counter is simple, but at scale it becomes both a single point of failure and a write bottleneck -- every ID-issuing request has to serialize through one counter, whether it lives in one database row or one dedicated service. Two standard real-world fixes: (1) a distributed ID generator such as Twitter's Snowflake, which produces unique, roughly time-sortable IDs by combining a timestamp, a machine/worker ID, and a per-machine sequence number, entirely without a shared, centrally-coordinated counter; or (2) pre-allocating blocks/ranges of IDs to different servers ahead of time (e.g., server A hands out IDs 1-1,000,000, server B hands out 1,000,001-2,000,000), so each server can issue IDs independently from its own reserved range without coordinating per request, only fetching a new range on exhaustion.
+
+                    **Connecting to consistent hashing**: once the mapping table grows too large for one database node, it needs to be sharded across multiple nodes -- and short_code is a natural sharding key for the hash-based scheme covered in the consistent-hashing-and-sharding-strategies lesson earlier in this topic: short codes are already effectively random-looking strings, so hash-based shard assignment spreads both writes and, more importantly for this read-heavy system, reads evenly across nodes, without the range-based hot-shard problem a sequential key would otherwise create. That earlier lesson's consistent-hashing-ring mechanics for adding or removing nodes without a full remap apply directly here -- nothing about that needs re-deriving for this case study.
+                    """, 1),
+                Block(BlockType.CheatSheet, null, BodyFormat.MiniMarkdown, """
+                    **Requirements**: shorten long URL -> short code; short code -> redirect to long URL; read (redirect) : write (create) ratio is heavily skewed, often 100:1+
+
+                    **Encoding**: base62 (a-z, A-Z, 0-9 = 62 chars) of an auto-incrementing ID -- denser than hex (base16) per character, so codes stay short
+                    - 62^7 = 3,521,614,606,208 -- a 7-char base62 code covers over 3.5 trillion IDs
+                    - Most real short codes: 6-8 characters
+
+                    **Data model**: single table/KV store, short_code -> {long_url, created_at, expires_at?, click_count?} -- short_code as primary/unique key; every access is a single-key lookup, no joins needed
+
+                    **Read path optimization**: cache-aside (see scaling-load-balancing-caching) -- check cache on redirect, populate on miss from the database, lazily warms on first click per code
+
+                    **ID generation at scale**: a single counter is a bottleneck/SPOF -- use a distributed generator (Snowflake: timestamp + machine ID + sequence) or pre-allocated ID ranges per server
+
+                    **Sharding the mapping table**: short_code is a natural hash-based sharding key (see consistent-hashing-and-sharding-strategies) -- spreads both reads and writes evenly, avoids the hot-shard risk of a sequential key
+                    """, 2),
+                Block(BlockType.CodeSnippet, "Base62 Encoding of an Auto-Incrementing ID", BodyFormat.PlainText, """
+                    private const string Base62Chars = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+                    // Encodes an auto-incrementing integer ID into a short, URL-safe base62 code.
+                    public static string EncodeBase62(long id)
+                    {
+                        if (id == 0) return Base62Chars[0].ToString();
+
+                        var chars = new Stack<char>();
+                        while (id > 0)
+                        {
+                            chars.Push(Base62Chars[(int)(id % 62)]);
+                            id /= 62;
+                        }
+                        return new string(chars.ToArray());
+                    }
+
+                    // Decodes a base62 short code back into its original integer ID.
+                    public static long DecodeBase62(string code)
+                    {
+                        long id = 0;
+                        foreach (var c in code)
+                        {
+                            id = id * 62 + Base62Chars.IndexOf(c);
+                        }
+                        return id;
+                    }
+
+                    // A 7-character base62 code covers 62^7 = 3,521,614,606,208 distinct IDs.
+                    var shortCode = EncodeBase62(125_000_000_000); // a compact, ~7-character code
+                    var url = $"https://sho.rt/{shortCode}";
+                    """, 3, language: "csharp"),
+                Block(BlockType.Diagram, "Write Path and Cache-Aside Read Path", BodyFormat.StructuredSteps, """
+                    [{"label":"Write path: POST long URL","note":"client submits a long URL to shorten"},{"label":"Assign next ID","note":"auto-increment counter, Snowflake ID, or a pre-allocated ID range"},{"label":"Base62-encode the ID","note":"produces a short, URL-safe code, e.g. 7 characters"},{"label":"Store mapping","note":"short_code -> long_url saved to the (sharded) mapping table"},{"label":"Read path: GET /{short_code}","note":"client requests a redirect"},{"label":"Cache check","note":"cache-aside: look up short_code in the cache first"},{"label":"Cache hit -> redirect immediately","note":"the vast majority of traffic, since reads dominate writes"},{"label":"Cache miss -> DB lookup, populate cache, then redirect","note":"paid once per code, on its first-ever click"}]
+                    """, 4),
+                Block(BlockType.BestPractice, null, BodyFormat.MiniMarkdown, """
+                    Design the short_code -> long_url table so a lookup by short_code is always a single indexed point read -- that's the only access pattern the read-heavy redirect path ever needs, and any design that turns it into a scan or a join is working against the shape of this system.
+
+                    Set an explicit cache TTL and treat a cache miss as the normal, expected path for any code that hasn't been redirected recently, not an error case -- for a service with a long-tail access pattern (most codes fade after their first burst of clicks), a cold cache on rarely-hit codes is completely normal.
+
+                    Reserve ID ranges (or use a Snowflake-style generator) well before a single counter becomes a bottleneck in practice, not after -- retrofitting distributed ID generation onto a live system with a sequential-ID assumption already baked into existing short codes is considerably harder than designing for it from the start.
+                    """, 5),
+                Block(BlockType.InterviewTip, null, BodyFormat.MiniMarkdown, """
+                    When asked to design a URL shortener, say the read:write imbalance out loud before touching the whiteboard -- "redirects will vastly outnumber creations, so I want to optimize the read path first" signals you've internalized the estimation-and-caching mindset rather than jumping straight to "I'll use a hash function." Then be explicit about why base62 specifically: denser encoding than hex means shorter codes, confined to URL-safe characters.
+
+                    If the interviewer pushes on scale ("what if a single counter can't keep up?"), have Snowflake-style ID generation or pre-allocated ID ranges ready as a named, concrete answer -- and if sharding comes up, explicitly reuse consistent hashing rather than inventing a new sharding scheme on the spot; reusing a concept you've already covered elsewhere is a signal in itself.
+                    """, 6),
+                Block(BlockType.CommonMistake, null, BodyFormat.MiniMarkdown, """
+                    Reaching for a hash of the long URL (e.g., truncating an MD5/SHA hash to a few characters) as the primary short-code strategy without addressing collisions -- truncated hashes collide, and handling that (checking for an existing mapping, retrying, or appending disambiguating characters) is real design work that's easy to hand-wave past. Encoding an auto-incrementing (or otherwise guaranteed-unique) ID sidesteps the collision problem entirely, which is exactly why it's the more common answer.
+
+                    Also common: designing the cache-aside path without reasoning about what makes it a good fit here specifically -- the read:write ratio -- and treating the write path (URL creation) as needing the same aggressive optimization as the redirect path, when it's the redirect path that dominates traffic and deserves the design attention.
+                    """, 7),
+                Block(BlockType.RealWorldAnalogy, null, BodyFormat.MiniMarkdown, """
+                    A URL shortener's mapping table is like a hotel's front-desk key-card system rather than a library card catalog. A library catalog is built for browsing and range queries (all books by an author, all books on a shelf) -- but a key card only ever needs one operation: hand over this specific card, get back exactly one specific room, instantly, with no need to search or scan anything else. Every redirect is a key card handed to the front desk; the desk doesn't need to know anything about any other room to answer it, which is exactly why a flat, single-key mapping table is enough.
+
+                    The front desk keeping a small stack of recently-requested room assignments within arm's reach, instead of walking to the back office file room for every single guest, is the cache-aside layer -- most guests checking in are ones the desk has helped recently, so the fast, nearby stack resolves the vast majority of requests before ever touching the slower, authoritative filing system in back.
+                    """, 8),
+            ],
+            quiz:
+            [
+                new QuizQuestionSeed(
+                    "Why is base62 encoding (a-z, A-Z, 0-9) preferred over hex (base16) for encoding a URL shortener's auto-incrementing ID into a short code?",
+                    "Base62 packs more information into each character (62 possible values per character vs. 16 for hex), so the same integer ID encodes into meaningfully fewer characters -- producing a shorter code, which is the entire point of a URL shortener -- while staying limited to URL-safe characters.",
+                    [
+                        new QuizOptionSeed("Base62 uses more possible values per character than hex, so it encodes the same integer into fewer characters, producing a shorter, URL-safe code", true),
+                        new QuizOptionSeed("Hex characters are not valid in a URL path, so hex cannot be used at all", false),
+                        new QuizOptionSeed("Base62 is required because integers cannot be represented in hexadecimal", false),
+                        new QuizOptionSeed("Base62 and hex produce codes of identical length; the choice is purely stylistic", false),
+                    ]),
+                new QuizQuestionSeed(
+                    "Why does the redirect path of a URL shortener (short_code -> long_url) fit the cache-aside pattern particularly well?",
+                    "Redirects (reads) vastly outnumber URL creations (writes) in this system, so caching the read path yields an outsized benefit: the overwhelming majority of traffic can be served from a fast cache, with only a small fraction of requests -- creations, and each code's first-ever redirect -- ever needing to reach the database.",
+                    [
+                        new QuizOptionSeed("Because redirects vastly outnumber creations, so caching the read path serves the overwhelming majority of traffic without touching the database each time", true),
+                        new QuizOptionSeed("Because cache-aside is required any time a system uses a key-value data model", false),
+                        new QuizOptionSeed("Because URL creation happens more frequently than redirects, so the write path needs the caching benefit", false),
+                        new QuizOptionSeed("Because caching removes the need for a database entirely in this design", false),
+                    ]),
+            ],
+            referenceLinks:
+            [
+                new ReferenceLinkSeed("System Design Primer: Design a URL shortening service", "https://github.com/donnemartin/system-design-primer", LinkType.FurtherReading),
+                new ReferenceLinkSeed("Twitter Engineering: Announcing Snowflake", "https://blog.twitter.com/engineering/en_us/a/2010/announcing-snowflake", LinkType.FurtherReading),
+            ],
+            prerequisites: [lesson1]);
+
+        var lesson2Checklist = new ChecklistSeed(ChecklistOwnerKind.Lesson, lesson2.Slug,
+        [
+            "Implement Base62 encode/decode for an auto-incrementing ID and verify round-tripping a handful of IDs produces stable, URL-safe short codes",
+            "Sketch the short_code -> long_url table schema and trace both the write path (long URL in, short code out) and the cache-aside read path (short code in, cache check, DB fallback, redirect) end to end",
+            "Explain out loud why a single auto-incrementing counter becomes a bottleneck at scale, and name one concrete fix (Snowflake-style IDs or pre-allocated ID ranges)",
+        ]);
+
+        var module = BuildModule(topicId, "estimation-and-classic-case-studies", "Estimation & Classic Case Studies",
+            "Back-of-envelope capacity estimation for QPS, storage, and bandwidth, followed by a full case study designing a URL shortener that combines base62 encoding, cache-aside, and consistent hashing from earlier modules.",
+            85, [lesson1, lesson2], sortOrder: 7);
+
+        return (module, [lesson1Checklist, lesson2Checklist]);
+    }
 
     private static (Module, List<ChecklistSeed>) BuildSqlModule(int topicId)
     {
